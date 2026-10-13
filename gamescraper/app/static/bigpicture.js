@@ -471,6 +471,7 @@ function gameScreen(id) {
         } });
       this.buttons.push({ label: d.user.favorite ? "★ Preferito" : "☆ Preferito", cls: d.user.favorite ? "on" : "", run: () => toggleFav(BP.lib.byId.get(id)) });
       if (d.versions.length > 1) this.buttons.push({ label: `Versioni (${d.versions.length})`, run: () => push(versionsScreen(d)) });
+      if (d.shots) this.buttons.push({ label: `📷 Schermate (${d.shots})`, run: () => push(shotsScreen(d)) });
       this.buttons.push({ label: "Indietro", run: () => pop() });
       const facts = [["Uscita", d.release_date || d.year], ["Sviluppatore", d.developer], ["Generi", (d.genres || []).join(", ")],
         ["Giocatori", d.players_local],
@@ -510,6 +511,35 @@ function gameScreen(id) {
     },
     fav() { toggleFav(BP.lib.byId.get(id)); },
     hints: [["a", "Seleziona"], ["b", "Indietro"], ["x", "Preferito"]],
+  };
+  return scr;
+}
+
+/* ---- schermate del gioco: visualizzatore a tutto schermo, sinistra/destra per scorrere */
+function shotsScreen(d) {
+  const scr = {
+    tab: null, i: 0, list: [], navFocus: null,
+    async render(el) {
+      el.innerHTML = `<div class="bp-shots"><p class="muted">Carico…</p></div>`;
+      try { this.list = (await api(`/api/game/${d.id}/shots`)).shots; } catch (e) { toast(e.message, true); return; }
+      this.update();
+    },
+    update() {
+      renderNav();
+      const s = this.list[this.i];
+      const el = document.querySelector(".bp-shots");
+      if (!el) return;
+      el.innerHTML = s ? `<img src="${s.url}" alt=""><div class="bp-shots-bar"><b>${esc(d.title)}</b>
+        <span>${new Date(s.taken * 1000).toLocaleString("it", { dateStyle: "medium", timeStyle: "short" })} · ${esc(s.source)}</span>
+        <span>${this.i + 1} / ${this.list.length}</span></div>` : `<p class="muted">Nessuna schermata.</p>`;
+    },
+    move(dx) {
+      const n = this.i + dx;
+      if (!dx || n < 0 || n >= this.list.length) return false;
+      this.i = n; this.update(); return true;
+    },
+    ok() {},
+    hints: [["b", "Indietro"]],
   };
   return scr;
 }
@@ -620,14 +650,17 @@ async function pollRunning() {
   let r;
   try { r = await api("/api/running"); } catch { r = {}; }
   if (["starting", "extracting", "running"].includes(r.status)) {
-    showRunning(r.status === "extracting" ? (r.message || "Estrazione…") : r.status === "starting" ? "Avvio…" : `In esecuzione con ${r.emulator}`);
+    showRunning(r.status === "extracting" ? (r.message || "Estrazione…") : r.status === "starting" ? "Avvio…"
+      : `In esecuzione con ${r.emulator} · Select+R1 per una schermata${r.shots ? ` (${r.shots})` : ""}`);
+    if (BP.running && (r.shots || 0) > (BP.running.shots || 0)) toast("📷 Schermata salvata");
+    if (BP.running) BP.running.shots = r.shots || 0;
     setTimeout(pollRunning, 1500);
     return;
   }
   $("#bp-running").hidden = true;
   if (BP.running) {
     if (r.status === "error") toast(r.message, true);
-    else if (r.status === "finished" && r.played > 30) toast(`Sessione: ${fmtTime(r.played)}`);
+    else if (r.status === "finished" && r.played > 30) toast(`Sessione: ${fmtTime(r.played)}${r.shots ? ` · 📷 ${r.shots}` : ""}`);
     BP.running = null;
     try { window.pywebview?.api?.focus_window?.(); } catch { /* browser */ }
     await reloadLibrary();

@@ -20,6 +20,7 @@
       <a class="nav-item" data-view="multi"><span class="ico">👥</span><span class="lbl">Multigiocatore locale</span><span class="cnt" id="cnt-multi"></span></a>
       <a class="nav-item" data-view="free"><span class="ico">🎁</span><span class="lbl">Giochi gratis</span><span class="cnt" id="cnt-free"></span></a>
       <a class="nav-item" data-view="wishlist"><span class="ico">♡</span><span class="lbl">Lista desideri</span><span class="cnt" id="cnt-wish"></span></a>
+      <a class="nav-item" data-view="shots"><span class="ico">📷</span><span class="lbl">Schermate</span><span class="cnt" id="cnt-shots"></span></a>
       <a class="nav-item" data-view="stats"><span class="ico">📊</span><span class="lbl">Statistiche</span></a>
       <a class="nav-item" data-view="recent"><span class="ico">◷</span><span class="lbl">Giocati di recente</span><span class="cnt" id="cnt-recent"></span></a>
 
@@ -124,6 +125,25 @@
   </section>
 
   <div id="running" hidden></div>
+  <div id="lightbox" hidden></div>
+  <dialog id="prof-dlg">
+    <h3>Profilo di avvio <span class="muted small" id="pf-game"></span></h3>
+    <p class="muted small">Vale solo per questo gioco (tutte le sue versioni). I campi vuoti usano le impostazioni della console.</p>
+    <div class="pf-grid">
+      <label>Emulatore <select class="field" id="pf-emu"></select></label>
+      <label id="pf-core-row">Core RetroArch <select class="field" id="pf-core"></select></label>
+      <label class="wide">Eseguibile diverso <span class="muted small">(es. un'altra versione dell'emulatore)</span>
+        <span class="row tight"><input class="field grow" id="pf-exe" placeholder="lascia vuoto per quello configurato">
+        <button class="btn" id="pf-exe-pick" type="button">Sfoglia…</button></span></label>
+      <label class="wide">Argomenti al posto di quelli predefiniti <span class="muted small">— {rom} = file del gioco, {core} = core</span>
+        <input class="field" id="pf-args" placeholder=""></label>
+      <label class="wide">Argomenti aggiuntivi <span class="muted small">(messi prima del file del gioco)</span>
+        <input class="field" id="pf-extra" placeholder="es. -fullscreen"></label>
+    </div>
+    <div class="pf-preview"><span class="muted small">Comando:</span> <code id="pf-cmd"></code></div>
+    <div class="row end"><button class="btn" id="pf-reset">Ripristina predefinito</button><span class="grow"></span>
+      <button class="btn" id="pf-cancel">Annulla</button><button class="btn primary" id="pf-save">Salva</button></div>
+  </dialog>
   <div id="toast" hidden></div>
   <div id="popover" hidden></div>
 

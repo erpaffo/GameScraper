@@ -25,6 +25,7 @@ CREATE INDEX IF NOT EXISTS play_sessions_start ON play_sessions(start);
 CREATE TABLE IF NOT EXISTS wishlist(id TEXT PRIMARY KEY, title TEXT, steam_appid TEXT, itad_id TEXT, target REAL,
                                     added REAL, price REAL, regular REAL, cut INT, shop TEXT, url TEXT, low REAL,
                                     currency TEXT, checked REAL, alert TEXT, seen INT DEFAULT 0);
+CREATE TABLE IF NOT EXISTS game_profiles(key TEXT PRIMARY KEY, data TEXT);
 CREATE TABLE IF NOT EXISTS manual_games(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, exe TEXT, args TEXT,
                                         cwd TEXT, added REAL);
 """
@@ -81,6 +82,23 @@ class UserData:
 
     def sessions(self, since: float = 0) -> list[tuple[str, float, float]]:
         return self._q("SELECT key, start, seconds FROM play_sessions WHERE start >= ?", (since,))
+
+    # ------------------------------------------------------------ profili di avvio per gioco
+    def profile(self, key: str) -> dict | None:
+        import json
+        r = self._q("SELECT data FROM game_profiles WHERE key=?", (key,))
+        return json.loads(r[0][0]) if r else None
+
+    def set_profile(self, keys: list[str], data: dict | None):
+        """Profilo per tutte le versioni del gioco (None = torna alle impostazioni della console)."""
+        import json
+        with self.lock:
+            for k in keys:
+                if data:
+                    self.db.execute("INSERT OR REPLACE INTO game_profiles VALUES(?, ?)", (k, json.dumps(data)))
+                else:
+                    self.db.execute("DELETE FROM game_profiles WHERE key=?", (k,))
+            self.db.commit()
 
     # ------------------------------------------------------------ lista dei desideri
     WISH_COLS = ("id", "title", "steam_appid", "itad_id", "target", "added", "price", "regular", "cut", "shop", "url",

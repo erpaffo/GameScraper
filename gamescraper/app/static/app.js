@@ -409,7 +409,7 @@ function renderShopTools() {
 
 function viewTitle() {
   const v = S.view;
-  return { free: "Giochi gratis", wishlist: "Lista desideri", stats: "Statistiche",
+  return { shots: "Schermate", free: "Giochi gratis", wishlist: "Lista desideri", stats: "Statistiche",
     status: `${STATUS[v.id]?.icon || ""} ${STATUS[v.id]?.label || ""}`,
     smart: `${S.smart.find((x) => x.id === v.id)?.icon || "⚡"} ${S.smart.find((x) => x.id === v.id)?.name || "Collezione"}`,
     foryou: "Per te", multi: "Multigiocatore in locale", shop: "Store · da installare", all: "Tutti i giochi", favorites: "Preferiti", recent: "Giocati di recente", missing: "Senza dati",
@@ -451,15 +451,15 @@ function setView(v) {
   store.set("view", v);
   GS.emit("viewChanged", v);
   const pv = $("#plugin-view");
-  document.body.classList.toggle("foryou-mode", ["foryou", "free", "wishlist", "stats"].includes(v.type));
+  document.body.classList.toggle("foryou-mode", ["foryou", "free", "wishlist", "stats", "shots"].includes(v.type));
   if (v.type !== "collection") $("#coll-banner").hidden = true;
-  if (["free", "wishlist", "stats"].includes(v.type)) {
+  if (["free", "wishlist", "stats", "shots"].includes(v.type)) {
     $("#grid-scroll").hidden = true;
     pv.hidden = false;
     markActive();
     updateHeader();
     $("#view-count").textContent = "";
-    ({ free: renderFree, wishlist: renderWishlist, stats: renderStats })[v.type](pv);
+    ({ free: renderFree, wishlist: renderWishlist, stats: renderStats, shots: renderShots })[v.type](pv);
     return;
   }
   if (v.type === "foryou") {
@@ -679,8 +679,9 @@ async function openDetail(id) {
       nel client torrent seleziona solo il file «${esc(d.file_name || d.title)}».</div>` : ""}
     <div class="d-emu muted">${online ? `${d.page_url ? `<img class="sico" src="/icons/site?url=${encodeURIComponent(d.page_url)}" alt="">` : "🌐"} Disponibile online · ${esc(d.file_name || "")}`
       : pc ? `${esc(d.store_name)} · ${d.installed ? "installato" : "non installato"}`
-      : d.emulator ? "Emulatore: " + esc(d.emulator)
-      : `Nessun emulatore configurato per ${esc(d.platform_name)} — <a href="#" id="d-emu-cfg">impostazioni</a>`}</div>
+      : d.emulator ? "Emulatore: " + esc(d.emulator) + (d.profile ? ` <span class="tag" title="Profilo di avvio di questo gioco">profilo</span>` : "")
+      : `Nessun emulatore configurato per ${esc(d.platform_name)} — <a href="#" id="d-emu-cfg">impostazioni</a>`}
+      ${!pc && !online ? `<a href="#" id="d-profile" title="Emulatore, core, eseguibile e argomenti solo per questo gioco">⚙ Profilo di avvio</a>` : ""}</div>
     ${ratingBlock(d)}
     ${online ? "" : `<div class="d-status">${Object.entries(STATUS).map(([k, s]) =>
       `<button class="btn st-btn${u.status === k ? " on st-" + k : ""}" data-status="${k}">${s.icon} ${s.label}</button>`).join("")}</div>`}
@@ -693,6 +694,8 @@ async function openDetail(id) {
       <span class="chip add" id="d-add-coll">＋ Aggiungi</span></div>
     <dl class="d-grid">${dl.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}</dl>
     ${d.description ? `<div class="d-h">Descrizione</div><div class="d-desc">${esc(d.description)}</div>` : ""}
+    ${d.shots ? `<div class="d-h">📷 Le tue schermate (${d.shots}) <a href="#" id="d-shots-all" class="muted small">vedi tutte</a></div>
+      <div class="my-shots" id="d-myshots"></div>` : ""}
     ${shots.length ? `<div class="d-h">Immagini</div><div class="shots">${shots.map((k) => `<img loading="lazy" src="${d.media[k]}?w=700" alt="${k}">`).join("")}</div>` : ""}
     ${d.versions.length > 1 ? `<div class="d-h">Versioni (${d.versions.length})</div><div class="versions">${d.versions.map((v) =>
       `<div class="version ${v.primary ? "primary" : ""}"><span class="f" title="${esc(v.file)}">${esc(v.file)}</span>`
@@ -708,6 +711,7 @@ async function openDetail(id) {
   $("#detail").setAttribute("aria-hidden", "false");
   $("#detail").scrollTop = 0;
   renderDetailSections(d);
+  if (d.shots) loadDetailShots(d.id);
   GS.emit("gameOpened", d);
 }
 
@@ -833,13 +837,19 @@ async function pollRunning() {
     bar.hidden = false;
     bar.className = r.status === "extracting" ? "extracting" : "";
     const what = r.status === "extracting" ? (r.message || "Estrazione…") : r.status === "starting" ? "Avvio…" : `In esecuzione con ${esc(r.emulator)}`;
-    bar.innerHTML = `<span class="dot"></span><b>${esc(r.title)}</b><span class="muted">${esc(what)}</span>`;
+    bar.innerHTML = `<span class="dot"></span><b>${esc(r.title)}</b><span class="muted">${esc(what)}</span>`
+      + (r.status === "running" ? `<button class="btn" id="run-shot" title="Schermata del gioco (${esc(SHOTS.hotkey)} · controller: Select+R1)">📷${r.shots ? " " + r.shots : ""}</button>` : "");
+    if (S.running && r.status === "running" && (r.shots || 0) > (S.running.shots || 0)) toast("📷 Schermata salvata");
     pollTimer = setTimeout(pollRunning, 1500);
   } else {
     bar.hidden = true;
     if (S.running && S.running.started === r.started) {
       if (r.status === "error") toast(r.message, true);
-      if (r.status === "finished") { toast(`Sessione terminata: ${fmtTime(r.played)}`); reload(true); }
+      if (r.status === "finished") {
+        toast(`Sessione terminata: ${fmtTime(r.played)}${r.shots ? ` · ${r.shots} ${r.shots === 1 ? "schermata" : "schermate"}` : ""}`);
+        reload(true);
+        if (S.detail) openDetail(S.detail.id);
+      }
     }
   }
   S.running = r;
@@ -1113,6 +1123,140 @@ async function renderStats(pv) {
       : `<p class="muted small">Ancora nessuna partita registrata.</p>`}</div></div>`;
   $("#st-year").onchange = (e) => { STATS_Y.y = +e.target.value; renderStats(pv); };
   pv.onclick = (e) => { const li = e.target.closest("li[data-id]"); if (li) openDetail(+li.dataset.id); };
+}
+
+/* ---- schermate dei giochi */
+const SHOTS = { detail: [], page: [], hotkey: "Ctrl+Shift+S" };
+
+async function loadDetailShots(id) {
+  let r;
+  try { r = await api(`/api/game/${id}/shots`); } catch { return; }
+  if (!S.detail || S.detail.id !== id) return;
+  SHOTS.detail = r.shots;
+  const box = $("#d-myshots");
+  if (box) box.innerHTML = r.shots.slice(0, 12).map((s, i) => `<img loading="lazy" src="${s.url}?w=360" data-i="${i}" alt="" title="${esc(fmtDate(s.taken))} · ${esc(s.source)}">`).join("");
+}
+
+function openLightbox(list, i) {
+  if (!list.length) return;
+  const lb = $("#lightbox");
+  const draw = () => {
+    const s = list[i];
+    lb.innerHTML = `<div class="lb-top"><b>${esc(s.title || "")}</b><span class="muted">${esc(fmtDate(s.taken))} · ${esc(s.source)} · ${i + 1}/${list.length}</span>
+      <span class="grow"></span><button class="btn" data-lb="folder">📁 Mostra nella cartella</button><button class="btn" data-lb="del">🗑 Elimina</button>
+      <button class="icon-btn big" data-lb="close">✕</button></div>
+      <button class="lb-arr l" data-lb="prev"${i ? "" : " disabled"}>‹</button><img class="lb-img" src="${s.url}" alt="">
+      <button class="lb-arr r" data-lb="next"${i < list.length - 1 ? "" : " disabled"}>›</button>`;
+  };
+  const close = () => { lb.hidden = true; document.removeEventListener("keydown", keys, true); };
+  const keys = (e) => {
+    if (e.key === "Escape") { e.stopPropagation(); close(); }
+    else if (e.key === "ArrowLeft" && i > 0) { i--; draw(); }
+    else if (e.key === "ArrowRight" && i < list.length - 1) { i++; draw(); }
+  };
+  lb.onclick = async (e) => {
+    const a = e.target.closest("[data-lb]")?.dataset.lb;
+    if (!a && e.target === lb) return close();
+    if (a === "close") close();
+    else if (a === "prev" && i > 0) { i--; draw(); }
+    else if (a === "next" && i < list.length - 1) { i++; draw(); }
+    else if (a === "folder") api("/api/shots/open", { body: { id: list[i].id } });
+    else if (a === "del") {
+      if (!confirm("Eliminare questa schermata dall'app? (l'originale dell'emulatore, se c'e', non viene toccato)")) return;
+      await api(`/api/shots/${list[i].id}`, { method: "DELETE" });
+      list.splice(i, 1);
+      if (!list.length) { close(); } else { i = Math.min(i, list.length - 1); draw(); }
+      if (S.view.type === "shots") renderShots($("#plugin-view"));
+      if (S.detail) openDetail(S.detail.id);
+    }
+  };
+  document.addEventListener("keydown", keys, true);
+  lb.hidden = false;
+  draw();
+}
+
+async function renderShots(pv) {
+  let d;
+  try { d = await api("/api/shots"); } catch (e) { pv.innerHTML = `<div class="page"><p>${esc(e.message)}</p></div>`; return; }
+  SHOTS.page = d.shots;
+  const st = d.settings;
+  SHOTS.hotkey = st.hotkey ? st.hotkey.split("+").map((k) => k[0].toUpperCase() + k.slice(1)).join("+") : "—";
+  $("#cnt-shots").textContent = d.shots.length || "";
+  const groups = new Map();
+  d.shots.forEach((s, i) => { const k = s.game ?? s.key; if (!groups.has(k)) groups.set(k, { s, items: [] }); groups.get(k).items.push(i); });
+  pv.innerHTML = `<div class="page">
+    <div class="page-head"><div><h2>📷 Le tue schermate</h2>
+      <p class="muted small">Mentre giochi premi <kbd>${esc(SHOTS.hotkey)}</kbd> o <kbd>Select</kbd>+<kbd>R1</kbd> sul controller (View+RB su Xbox):
+        l'app salva la finestra del gioco. Le schermate fatte con il tasto dell'emulatore vengono importate a fine partita.</p></div>
+      <div class="row"><button class="btn" id="sh-steam">⬇ Importa da Steam</button><button class="btn" id="sh-folder">📁 Cartella</button>
+        <button class="btn" id="sh-set">⚙</button></div></div>
+    <div class="wl-settings" id="sh-settings" hidden>
+      <label>Scorciatoia da tastiera <input class="field" id="sh-hotkey" value="${esc(st.hotkey || "")}" placeholder="es. ctrl+shift+s, f10"></label>
+      <label class="chk"><input type="checkbox" id="sh-pad"${st.pad ? " checked" : ""}> Select + R1 sul controller</label>
+      <label class="chk"><input type="checkbox" id="sh-emu"${st.import_emulator ? " checked" : ""}> Importa le schermate dell'emulatore a fine partita</label>
+      <button class="btn primary" id="sh-save">Salva</button></div>
+    ${d.shots.length ? [...groups.values()].map((g) => `<section class="sh-group"><h3>${g.s.game ? `<a href="#" data-game="${g.s.game}">${esc(g.s.title)}</a>` : esc(g.s.title)}
+        <span class="muted small">${esc(STORE_SHORT[g.s.platform] || platName(g.s.platform) || "")} · ${g.items.length}</span></h3>
+        <div class="sh-grid">${g.items.map((i) => `<img loading="lazy" src="${d.shots[i].url}?w=480" data-i="${i}" alt="" title="${esc(fmtDate(d.shots[i].taken))} · ${esc(d.shots[i].source)}">`).join("")}</div></section>`).join("")
+      : `<p class="muted">Ancora nessuna schermata. Avvia un gioco dall'app e premi <kbd>${esc(SHOTS.hotkey)}</kbd>.</p>`}</div>`;
+  pv.onclick = async (e) => {
+    const t = e.target;
+    if (t.matches(".sh-grid img")) return openLightbox(SHOTS.page, +t.dataset.i);
+    if (t.dataset.game) { e.preventDefault(); return openDetail(+t.dataset.game); }
+    if (t.id === "sh-folder") api("/api/shots/open", { body: {} });
+    else if (t.id === "sh-set") $("#sh-settings").hidden = !$("#sh-settings").hidden;
+    else if (t.id === "sh-steam") {
+      t.disabled = true;
+      try { const r = await api("/api/shots/import-steam", { body: {} }); toast(`Importate ${r.imported} schermate da Steam`); renderShots(pv); }
+      catch (err) { toast(err.message, true); t.disabled = false; }
+    } else if (t.id === "sh-save") {
+      try {
+        await api("/api/shots/settings", { body: { hotkey: $("#sh-hotkey").value, pad: $("#sh-pad").checked, import_emulator: $("#sh-emu").checked } });
+        toast("Impostazioni delle schermate salvate (valgono dalla prossima partita)");
+        renderShots(pv);
+      } catch (err) { toast(err.message, true); }
+    }
+  };
+}
+
+/* ---- profilo di avvio per gioco */
+let PF = null;
+async function openProfile(d) {
+  try { PF = await api(`/api/game/${d.id}/profile`); } catch (e) { return toast(e.message, true); }
+  PF.id = d.id;
+  const p = PF.profile, def = PF.default;
+  $("#pf-game").textContent = `— ${d.title} (${PF.platform})`;
+  const emus = PF.emulators.filter((e) => e.configured || e.id === p.emulator).sort((a, b) => (b.preset - a.preset) || a.id.localeCompare(b.id));
+  $("#pf-emu").innerHTML = `<option value="">Predefinito della console${def ? ` (${esc(def.emulator)}${def.core ? " · " + esc(def.core) : ""})` : ""}</option>`
+    + emus.map((e) => `<option value="${esc(e.id)}"${p.emulator === e.id ? " selected" : ""}>${esc(e.id)}${e.preset ? "" : " (non previsto per questa console)"}</option>`).join("");
+  $("#pf-core").innerHTML = `<option value="">Predefinito</option>` + PF.cores.map((c) => `<option${p.core === c ? " selected" : ""}>${esc(c)}</option>`).join("");
+  $("#pf-exe").value = p.exe || "";
+  $("#pf-args").value = p.args || "";
+  $("#pf-extra").value = p.extra || "";
+  pfRefresh();
+  $("#prof-dlg").showModal();
+}
+function pfRefresh() {
+  const emu = $("#pf-emu").value || PF.default?.emulator || "";
+  $("#pf-core-row").hidden = emu !== "retroarch";
+  const sel = PF.emulators.find((e) => e.id === $("#pf-emu").value);
+  const cur = PF.current && !PF.current.error && PF.current.emulator === (sel ? sel.id : PF.default?.emulator) ? PF.current : null;
+  const base = sel ? (cur || { exe: sel.exe, args: sel.args }) : (PF.default || cur);
+  $("#pf-args").placeholder = base ? base.args.join(" ") : "{rom}";
+  const exe = $("#pf-exe").value || (base ? base.exe : "");
+  const args = ($("#pf-args").value || (base ? base.args.join(" ") : "{rom}"));
+  const extra = $("#pf-extra").value;
+  $("#pf-cmd").textContent = `"${exe}" ${extra && args.includes("{rom}") ? args.replace("{rom}", extra + " {rom}") : args + (extra ? " " + extra : "")}`;
+}
+async function saveProfile(reset = false) {
+  try {
+    PF = Object.assign(PF, reset ? await api(`/api/game/${PF.id}/profile`, { method: "DELETE" })
+      : await api(`/api/game/${PF.id}/profile`, { body: { emulator: $("#pf-emu").value, core: $("#pf-emu").value === "retroarch" || !$("#pf-emu").value ? $("#pf-core").value : "",
+        exe: $("#pf-exe").value, args: $("#pf-args").value, extra: $("#pf-extra").value } }));
+  } catch (e) { return toast(e.message, true); }
+  $("#prof-dlg").close();
+  toast(reset ? "Profilo rimosso: si usano le impostazioni della console" : "Profilo di avvio salvato");
+  openDetail(PF.id);
 }
 
 /* ---- metadati degli store (solo database offline) */
@@ -1723,6 +1867,9 @@ function bind() {
     else if (t.id === "d-hide") setFlag("hidden", !d.user.hidden);
     else if (t.id === "d-folder") api(`/api/game/${d.id}/open-folder`, { body: {} }).catch((err) => toast(err.message, true));
     else if (t.id === "d-emu-cfg") { e.preventDefault(); openSettings("emu"); }
+    else if (t.id === "d-profile") { e.preventDefault(); openProfile(d); }
+    else if (t.id === "d-shots-all") { e.preventDefault(); openLightbox(SHOTS.detail, 0); }
+    else if (t.closest("#d-myshots img")) { openLightbox(SHOTS.detail, +t.closest("img").dataset.i); }
     else if (t.id === "d-scrape") {
       try { await api("/api/scan", { body: { game: d.id, mode: "missing" } }); }
       catch (err) { return toast(err.message, true); }
@@ -1842,6 +1989,17 @@ function bind() {
   $("#collart-all").onclick = () => startCollart("all");
   $("#collart-stop").onclick = () => api("/api/collart/cancel", { body: {} });
   $("#smeta-all").onclick = () => startStoreMeta(false);
+  $("#prof-dlg").addEventListener("input", pfRefresh);
+  $("#prof-dlg").addEventListener("change", pfRefresh);
+  $("#pf-cancel").onclick = () => $("#prof-dlg").close();
+  $("#pf-save").onclick = () => saveProfile(false);
+  $("#pf-reset").onclick = () => saveProfile(true);
+  $("#pf-exe-pick").onclick = async () => { const p = await pickPath("file"); if (p) { $("#pf-exe").value = p; pfRefresh(); } };
+  $("#running").addEventListener("click", (e) => { if (e.target.closest("#run-shot")) api("/api/running/screenshot", { body: {} }); });
+  api("/api/shots").then((d) => {
+    $("#cnt-shots").textContent = d.shots.length || "";
+    SHOTS.hotkey = d.settings.hotkey ? d.settings.hotkey.split("+").map((k) => k[0].toUpperCase() + k.slice(1)).join("+") : "—";
+  }).catch(() => {});
   $("#smart-new").onclick = () => openSmart();
   $("#smart-dlg").addEventListener("click", (e) => {
     const c = e.target.closest(".sm-chip");

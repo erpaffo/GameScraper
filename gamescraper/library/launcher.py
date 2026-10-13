@@ -13,6 +13,8 @@ Configurazione (config.toml):
     args = ["-L", "{core}", "{rom}"]
 
 Per ogni console si usa il primo emulatore dei preset che risulta configurato.
+Un singolo gioco puo' avere un profilo proprio (scheda del gioco > Profilo di avvio): emulatore, core,
+eseguibile diverso (es. un'altra versione di PCSX2), argomenti e argomenti aggiuntivi.
 """
 
 from __future__ import annotations
@@ -185,9 +187,36 @@ def _core_path(cfg, core: str) -> Path:
     return base / f"{core}_libretro{ext}"
 
 
-def plan(cfg, platform: P.Platform) -> dict | None:
-    """Emulatore scelto per una console: {emulator, exe, core, args} oppure None."""
-    over = cfg.launch.get(platform.id, {})
+def _split_args(s) -> list[str]:
+    if isinstance(s, list):
+        return [str(x) for x in s]
+    import shlex
+    return [a.strip('"') for a in shlex.split(str(s or ""), posix=False)]
+
+
+def default_core(platform_id: str, emulator: str) -> str | None:
+    return next((c for e, c in PRESETS.get(platform_id, []) if e == emulator and c), None)
+
+
+def plan(cfg, platform: P.Platform, profile: dict | None = None) -> dict | None:
+    """Emulatore scelto per una console (o per un gioco con un profilo proprio):
+    {emulator, exe, core, args, profile} oppure None."""
+    over = dict(cfg.launch.get(platform.id, {}))
+    prof = {k: v for k, v in (profile or {}).items() if v not in (None, "", [])}
+    if prof:
+        emu = prof.get("emulator") or over.get("emulator")
+        if emu:
+            # emulatore del profilo: si parte dal suo preset per questa console, non da quello della console
+            over = {"emulator": emu, "core": prof.get("core") or (over.get("core") if over.get("emulator") == emu else None)
+                    or default_core(platform.id, emu), "exe": prof.get("exe") or (over.get("exe") if over.get("emulator") == emu else None),
+                    "args": _split_args(prof["args"]) if prof.get("args") else (over.get("args") if over.get("emulator") == emu else None)}
+        else:  # solo core/eseguibile/argomenti diversi sul preset della console
+            p0 = plan(cfg, platform)
+            if p0:
+                over = {"emulator": p0["emulator"], "core": prof.get("core") or p0["core"], "exe": prof.get("exe") or p0["exe"],
+                        "args": _split_args(prof["args"]) if prof.get("args") else p0["args"]}
+        if prof.get("exe") and not Path(prof["exe"]).exists():
+            raise LaunchError(f"Profilo del gioco: eseguibile non trovato ({prof['exe']})")
     cands = [(over["emulator"], over.get("core"))] if over.get("emulator") else PRESETS.get(platform.id, [])
     for emu, core in cands:
         exe = (over.get("exe") if over.get("emulator") == emu else None) or cfg.emulators.get(emu)
@@ -200,7 +229,11 @@ def plan(cfg, platform: P.Platform) -> dict | None:
             args = over.get("args") or ["-L", "{core}", "{rom}"]
         else:
             args = over.get("args") or STANDALONE_ARGS.get(emu, ["{rom}"])
-        return {"emulator": emu, "exe": exe, "core": core, "args": args}
+        extra = _split_args(prof.get("extra")) if prof.get("extra") else []
+        if extra:  # argomenti aggiuntivi prima del file del gioco
+            i = next((n for n, a in enumerate(args) if "{rom}" in a), len(args))
+            args = [*args[:i], *extra, *args[i:]]
+        return {"emulator": emu, "exe": exe, "core": core, "args": list(args), "profile": bool(prof)}
     return None
 
 
@@ -309,33 +342,89 @@ def _xinput():
     return buttons
 
 
-XINPUT_BACK, XINPUT_START = 0x0020, 0x0010
+XINPUT_BACK, XINPUT_START, XINPUT_RB = 0x0020, 0x0010, 0x0200
 
 
 class Launcher:
-    def __init__(self, cfg, userdata, on_event=None):
+    def __init__(self, cfg, userdata, on_event=None, shots=None, profile_of=None):
         self.cfg = cfg
         self.user = userdata
         self.on_event = on_event or (lambda name, data: None)
+        self.shots = shots  # archivio delle schermate (screens.Shots)
+        self.profile_of = profile_of or (lambda key: None)  # profilo di avvio del gioco
         self.state: dict = {}
         self.lock = threading.Lock()
+        self._hotkey = None
+
+    def screenshot(self) -> bool:
+        """Cattura la finestra del gioco e la salva nell'app."""
+        key = self.state.get("key")
+        if not self.shots or not key or self.state.get("status") != "running":
+            return False
+        from . import screens
+        try:
+            img = screens.capture_foreground()
+            sid = self.shots.add_image(key, img)
+        except Exception as e:
+            self._set(message=f"Schermata non riuscita: {e}")
+            return False
+        screens.beep()
+        with self.lock:
+            self.state["shots"] = self.state.get("shots", 0) + 1
+            self.state["last_shot"] = sid
+        self.on_event("screenshot", {"key": key, "id": sid})
+        return True
+
+    def _start_capture(self):
+        from . import screens
+        st = screens.settings(self.cfg)
+        if self.shots and st.get("hotkey"):
+            self._hotkey = screens.Hotkey(st["hotkey"], self.screenshot)
+            self._hotkey.start()
+
+    def _stop_capture(self, st: dict):
+        if self._hotkey:
+            self._hotkey.stop()
+            self._hotkey = None
+        from . import screens
+        if self.shots and screens.settings(self.cfg).get("import_emulator") and st.get("key") and st.get("started"):
+            try:  # schermate fatte con il tasto dell'emulatore durante la sessione
+                n = screens.import_session(self.shots, st["key"], st.get("emulator_id") or st.get("emulator") or "",
+                                           st.get("exe"), st["started"], time.time())
+                if n:
+                    with self.lock:
+                        self.state["shots"] = self.state.get("shots", 0) + n
+                    self.on_event("screenshot", {"key": st["key"], "imported": n})
+            except Exception:
+                pass
 
     def _watch_combo(self):
-        """Select/View + Start/Menu tenuti premuti per 2 secondi chiudono il gioco in esecuzione."""
+        """Controller (XInput) durante il gioco: Select/View + Start/Menu tenuti 2 secondi chiudono il gioco,
+        Select/View + R1/RB fanno una schermata."""
         read = _xinput()
         if not read:
             return
+        from . import screens
+        pad_shot = screens.settings(self.cfg).get("pad", True)
+        exit_combo = self.cfg.app.get("exit_combo", True)
+        if not pad_shot and not exit_combo:
+            return
         since = 0.0
+        shot_held = False
         while self.state.get("status") == "running":
             pressed = read()
-            if pressed & XINPUT_BACK and pressed & XINPUT_START:
+            if exit_combo and pressed & XINPUT_BACK and pressed & XINPUT_START:
                 since = since or time.time()
                 if time.time() - since >= 2:
                     self.stop()
                     return
             else:
                 since = 0.0
-            time.sleep(0.1)
+            combo = bool(pressed & XINPUT_BACK and pressed & XINPUT_RB)
+            if pad_shot and combo and not shot_held:
+                threading.Thread(target=self.screenshot, daemon=True).start()
+            shot_held = combo
+            time.sleep(0.05)
 
     def stop(self) -> bool:
         """Chiude il gioco in esecuzione (es. Select+Start tenuti premuti nella Big Picture)."""
@@ -380,13 +469,14 @@ class Launcher:
         with self.lock:
             if self.state.get("status") in ("starting", "extracting", "running"):
                 raise LaunchError(f"E' gia' in esecuzione: {self.state.get('title')}")
-            pl = plan(self.cfg, platform)
+            pl = plan(self.cfg, platform, self.profile_of(key))
             if not pl:
                 cands = ", ".join(e + (f" (core {c})" if c else "") for e, c in PRESETS.get(platform.id, [])) or "nessun preset"
                 raise LaunchError(f"Nessun emulatore configurato per {platform.name}. Aggiungi in config.toml, "
                                   f"sezione [emulators], uno di: {cands}")
             self.state = {"key": key, "title": title, "status": "starting", "message": "", "emulator": pl["emulator"],
-                          "started": time.time()}
+                          "emulator_id": pl["emulator"], "exe": pl["exe"], "profile": pl.get("profile", False),
+                          "started": time.time(), "shots": 0}
         threading.Thread(target=self._run, args=(key, platform, path, pl), daemon=True).start()
 
     # ------------------------------------------------------------ giochi PC (store e manuali)
@@ -399,7 +489,8 @@ class Launcher:
             if not launch or not launch.get("target"):
                 raise LaunchError("Questo gioco non ha un comando di avvio (prova ad aprirlo dallo store)")
             self.state = {"key": key, "title": title, "status": "starting", "message": "", "emulator": store,
-                          "started": time.time()}
+                          "emulator_id": "", "exe": launch.get("target") if launch.get("type") != "uri" else None,
+                          "started": time.time(), "shots": 0}
         threading.Thread(target=self._run_pc, args=(key, launch, install_dir), daemon=True).start()
 
     @staticmethod
@@ -458,9 +549,13 @@ class Launcher:
             st = dict(self.state)
         if kw.get("status") == "running" and prev != "running":
             self.on_event("game_started", st)
-            if self.cfg.app.get("exit_combo", True):
-                threading.Thread(target=self._watch_combo, daemon=True).start()
+            self._start_capture()
+            threading.Thread(target=self._watch_combo, daemon=True).start()
         elif kw.get("status") in ("finished", "error") and prev in ("running", "starting", "extracting"):
+            if prev == "running":
+                self._stop_capture(st)
+                with self.lock:
+                    st = dict(self.state)
             self.on_event("game_stopped", st)
 
     def _run(self, key: str, platform: P.Platform, path: Path, pl: dict):

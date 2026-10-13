@@ -132,7 +132,9 @@ def create_app(cfg) -> FastAPI:
     Path(cfg.cache).mkdir(parents=True, exist_ok=True)  # prima installazione: la cache non esiste ancora
     user = UserData(Path(cfg.cache) / "userdata.db")
     events = X.Events()
-    launcher = L.Launcher(cfg, user, on_event=events.emit)
+    from ..library import screens as SC
+    shots = SC.Shots(cfg.cache, Path(cfg.cache) / "userdata.db")
+    launcher = L.Launcher(cfg, user, on_event=events.emit, shots=shots, profile_of=user.profile)
     plugin_errors = X.load_backends(app, cfg, events)
     thumbs_dir = Path(cfg.cache) / "thumbs"
     state = {"building": False, "build_log": [], "build_stats": None, "thumbs_total": 0, "thumbs_done": 0}
@@ -245,7 +247,10 @@ def create_app(cfg) -> FastAPI:
         v = view()
         grp = v["groups"][g["grp"]]
         p = P.PLATFORMS.get(g["platform"])
-        plan = L.plan(cfg, p) if p else None
+        try:
+            plan = L.plan(cfg, p, user.profile(g["key"])) if p else None
+        except L.LaunchError:
+            plan = None
         versions = [{"id": m["id"], "title": m["title"],
                      "file": (STORE_NAMES.get(m.get("store"), m.get("store")) if m.get("store")
                               else Path(m["files"][0]).name if m["files"] else m["title"]),
@@ -264,6 +269,8 @@ def create_app(cfg) -> FastAPI:
                 "missing": [] if g.get("store") else _missing(g),
                 "rating_count": g.get("rating_count"), "rating_critics": g.get("rating_critics"),
                 "players_local": _players_label(g.get("players"), g["platform"]),
+                "profile": user.profile(g["key"]),
+                "shots": len(shots.list([m["key"] for m in lib.groups[g["grp"]]])),
                 "hltb": json.loads(g["hltb"]) if g.get("hltb") else None,
                 "size": g.get("size"), "magnet": (g.get("launch") or {}).get("magnet") if g.get("store") == "online" else None,
                 "file_name": g.get("canonical") if g.get("store") == "online" else None,
@@ -358,6 +365,137 @@ def create_app(cfg) -> FastAPI:
         except L.LaunchError as e:
             raise HTTPException(409, str(e))
         return {"ok": True}
+
+    # ------------------------------------------------------------ profilo di avvio del gioco
+    @app.get("/api/game/{gid}/profile")
+    def api_profile(gid: int):
+        g = lib.get(gid)
+        p = P.PLATFORMS.get(g["platform"])
+        if not p or g.get("store"):
+            raise HTTPException(400, "I profili di avvio valgono per i giochi delle console")
+        base = L.plan(cfg, p)
+        try:
+            cur = L.plan(cfg, p, user.profile(g["key"]))
+        except L.LaunchError as e:
+            cur = {"error": str(e)}
+        emus = [{"id": e, "configured": bool(cfg.emulators.get(e) and Path(cfg.emulators[e]).exists()),
+                 "preset": any(x == e for x, _ in L.PRESETS.get(p.id, [])), "default_core": L.default_core(p.id, e),
+                 "exe": cfg.emulators.get(e) or "",
+                 "args": ["-L", "{core}", "{rom}"] if e == L.RA else L.STANDALONE_ARGS.get(e, ["{rom}"])}
+                for e in L.EMULATOR_NAMES]
+        cores = []
+        if cfg.emulators.get(L.RA):
+            cdir = L._core_path(cfg, "x").parent
+            if cdir.is_dir():
+                cores = sorted(f.name.split("_libretro")[0] for f in cdir.iterdir() if "_libretro" in f.name)
+        return {"profile": user.profile(g["key"]) or {}, "default": base, "current": cur, "emulators": emus,
+                "cores": cores, "platform": p.name}
+
+    @app.post("/api/game/{gid}/profile")
+    def api_profile_save(gid: int, body: dict = Body(...)):
+        g = lib.get(gid)
+        data = {k: str(body.get(k) or "").strip() for k in ("emulator", "core", "exe", "args", "extra")}
+        data = {k: v for k, v in data.items() if v}
+        if data.get("emulator") and data["emulator"] not in L.EMULATOR_NAMES:
+            raise HTTPException(400, "Emulatore sconosciuto")
+        if data.get("exe") and not Path(data["exe"].strip('"')).is_file():
+            raise HTTPException(400, "Eseguibile non trovato")
+        if data.get("exe"):
+            data["exe"] = data["exe"].strip('"')
+        user.set_profile(_member_keys(gid), data or None)
+        return api_profile(gid)
+
+    @app.delete("/api/game/{gid}/profile")
+    def api_profile_delete(gid: int):
+        user.set_profile(_member_keys(gid), None)
+        return api_profile(gid)
+
+    # ------------------------------------------------------------ schermate
+    def _shot_payload(s: dict) -> dict:
+        g = lib.by_key.get(s["key"])
+        return {**s, "url": f"/shots/{s['id']}", "game": g["id"] if g else None, "title": g["title"] if g else s["key"],
+                "platform": (g.get("store") or g["platform"]) if g else ""}
+
+    @app.get("/api/game/{gid}/shots")
+    def api_game_shots(gid: int):
+        g = lib.get(gid)
+        return {"shots": [_shot_payload(s) for s in shots.list([m["key"] for m in lib.groups[g["grp"]]])]}
+
+    @app.get("/api/shots")
+    def api_shots():
+        out = []
+        for s in shots.list():
+            g = lib.by_key.get(s["key"])
+            if g:  # la versione principale del gioco, per raggruppare le schermate di tutte le versioni
+                prim = next((m for m in lib.groups[g["grp"]] if m.get("is_primary")), g)
+                out.append({**_shot_payload(s), "game": prim["id"], "title": prim["title"],
+                            "platform": prim.get("store") or prim["platform"]})
+            else:
+                out.append(_shot_payload(s))
+        return {"shots": out, "folder": str(shots.root), "settings": SC.settings(cfg)}
+
+    @app.get("/shots/{sid}")
+    def shot_file(sid: int, w: int = 0):
+        p = shots.path(sid)
+        if not p or not p.exists():
+            raise HTTPException(404)
+        if w:
+            try:
+                p = _thumb(p, min(max(w, 64), 1600))
+            except Exception:
+                pass
+        return FileResponse(p, headers={"Cache-Control": "public, max-age=604800"})
+
+    @app.delete("/api/shots/{sid}")
+    def api_shot_delete(sid: int):
+        shots.delete(sid)
+        return {"ok": True}
+
+    @app.post("/api/shots/open")
+    def api_shot_open(body: dict = Body(default={})):
+        p = shots.path(int(body["id"])) if body.get("id") else shots.root
+        if not p or not p.exists():
+            shots.root.mkdir(parents=True, exist_ok=True)
+            p = shots.root
+        if sys.platform == "win32" and p.is_file():
+            subprocess.Popen(["explorer", "/select,", str(p)])
+        else:
+            L.open_uri(str(p if p.is_dir() else p.parent))
+        return {"ok": True}
+
+    @app.post("/api/shots/import-steam")
+    def api_shots_steam():
+        prov = STORES.BY_ID.get("steam")
+        from ..cache import Cache
+        c = Cache(cfg.cache)
+        try:
+            root = prov(cfg, c, None, lambda *a: None).path() if prov else None
+        finally:
+            c.close()
+        if not root:
+            raise HTTPException(400, "Steam non trovato su questo computer")
+        keys = {g["key"].split(":", 1)[1]: g["key"] for g in lib.games if g.get("store") == "steam"}
+        n = SC.import_steam(shots, Path(root), keys)
+        return {"imported": n}
+
+    @app.post("/api/shots/settings")
+    def api_shots_settings(body: dict = Body(...)):
+        cur = SC.settings(cfg)
+        if "hotkey" in body:
+            hk = str(body.get("hotkey") or "").strip().lower()
+            if hk and not SC.parse_hotkey(hk):
+                raise HTTPException(400, "Scorciatoia non valida (es. ctrl+shift+s, f10, alt+f12)")
+            cur["hotkey"] = hk
+        for k in ("pad", "import_emulator"):
+            if k in body:
+                cur[k] = bool(body[k])
+        C.save_settings(cfg, app={"screenshots": cur})
+        cfg.app["screenshots"] = cur
+        return {"settings": cur}
+
+    @app.post("/api/running/screenshot")
+    def api_running_shot():
+        return {"ok": launcher.screenshot()}
 
     @app.get("/api/running")
     def api_running():
@@ -1625,8 +1763,39 @@ def _plain(s: str) -> str:
     return re.sub(r"\[/?[a-z ]*\]", "", s)
 
 
+def _port_free(port: int) -> bool:
+    import socket
+    with socket.socket() as sk:
+        try:
+            sk.bind(("127.0.0.1", port))
+            return True
+        except OSError:
+            return False
+
+
+def _is_gamescraper(port: int) -> bool:
+    import urllib.request
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status", timeout=2) as r:
+            return b"build_stats" in r.read(400)
+    except Exception:
+        return False
+
+
 def run(cfg, port: int = 8765, browser: bool = False, bigpicture: bool = False):
     import uvicorn
+    if not _port_free(port):
+        if _is_gamescraper(port):  # una copia e' gia' aperta: non se ne avvia un'altra sugli stessi dati
+            print(f"GameScraper e' gia' in esecuzione su http://127.0.0.1:{port}/ - lo apro nel browser. "
+                  "Per aprirne un'altra usa --port.")
+            import webbrowser
+            webbrowser.open(f"http://127.0.0.1:{port}/" + ("bigpicture" if bigpicture else ""))
+            return
+        free = next((q for q in range(port + 1, port + 50) if _port_free(q)), None)
+        if free is None:
+            raise SystemExit(f"Porta {port} occupata da un altro programma: scegline un'altra con --port")
+        print(f"Porta {port} occupata da un altro programma: uso la {free}")
+        port = free
     app = create_app(cfg)
     url = f"http://127.0.0.1:{port}/"
     start_url = url + ("bigpicture" if bigpicture else "")

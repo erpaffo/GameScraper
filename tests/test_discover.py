@@ -67,9 +67,44 @@ def test_status_and_wishlist(tmp):
     u.db.close()
 
 
+def test_profiles_and_shots(tmp):
+    from PIL import Image
+
+    from gamescraper import config as C
+    from gamescraper import platforms as P
+    from gamescraper.library import launcher as L
+    from gamescraper.library.screens import Shots, parse_hotkey
+    d = Path(tmp)
+    for n in ("pcsx2.exe", "pcsx2-old.exe"):
+        (d / n).write_text("x")
+    cfg = C.Config()
+    cfg.emulators = {"pcsx2": str(d / "pcsx2.exe")}
+    ps2 = P.PLATFORMS["ps2"]
+    assert L.plan(cfg, ps2)["exe"].endswith("pcsx2.exe") and not L.plan(cfg, ps2)["profile"]
+    pl = L.plan(cfg, ps2, {"exe": str(d / "pcsx2-old.exe"), "extra": "-fullscreen"})
+    assert pl["exe"].endswith("pcsx2-old.exe") and pl["args"] == ["-batch", "-fullscreen", "{rom}"] and pl["profile"]
+    try:
+        L.plan(cfg, ps2, {"exe": str(d / "manca.exe")})
+        raise AssertionError("eseguibile mancante accettato")
+    except L.LaunchError:
+        pass
+    sh = Shots(d, d / "u.db")
+    sh.add_image("ps2/x", Image.new("RGB", (40, 30)))
+    f = d / "emu.png"
+    Image.new("RGB", (8, 8)).save(f)
+    assert sh.add_file("ps2/x", f, "pcsx2") and sh.add_file("ps2/x", f, "pcsx2") is None  # niente doppioni
+    assert sh.counts() == {"ps2/x": 2} and sh.path(sh.list()[0]["id"]).exists()
+    sh.delete(sh.list()[0]["id"])
+    assert sh.counts() == {"ps2/x": 1}
+    sh.db.close()
+    assert parse_hotkey("ctrl+shift+s") and parse_hotkey("f10") and parse_hotkey("ctrl+boh") is None
+
+
 if __name__ == "__main__":
     test_allkeyshop()
     test_hltb()
     with tempfile.TemporaryDirectory() as tmp:
         test_status_and_wishlist(tmp)
+    with tempfile.TemporaryDirectory() as tmp:
+        test_profiles_and_shots(tmp)
     print("TUTTI I TEST OK")
