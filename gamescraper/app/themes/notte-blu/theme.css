@@ -1,0 +1,3 @@
+/* Tema Notte blu - vale sia per la vista desktop sia per la Big Picture */
+:root{--bg:#171a21;--bg-2:#1b2838;--bg-3:#2a3f5a;--panel:#1b2838;--line:#2f4562;--text:#e6edf5;--muted:#8fa3bb;--accent:#66c0f4;--accent-2:#3d7fb8}
+#sidebar{background:linear-gradient(180deg,#1b2838,#171d25)}.btn.primary{background:linear-gradient(90deg,#75b022,#588a1b)}

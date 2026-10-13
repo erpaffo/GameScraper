@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="it" data-mode="desktop">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GameScraper</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M8 0l8 8-8 8-8-8z%22 fill=%22%235b8cff%22/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand"><span class="logo">◆</span> GameScraper</div>
+    <nav id="nav">
+      <div class="nav-section">Libreria</div>
+      <a class="nav-item" data-view="foryou"><span class="ico">✨</span><span class="lbl">Per te</span></a>
+      <a class="nav-item" data-view="all"><span class="ico">▦</span><span class="lbl">Tutti i giochi</span><span class="cnt" id="cnt-all"></span></a>
+      <a class="nav-item" data-view="favorites"><span class="ico">★</span><span class="lbl">Preferiti</span><span class="cnt" id="cnt-fav"></span></a>
+      <a class="nav-item" data-view="shop"><span class="ico">🛒</span><span class="lbl">Store</span><span class="cnt" id="cnt-shop"></span></a>
+      <a class="nav-item" data-view="multi"><span class="ico">👥</span><span class="lbl">Multigiocatore locale</span><span class="cnt" id="cnt-multi"></span></a>
+      <a class="nav-item" data-view="free"><span class="ico">🎁</span><span class="lbl">Giochi gratis</span><span class="cnt" id="cnt-free"></span></a>
+      <a class="nav-item" data-view="wishlist"><span class="ico">♡</span><span class="lbl">Lista desideri</span><span class="cnt" id="cnt-wish"></span></a>
+      <a class="nav-item" data-view="stats"><span class="ico">📊</span><span class="lbl">Statistiche</span></a>
+      <a class="nav-item" data-view="recent"><span class="ico">◷</span><span class="lbl">Giocati di recente</span><span class="cnt" id="cnt-recent"></span></a>
+
+      <div class="nav-section">Stato</div>
+      <div id="status-list"></div>
+
+      <div class="nav-section with-action">
+        <span>PC</span>
+        <span class="section-tools"><button class="icon-btn" id="pc-add" title="Aggiungi un gioco PC (.exe)">＋</button></span>
+      </div>
+      <div id="store-list"></div>
+
+      <div class="nav-section">Console</div>
+      <div id="platform-list"></div>
+
+      <div class="nav-section with-action">
+        <span>Collezioni</span>
+        <span class="section-tools">
+          <button class="icon-btn" id="coll-sort" title="Ordina collezioni">⇅</button>
+          <button class="icon-btn" id="coll-new" title="Nuova collezione">＋</button>
+        </span>
+      </div>
+      <div class="smart-head"><span>Intelligenti</span><button class="icon-btn" id="smart-new" title="Nuova collezione intelligente (regole)">＋⚡</button></div>
+      <div id="smart-list"></div>
+      <input id="coll-filter" class="side-input" placeholder="Filtra collezioni…" autocomplete="off">
+      <div id="coll-list"></div>
+
+      <div id="plugin-nav-section" hidden>
+        <div class="nav-section">Estensioni</div>
+        <div id="plugin-nav"></div>
+      </div>
+
+      <div class="nav-section">Altro</div>
+      <a class="nav-item" data-view="missing"><span class="ico">?</span><span class="lbl">Senza dati</span><span class="cnt" id="cnt-missing"></span></a>
+      <a class="nav-item" data-view="dups"><span class="ico">⧉</span><span class="lbl">Duplicati</span><span class="cnt" id="cnt-dups"></span></a>
+      <a class="nav-item" data-view="hidden"><span class="ico">⊘</span><span class="lbl">Nascosti</span><span class="cnt" id="cnt-hidden"></span></a>
+    </nav>
+  </aside>
+
+  <main id="main">
+    <header id="toolbar">
+      <div class="view-head">
+        <h1 id="view-title">Tutti i giochi</h1>
+        <span id="view-count" class="muted"></span>
+        <span id="view-actions"></span>
+      </div>
+      <div class="tools">
+        <input id="search" type="search" placeholder="Cerca titolo, sviluppatore…  ( / )" autocomplete="off">
+        <select id="disc-preset" title="Scopri: filtri su valutazioni e voti"></select>
+        <select id="disc-genre" title="Genere"></select>
+        <select id="disc-decade" title="Decennio"></select>
+        <select id="sort" title="Ordinamento">
+          <option value="title">Titolo A–Z</option>
+          <option value="year">Anno ↑</option>
+          <option value="-year">Anno ↓</option>
+          <option value="platform">Console</option>
+          <option value="-last">Ultimi giocati</option>
+          <option value="-playtime">Tempo di gioco</option>
+          <option value="-rating">Valutazione</option>
+          <option value="-size">Dimensione ↓</option>
+          <option value="size">Dimensione ↑</option>
+          <option value="hltb">Durata ↑ (HowLongToBeat)</option>
+          <option value="-hltb">Durata ↓</option>
+          <option value="store">Store</option>
+        </select>
+        <select id="group" title="Raggruppa">
+          <option value="">Nessun gruppo</option>
+          <option value="platform">Per console</option>
+          <option value="year">Per anno</option>
+          <option value="letter">Per lettera</option>
+        </select>
+        <span id="shop-tools" hidden>
+          <select id="shop-src" title="Store"></select>
+          <select id="shop-plat" title="Piattaforma"></select>
+          <select id="shop-size" title="Dimensione"></select>
+        </span>
+        <select id="inst-filter" title="Giochi PC" hidden>
+          <option value="all">Tutti</option>
+          <option value="installed">Solo posseduti / installati</option>
+          <option value="notinstalled">Solo da scaricare / installare</option>
+        </select>
+        <label class="chk" title="Mostra una sola versione (la tua lingua/regione) per ogni gioco"><input type="checkbox" id="one-version" checked> Nascondi duplicati</label>
+        <input id="zoom" type="range" min="120" max="280" step="10" value="170" title="Dimensione copertine">
+        <button class="btn" id="scan-btn" title="Cerca nuovi giochi e console">⟳ Nuovi giochi</button>
+        <button class="btn" id="bp-btn" title="Modalità a schermo intero per il controller">🎮 Big Picture</button>
+        <button class="icon-btn big" id="settings-btn" title="Impostazioni">⚙</button>
+      </div>
+    </header>
+    <div id="coll-banner" hidden></div>
+    <div id="grid-scroll" tabindex="-1">
+      <div id="grid-sizer"></div>
+      <div id="grid-layer"></div>
+      <div id="empty" hidden></div>
+    </div>
+    <div id="plugin-view" hidden></div>
+  </main>
+
+  <section id="detail" aria-hidden="true">
+    <div class="detail-hero"><div class="hero-bg"></div></div>
+    <button class="icon-btn close" id="detail-close" title="Chiudi (Esc)">✕</button>
+    <div class="detail-body" id="detail-body"></div>
+  </section>
+
+  <div id="running" hidden></div>
+  <div id="toast" hidden></div>
+  <div id="popover" hidden></div>
+
+  <dialog id="settings">
+    <form method="dialog" class="dlg-head">
+      <div class="tabs" id="tabs">
+        <button type="button" class="tab" data-tab="scan">⟳ Nuovi giochi</button>
+        <button type="button" class="tab" data-tab="src">🔌 Fonti</button>
+        <button type="button" class="tab" data-tab="acc">🛒 Account</button>
+        <button type="button" class="tab" data-tab="emu">🎮 Emulatori</button>
+        <button type="button" class="tab" data-tab="look">🎨 Aspetto</button>
+        <button type="button" class="tab" data-tab="lib">▦ Libreria</button>
+      </div>
+      <button class="icon-btn">✕</button>
+    </form>
+    <div class="dlg-body">
+      <!-- ---------------- scraping -->
+      <section data-pane="scan">
+        <p class="muted">Cartella ROM: <code id="scan-root"></code> — le console vengono riconosciute dal nome della cartella.
+          Lo scraping interroga solo i giochi mai cercati prima, quindi è veloce anche su librerie grandi.</p>
+        <div id="scan-table"></div>
+        <div id="scan-unknown"></div>
+        <div class="row">
+          <select id="scan-mode" class="field" title="Cosa cercare">
+            <option value="new">Solo giochi nuovi o mai cercati</option>
+            <option value="missing">Completa i dati mancanti (riprova le fonti che non li avevano trovati)</option>
+            <option value="all">Riscarica tutto da capo (usa molta quota)</option>
+          </select>
+          <span class="spacer"></span>
+          <button class="btn" id="console-add">＋ Aggiungi console</button>
+          <button class="btn" id="scan-reload">↻ Ricontrolla cartelle</button>
+          <button class="btn" id="scan-plan" title="Quanti giochi e richieste per ogni fonte, tempi e giorni necessari">📊 Stima</button>
+          <button class="btn" id="scan-cancel" hidden>■ Interrompi</button>
+          <button class="btn primary" id="scan-start">⟳ Cerca nuovi giochi</button>
+        </div>
+        <div id="custom-consoles"></div>
+        <div id="scan-plan-box"></div>
+        <div id="scan-progress"></div>
+        <pre id="scan-log" class="log"></pre>
+      </section>
+
+      <!-- ---------------- fonti dei dati -->
+      <section data-pane="src">
+        <p class="muted">Le fonti vengono usate <b>in quest'ordine</b>: ognuna interroga solo i giochi a cui manca ancora
+          qualcosa. Metti prima quelle <b>offline</b> (nessuna richiesta ai siti) e dopo quelle online con quote.
+          I limiti valgono anche tra un'esecuzione e l'altra; in caso di errori ripetuti la fonte va in pausa da sola.</p>
+        <table class="emu"><thead><tr><th style="width:56px"></th><th>Fonte</th><th style="width:130px">Oggi / mese</th>
+          <th style="width:90px" title="richieste al secondo">Ritmo/s</th><th style="width:100px">Max/giorno</th><th style="width:100px">Max/mese</th></tr></thead>
+          <tbody id="src-table"></tbody></table>
+        <div class="row"><label class="lbl-field grow">Chiave RAWG (valutazioni e Metacritic, gratuita)
+          <span class="row tight"><input class="field grow" id="rawg-key" placeholder="incolla la chiave">
+          <a href="#" data-open="https://rawg.io/apidocs">Ottieni la chiave</a></span></label></div>
+        <h3>Database locali</h3>
+        <p class="muted small">Scaricati per intero una volta a settimana/mese: poi tutte le ricerche sono locali, senza richieste.</p>
+        <div id="bulk-list"></div>
+        <pre class="log" id="bulk-log"></pre>
+        <h3>Durate dei giochi (HowLongToBeat)</h3>
+        <p class="muted small">Quanto serve per finire la storia, la storia con gli extra e il 100%. Prima i tempi ufficiali di IGDB
+          per i giochi già collegati (500 per richiesta, pochi secondi), poi HowLongToBeat per gli altri: circa 50 giochi al minuto
+          (il massimo che il sito accetta), iniziando dai giochi che hai giocato e dai più popolari. Cache di 6 mesi.</p>
+        <div class="row"><span id="hltb-info" class="muted small grow"></span>
+          <button class="btn" id="hltb-missing">Cerca le mancanti</button><button class="btn" id="hltb-all">Aggiorna tutte</button>
+          <button class="btn" id="hltb-stop" hidden>■ Interrompi</button></div>
+        <div id="hltb-progress" class="job-progress"></div>
+        <h3>Immagini delle collezioni</h3>
+        <p class="muted small">Logo e copertina di ogni saga da Wikipedia (una richiesta alla volta, in sottofondo all'avvio);
+          dove manca si usano le immagini dei giochi della collezione.</p>
+        <div class="row"><span id="collart-info" class="muted small grow"></span>
+          <button class="btn" id="collart-missing">Cerca le mancanti</button><button class="btn" id="collart-all">Aggiorna tutte</button>
+          <button class="btn" id="collart-stop" hidden>■ Interrompi</button></div>
+        <div id="collart-progress" class="job-progress"></div>
+        <h3>Scraping automatico</h3>
+        <div class="row"><label class="chk"><input type="checkbox" id="sch-on"> Ogni giorno alle</label>
+          <input type="time" class="field" id="sch-time" value="03:00">
+          <select class="field" id="sch-mode"><option value="missing">completa i dati mancanti</option><option value="new">solo giochi nuovi</option></select>
+          <span class="muted small" id="sch-last"></span></div>
+        <p class="muted small">Funziona mentre l'app è aperta (anche ridotta a icona). Rispetta i limiti: se una quota finisce, riprende il giorno dopo.</p>
+        <div class="row end"><button class="btn primary" id="src-save">Salva</button></div>
+      </section>
+
+      <!-- ---------------- account degli store -->
+      <section data-pane="acc">
+        <p class="muted">I giochi PC arrivano dagli store installati su questo computer e dagli account collegati.
+          I giochi non installati compaiono con il pulsante «Installa», che apre lo store sulla pagina del gioco.</p>
+        <table class="emu"><thead><tr><th>Store</th><th style="width:110px">Stato</th><th class="num" style="width:110px" title="installati / totali">Giochi</th><th>Account</th></tr></thead>
+          <tbody id="acc-table"></tbody></table>
+        <div class="row end"><span class="muted small" id="acc-info"></span><button class="btn primary" id="acc-refresh">↻ Aggiorna store</button></div>
+        <div id="acc-progress"></div>
+      </section>
+
+      <!-- ---------------- aspetto: temi e plugin -->
+      <section data-pane="look">
+        <h3>Tema</h3>
+        <div id="theme-list" class="theme-list"></div>
+        <h3>Plugin</h3>
+        <p class="muted small">I plugin aggiungono funzioni all'app (pulsanti, sezioni, pagine, store, fonti di dati).
+          Installa solo plugin di cui ti fidi: possono fare qualsiasi cosa sul computer.</p>
+        <div id="plugin-list"></div>
+        <p class="muted small" id="ext-paths"></p>
+        <p class="muted small" id="ext-credit"></p>
+        <p class="muted small">Guida per creare temi e plugin: <code>docs/ESTENSIONI.md</code></p>
+      </section>
+
+      <!-- ---------------- emulatori -->
+      <section data-pane="emu">
+        <div class="row">
+          <input id="emu-folder" class="field grow" placeholder="Cartella che contiene gli emulatori, es. C:\Emulatori">
+          <button class="btn" id="emu-folder-pick">Sfoglia…</button>
+          <button class="btn" id="emu-detect">🔍 Trova emulatori</button>
+        </div>
+        <h3>Programmi</h3>
+        <p class="muted small">Un percorso per emulatore: vale per tutte le console che lo usano.</p>
+        <div id="emu-paths"></div>
+        <div class="row"><button class="btn" id="emu-add">＋ Aggiungi un altro emulatore</button></div>
+        <h3>Emulatore per console</h3>
+        <p class="muted small">«Automatico» usa il primo emulatore installato tra quelli consigliati. Negli argomenti
+          <code>{rom}</code> è il file del gioco, <code>{core}</code> il core di RetroArch.</p>
+        <div id="emu-table"></div>
+        <div class="row end">
+          <span class="muted small" id="emu-saved-to"></span>
+          <button class="btn primary" id="emu-save">Salva</button>
+        </div>
+      </section>
+
+      <!-- ---------------- libreria -->
+      <section data-pane="lib">
+        <p class="muted" id="lib-info"></p>
+        <button class="btn" id="rebuild-btn">↻ Aggiorna libreria</button>
+        <p class="muted small">Ricalcola giochi, versioni e collezioni dalla cache, senza scaricare nulla.</p>
+        <pre id="build-log" class="log"></pre>
+        <p class="muted" id="thumbs-info"></p>
+      </section>
+    </div>
+  </dialog>
+
+  <dialog id="catalog-dlg" class="small-dlg">
+    <form method="dialog" class="dlg-head"><h2 id="cat-title">Store online</h2><button class="icon-btn">✕</button></form>
+    <div class="dlg-body">
+      <p class="muted small">Incolla uno o più indirizzi di pagine che elencano i giochi di questa console (uno per riga).
+        Da ogni pagina vengono letti <b>nome</b>, <b>peso</b>, link di download e link magnet: i giochi che non hai
+        compaiono come «da scaricare». La pagina viene letta una sola volta per aggiornamento.</p>
+      <textarea id="cat-urls" class="field" rows="4" style="width:100%" placeholder="https://..."></textarea>
+      <div id="cat-pages" class="small"></div>
+      <pre class="log" id="cat-log"></pre>
+      <p class="muted small">Scarica solo ciò che hai il diritto di scaricare (giochi che possiedi dove la copia di backup è
+        consentita, homebrew, titoli liberi): il download di giochi protetti senza licenza è illegale.</p>
+      <div class="row end"><button class="btn" id="cat-refresh" type="button">↻ Rileggi</button>
+        <button class="btn primary" id="cat-save" type="button">Salva e leggi</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="console-dlg" class="small-dlg">
+    <form method="dialog" class="dlg-head"><h2>Aggiungi una console</h2><button class="icon-btn">✕</button></form>
+    <div class="dlg-body">
+      <label class="lbl-field">Nome <input id="cn-name" class="field" placeholder="es. NEC PC-8801"></label>
+      <label class="lbl-field">Identificativo (breve, senza spazi) <input id="cn-id" class="field" placeholder="es. pc8801"></label>
+      <label class="lbl-field">Estensioni dei file <input id="cn-exts" class="field" placeholder="es. d88 cmt (zip e 7z sono sempre inclusi)"></label>
+      <label class="lbl-field">Nomi della cartella che la identificano (separati da virgola)
+        <input id="cn-aliases" class="field" placeholder="es. PC88, NEC PC-8801"></label>
+      <label class="chk"><input type="checkbox" id="cn-cd"> Giochi su disco (ISO/CHD: niente calcolo del checksum)</label>
+      <label class="chk"><input type="checkbox" id="cn-dir"> Ogni sottocartella è un gioco</label>
+      <label class="lbl-field">ID piattaforma IGDB (facoltativo, migliora la ricerca) <input id="cn-igdb" class="field" placeholder="es. 125"></label>
+      <div class="row end"><button class="btn primary" id="cn-save" type="button">Aggiungi</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="quiz">
+    <div id="quiz-body"></div>
+  </dialog>
+  <dialog id="smart-dlg">
+    <h3 id="sm-title">Collezione intelligente</h3>
+    <div class="sm-grid">
+      <label>Nome <input class="field" id="sm-name" placeholder="es. Brevi da finire"></label>
+      <label>Icona <input class="field" id="sm-icon" maxlength="4" value="⚡"></label>
+      <label class="wide">Console e store <span class="muted small">(nessuna = tutte)</span><div class="sm-chips" id="sm-plats"></div></label>
+      <label class="wide">Generi <span class="muted small">(almeno uno)</span><div class="sm-chips" id="sm-genres"></div></label>
+      <label class="wide">Stato <div class="sm-chips" id="sm-status"></div></label>
+      <label>Valutazione minima (%) <input class="field" id="sm-minRating" type="number" min="0" max="100"></label>
+      <label>Critica minima (/100) <input class="field" id="sm-minCritics" type="number" min="0" max="100"></label>
+      <label>Giocatori in locale (almeno) <input class="field" id="sm-minPlayers" type="number" min="1" max="8"></label>
+      <label>Anno da <input class="field" id="sm-yearFrom" type="number" min="1970" max="2100"></label>
+      <label>Anno fino a <input class="field" id="sm-yearTo" type="number" min="1970" max="2100"></label>
+      <label>Durata massima (ore) <input class="field" id="sm-maxHours" type="number" min="0" step="0.5"></label>
+      <label>Durata minima (ore) <input class="field" id="sm-minHours" type="number" min="0" step="0.5"></label>
+      <label class="chk"><input type="checkbox" id="sm-installed"> Solo giochi pronti (ROM o installati)</label>
+      <label class="chk"><input type="checkbox" id="sm-favorites"> Solo preferiti</label>
+      <label class="chk"><input type="checkbox" id="sm-unplayed"> Solo mai giocati</label>
+    </div>
+    <div class="row end"><span class="muted grow" id="sm-count"></span>
+      <button class="btn" id="sm-delete" hidden>🗑 Elimina</button>
+      <button class="btn" id="sm-cancel">Annulla</button><button class="btn primary" id="sm-save">Salva</button></div>
+  </dialog>
+  <dialog id="smeta" class="small-dlg">
+    <h3>📚 Metadati dei giochi degli store</h3>
+    <p class="muted small">Descrizioni, sviluppatori, generi, date e valutazioni dei giochi PC (Steam, Epic, GOG…) vengono cercati
+      <b>solo nei database offline</b> già scaricati (LaunchBox, TheGamesDB): nessuna richiesta online, nessun limite consumato.
+      È separato dallo scraping dei giochi delle console.</p>
+    <div id="smeta-progress" class="job-progress"></div>
+    <div class="row end">
+      <button class="btn" id="smeta-missing">Solo quelli senza metadati</button>
+      <button class="btn primary" id="smeta-all">Cerca per tutti</button>
+      <button class="btn" id="smeta-stop" hidden>■ Interrompi</button>
+      <button class="btn" id="smeta-close">Chiudi</button>
+    </div>
+  </dialog>
+  <dialog id="add-game" class="small-dlg">
+    <form method="dialog" class="dlg-head"><h2>Aggiungi un gioco PC</h2><button class="icon-btn">✕</button></form>
+    <div class="dlg-body">
+      <label class="lbl-field">Eseguibile del gioco
+        <span class="row tight"><input id="ag-exe" class="field grow" placeholder="C:\Giochi\MioGioco\gioco.exe">
+        <button class="btn" id="ag-pick" type="button">Sfoglia…</button></span></label>
+      <label class="lbl-field">Titolo <input id="ag-title" class="field" placeholder="se vuoto: nome della cartella"></label>
+      <label class="lbl-field">Argomenti (facoltativi) <input id="ag-args" class="field" placeholder="es. -fullscreen"></label>
+      <p class="muted small">Copertina e immagini vengono cercate automaticamente (Steam, IGDB). Il tempo di gioco viene registrato.</p>
+      <div class="row end"><button class="btn primary" id="ag-save" type="button">Aggiungi</button></div>
+    </div>
+  </dialog>
+
+  <div id="splash" hidden>
+    <div class="splash-box">
+      <div class="logo big">◆</div>
+      <h2>Preparazione della libreria…</h2>
+      <p class="muted">La prima volta serve circa mezzo minuto. Le volte successive l'avvio è immediato.</p>
+      <pre id="splash-log" class="log"></pre>
+    </div>
+  </div>
+</div>
+<script src="/static/core.js"></script>
+<script src="/static/reco.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+/* Tema Chiaro - vale sia per la vista desktop sia per la Big Picture */
+:root{color-scheme:light;--bg:#f4f6fa;--bg-2:#ffffff;--bg-3:#e8ecf3;--panel:#ffffff;--line:#d9dee8;--text:#1b1f2a;--muted:#6b7385;--accent:#2f6bff;--accent-2:#7c4dff;--fav:#e0a100}
+#toolbar{background:rgba(244,246,250,.92)}.nav-item{color:#3a4152}.nav-item:hover,.nav-item.active{color:#000}
+.badge{background:rgba(255,255,255,.88);color:#1b1f2a}.tile .ph{color:#fff}#detail{box-shadow:-20px 0 50px rgba(0,0,0,.15)}
+.detail-hero::after{background:linear-gradient(180deg,transparent 30%,var(--panel))}.hero-bg{filter:blur(2px) brightness(.9)}
+.d-title h2,.d-title{color:#111}.log{color:#3a4152}#toast,#running{background:#fff;color:#1b1f2a}

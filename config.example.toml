@@ -1,0 +1,141 @@
+# GameScraper - configurazione di esempio
+# Copia questo file in "config.toml" e compila le credenziali.
+# Le credenziali possono anche essere passate con variabili d'ambiente:
+#   SS_USER, SS_PASSWORD, SS_DEVID, SS_DEVPASSWORD, IGDB_CLIENT_ID, IGDB_CLIENT_SECRET, TGDB_API_KEY
+
+[paths]
+# Cartella radice delle ROM. Le cartelle console vengono cercate anche in profondita' (fino a 4 livelli):
+# riconosce id/alias ("snes", "psx", "Mega Drive") e i nomi dei set No-Intro/Redump
+# ("Myrient/No-Intro/Nintendo - Game Boy Advance", "Redump/Nintendo - GameCube - NKit RVZ [...]").
+roms = "E:/Roms"
+cache = "cache"      # dati + media scaricati (riutilizzati tra un'esecuzione e l'altra)
+output = "output"    # output/<console>/games.json, games.csv, missing.txt, media/<tipo>/
+
+# Se una cartella non viene riconosciuta automaticamente, mappala qui: "nome cartella" = "id piattaforma"
+# (vale anche un percorso relativo alla radice, es. "Vari/Collezione SNES" = "snes")
+# (elenco id: python -m gamescraper platforms)
+[platform_folders]
+# "Super Nintendo (PAL)" = "snes"
+# "Sony PS1" = "psx"
+
+[scrape]
+# Ordine delle sorgenti. Ogni sorgente interroga SOLO i giochi a cui manca ancora qualcosa
+# che lei sa fornire. Mettere prima quelle veloci e senza quota = scraping molto piu' rapido.
+#   libretro      offline (DAT No-Intro/Redump) + immagini thumbnails.libretro.com, nessuna quota
+#   arcadedb      solo arcade, 25 giochi per richiesta
+#   igdb          10 giochi per richiesta, 4 richieste/s
+#   screenscraper quota giornaliera, thread in base all'account; unica fonte per wheel/marquee/video
+#   thegamesdb    quota mensile, ultima risorsa
+sources = ["libretro", "launchbox", "tgdb", "arcadedb", "igdb", "screenscraper", "rawg", "thegamesdb", "wikipedia"]
+
+# Campi testuali desiderati
+fields = ["title", "description", "developer", "publisher", "genres", "release_date", "players", "rating"]
+
+# Media da scaricare: cover, screenshot, title, wheel, marquee, video, box3d, fanart
+# NB: wheel, marquee, video e box3d esistono quasi solo su ScreenScraper -> ogni gioco passera'
+# da ScreenScraper e la quota giornaliera diventa il limite. Toglili se ti serve velocita' massima.
+media = ["cover", "screenshot", "wheel"]
+
+regions = ["eu", "us", "wor", "jp"]   # preferenza regioni per titoli/immagini/date
+languages = ["it", "en"]              # preferenza lingue per descrizioni e generi
+min_match = 70                         # punteggio minimo (0-100) per accettare un match per nome
+max_hash_mb = 512                      # file piu' grandi non vengono hashati (identificati per nome)
+full_hash = false                      # true = anche MD5/SHA1 (piu' lento; utile solo per ScreenScraper)
+hash_workers = 0                       # 0 = tutti i core
+disk = "auto"                          # auto | hdd | ssd: su HDD i file grandi si leggono uno alla volta
+io_workers = 0                         # file grandi letti in parallelo (0 = 1 su HDD, tutti i core su SSD)
+link_media = true                      # hardlink cache -> output (istantaneo, nessuno spazio extra)
+
+# Priorita' per singolo campo (sovrascrive l'ordine di "sources" solo per quel campo).
+# Le descrizioni in italiano esistono quasi solo su ScreenScraper:
+[field_priority]
+description = ["screenscraper", "igdb", "thegamesdb", "arcadedb"]
+
+[screenscraper]
+user = "erpaffo"          # il tuo account screenscraper.fr
+password = "paffo410"
+# Credenziali SVILUPPATORE: richiedile sul forum ScreenScraper (sezione API / devid).
+# Senza devid ScreenScraper non risponde alle API.
+devid = ""
+devpassword = ""
+softname = "GameScraper"
+threads = 0              # 0 = il massimo consentito dal tuo account
+quota_reserve = 200      # si ferma quando restano queste richieste giornaliere (margine di sicurezza)
+ko_reserve = 100         # idem per il limite giornaliero dei "non trovati" (il tuo account: 2.000/giorno)
+search_fallback = "missing"  # ricerca per nome dopo un checksum fallito: "missing" = solo giochi senza dati,
+                             # true = sempre (consuma molti "non trovati"), false = mai
+only_primary = true      # non interrogare le versioni secondarie (altre regioni/revisioni dello stesso gioco)
+media_parallel = false   # false = i download dei media rispettano anche loro il limite dei thread (piu' sicuro)
+
+[igdb]
+# https://api-docs.igdb.com/#account-creation  (app Twitch -> Client ID + Client Secret)
+client_id = "p036w3fjrf9knqy351yav8a5r5h84d"
+client_secret = "kgimxmoyg9xb3dnzsnq6pd65g8266e"
+rate = 4                 # richieste/s (limite IGDB: 4)
+search_fallback = true   # dopo il batch per nome esatto, ricerca fuzzy per i giochi non trovati
+
+[rawg]
+# https://rawg.io/apidocs (gratuita): valutazioni degli utenti e voto Metacritic. 20.000 richieste/mese.
+api_key = ""
+
+# Regole per ogni fonte online (facoltativo: i predefiniti sono gia' prudenti; modificabili da Impostazioni > Fonti)
+# rate = richieste al secondo, daily/monthly = massimo al giorno/mese, reserve = margine da non usare
+# [limits.rawg]
+# daily = 600
+# [limits.igdb]
+# rate = 3
+
+[thegamesdb]
+api_key = "fb566b1d9078b91f0b91adb41d40867fa856aac8498ecd1f30fbf4003f58b307 "
+rate = 2
+quota_reserve = 20
+
+[libretro]
+refresh_days = 30            # ogni quanto riscaricare i DAT
+download_threads = 24        # download paralleli da thumbnails.libretro.com
+thumbs_by_filename = true    # prova le immagini anche per ROM non identificate, usando il nome file
+
+# ------------------------------------------------------------------ FRONTEND
+# Avvio: python -m gamescraper app        (ricostruire la libreria: python -m gamescraper library)
+
+[collections]
+min_games = 3                # una collezione automatica nasce con almeno N giochi
+exclude = []                 # franchise da non mostrare, es. ["Disney", "NBA"]
+# Unisci franchise con nomi diversi:
+# aliases = { "Lara Croft" = "Tomb Raider" }
+
+# Percorsi degli emulatori. Per ogni console si usa il primo configurato tra quelli previsti
+# (l'elenco per console e' in Impostazioni nell'app). RetroArch usa i core nella sua cartella "cores".
+[emulators]
+# retroarch   = "C:/Emulatori/RetroArch/retroarch.exe"
+# dolphin     = "C:/Emulatori/Dolphin/Dolphin.exe"          # GameCube, Wii
+# pcsx2       = "C:/Emulatori/PCSX2/pcsx2-qt.exe"           # PS2
+# duckstation = "C:/Emulatori/DuckStation/duckstation-qt-x64-ReleaseLTCG.exe"   # PS1
+# ppsspp      = "C:/Emulatori/PPSSPP/PPSSPPWindows64.exe"   # PSP
+# rpcs3       = "C:/Emulatori/RPCS3/rpcs3.exe"              # PS3
+# vita3k      = "C:/Emulatori/Vita3K/Vita3K.exe"            # PS Vita
+# melonds     = "C:/Emulatori/melonDS/melonDS.exe"          # DS
+# azahar      = "C:/Emulatori/Azahar/azahar.exe"            # 3DS
+# cemu        = "C:/Emulatori/Cemu/Cemu.exe"                # Wii U
+# ryujinx     = "C:/Emulatori/Ryujinx/Ryujinx.exe"          # Switch
+# xenia       = "C:/Emulatori/Xenia/xenia_canary.exe"       # Xbox 360
+# flycast     = "C:/Emulatori/Flycast/flycast.exe"          # Dreamcast
+
+# Sovrascrivere il comando per una console (opzionale):
+# [launch.psx]
+# emulator = "retroarch"
+# core = "swanstation"
+# args = ["-L", "{core}", "{rom}", "-f"]
+
+# ------------------------------------------------------------------ GIOCHI PC (STORE)
+# Gli store si configurano anche dall'app: Impostazioni › Account (le scelte vanno in settings.json).
+# [stores.steam]
+# api_key = ""          # https://steamcommunity.com/dev/apikey : serve per vedere anche i giochi NON installati
+# steamid = ""          # vuoto = account Steam usato piu' di recente su questo PC
+# [stores.xbox]
+# enabled = false       # per disattivare uno store
+
+# ------------------------------------------------------------------ APP
+# [app]
+# theme = "oled"              # tema (si sceglie anche da Impostazioni › Aspetto)
+# exit_combo = true           # Select/View + Start/Menu tenuti 2 s chiudono il gioco in esecuzione

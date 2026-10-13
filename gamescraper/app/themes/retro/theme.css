@@ -1,0 +1,8 @@
+/* Tema Retrò - vale sia per la vista desktop sia per la Big Picture */
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
+:root{--bg:#0d0418;--bg-2:#150828;--bg-3:#22103d;--panel:#130724;--line:#3b1a66;--text:#f5e9ff;--muted:#b18fd6;--accent:#ff2fd0;--accent-2:#00e5ff;--fav:#ffe600;--radius:4px;font-family:'VT323',monospace}
+html,body{font-size:17px}.brand,.view-head h1,.d-title h2,.grid-header{font-family:'Press Start 2P',monospace;letter-spacing:0}
+.brand{font-size:12px}.view-head h1{font-size:16px}.d-title h2{font-size:15px;line-height:1.5}.grid-header{font-size:12px}
+.tile:hover .cover{box-shadow:0 0 0 2px var(--accent),0 0 22px var(--accent)}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:100;background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px)}
+.btn.primary{background:linear-gradient(135deg,#ff2fd0,#00e5ff);color:#0d0418;text-shadow:none}
