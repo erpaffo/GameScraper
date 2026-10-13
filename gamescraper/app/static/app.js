@@ -21,7 +21,6 @@ const S = {
 
 async function loadLibrary() {
   const lib = await api("/api/library");
-  if (!lib.games.rows.length) return false;
   Object.assign(S, decodeLibrary(lib));
   S.skipDup = lib.skip_duplicates !== false;
   S.catalogs = lib.catalogs || {};
@@ -33,7 +32,7 @@ async function loadLibrary() {
   S.shopIds = new Set(S.shop.map((g) => g.id));
   S.hasOnline = new Set(S.games.filter((g) => g.store === "online").map((g) => g.platform));
   GS.emit("libraryLoaded", S);
-  return true;
+  return lib.games.rows.length > 0;
 }
 
 /* ------------------------------------------------------------------ filtri e ordinamento */
@@ -131,7 +130,10 @@ function layout() {
   S.total = y + 60;
   sizer.style.height = S.total + "px";
   $("#empty").hidden = S.items.length > 0;
-  $("#empty").textContent = S.search ? `Nessun gioco trovato per «${S.search}».` : "Nessun gioco in questa vista.";
+  $("#empty").innerHTML = S.search ? esc(`Nessun gioco trovato per «${S.search}».`)
+    : !S.games.length ? `<div class="empty-lib"><b>La libreria è vuota.</b><p class="muted">Scegli la cartella delle ROM o importa i giochi degli store.</p>
+        <button class="btn primary" onclick="SETUP.open(true).then(() => reload(true))">🧭 Configurazione guidata</button></div>`
+    : "Nessun gioco in questa vista.";
 }
 
 function firstRow(top) {
@@ -1827,6 +1829,7 @@ function bind() {
     if (a) { e.preventDefault(); api("/api/open", { body: { url: a.dataset.open } }); }
   });
   $("#scan-plan").onclick = showPlan;
+  $("#setup-open").onclick = async () => { $("#settings").close(); await SETUP.open(true); await reload(true); };
   $("#roms-change").onclick = async () => {
     let p = window.pywebview?.api ? await pickPath("folder") : prompt("Percorso della cartella delle ROM", $("#scan-root").textContent);
     if (!p) return;
@@ -1964,7 +1967,11 @@ GS.refresh = () => reload(true);
 (async function main() {
   bind();
   try {
-    if (!(await loadLibrary())) { await waitFirstBuild(); await loadLibrary(); }
+    await SETUP.open();  // primo avvio: configurazione guidata (non fa nulla se gia' configurato)
+    if (!(await loadLibrary())) {
+      const st = await api("/api/status");
+      if (!st.has_library) { await waitFirstBuild(); await loadLibrary(); }
+    }
   } catch (e) {
     toast("Errore nel caricamento della libreria: " + e.message, true);
     return;

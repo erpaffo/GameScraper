@@ -141,6 +141,9 @@ def apply_settings(cfg: Config):
         else:
             cfg.catalogs.pop(pid, None)
     cfg.rawg.update(s.get("rawg", {}))
+    cfg.ss.update(s.get("screenscraper", {}))
+    cfg.igdb.update(s.get("igdb", {}))
+    cfg.tgdb.update(s.get("thegamesdb", {}))
     for src, v in s.get("limits", {}).items():
         cfg.limits.setdefault(src, {}).update(v or {})
     sc = s.get("scrape", {})

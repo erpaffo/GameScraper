@@ -476,7 +476,11 @@ def build(cfg, log=print, progress=None) -> dict:
     t0 = time.time()
     cache = Cache(cfg.cache)
     try:
-        targets = find_platform_dirs(cfg)
+        if Path(cfg.roms).is_dir():
+            targets = find_platform_dirs(cfg)
+        else:
+            targets = []
+            log("Nessuna cartella ROM impostata: la libreria contiene solo i giochi degli store")
         games = scan(cfg, cache, targets, progress)
         load_cached(cfg, cache, games)
         try:

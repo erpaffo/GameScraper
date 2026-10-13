@@ -143,6 +143,7 @@
       <!-- ---------------- scraping -->
       <section data-pane="scan">
         <p class="muted">Cartella ROM: <code id="scan-root"></code> <button class="btn" id="roms-change" type="button">📁 Cambia…</button>
+          <button class="btn" id="setup-open" type="button" title="Cartella ROM, store PC e account delle fonti, passo per passo">🧭 Configurazione guidata</button>
           — le console vengono riconosciute dal nome della cartella.
           Lo scraping interroga solo i giochi mai cercati prima, quindi è veloce anche su librerie grandi.</p>
         <div id="scan-table"></div>
@@ -343,6 +344,7 @@
     </div>
   </dialog>
 
+  <div id="setup" hidden></div>
   <div id="splash" hidden>
     <div class="splash-box">
       <div class="logo big">◆</div>
@@ -354,6 +356,7 @@
 </div>
 <script src="/static/core.js"></script>
 <script src="/static/reco.js"></script>
+<script src="/static/setup.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
