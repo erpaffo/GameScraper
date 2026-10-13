@@ -56,6 +56,8 @@ class Library:
         self.path = Path(cfg.cache) / "library.db"
         self.games: list[dict] = []
         self.by_id: dict[int, dict] = {}
+        self.by_key: dict[str, dict] = {}
+        self.groups: dict[str, list[dict]] = defaultdict(list)  # vuoti al primo avvio (libreria non ancora creata)
         self.auto: dict[str, dict] = {}
         self.built_at = 0.0
         self.lock = threading.RLock()
@@ -602,6 +604,15 @@ def create_app(cfg) -> FastAPI:
     @app.get("/api/stores/refresh")
     def api_stores_state():
         return job["stores"].state()
+
+    @app.post("/api/roms")
+    def api_roms(body: dict = Body(...)):
+        """Cartella radice delle ROM scelta dall'app (salvata in settings.json)."""
+        p = Path(os.path.expandvars(os.path.expanduser(str(body.get("path") or "").strip().strip('"'))))
+        if not str(p) or not p.is_dir():
+            raise HTTPException(400, "Cartella non trovata")
+        C.save_settings(cfg, paths={"roms": str(p.resolve())})
+        return {"root": str(cfg.roms)}
 
     @app.post("/api/stores/metadata")
     def api_storemeta_start(body: dict = Body(default={})):

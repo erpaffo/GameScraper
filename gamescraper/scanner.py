@@ -295,7 +295,7 @@ def find_platform_dirs(cfg) -> list[tuple[P.Platform, Path]]:
     """Trova le cartelle console sotto la radice ROM, anche annidate (fino a MAX_DEPTH livelli)."""
     root: Path = cfg.roms
     if not root.exists():
-        raise FileNotFoundError(f"Cartella ROM non trovata: {root}")
+        raise FileNotFoundError(f"Cartella ROM non trovata: {root} - sceglila con «📁 Cambia…» (o in config.toml, [paths] roms)")
     overrides = {}
     for k, v in cfg.platform_folders.items():
         overrides[k] = v

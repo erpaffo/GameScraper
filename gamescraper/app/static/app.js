@@ -1453,18 +1453,20 @@ function renderScan(pv, js) {
   if (js) { setScanRunning(js.status === "running"); renderScanJob(js); }
 }
 
-// spunta le console interessate dalla modalita' scelta e aggiorna il testo del pulsante
+// testo del pulsante: conta i giochi delle console spuntate (nessuna spunta = tutte le console).
+// Nessuna console viene spuntata in automatico.
 function applyScanMode() {
   const pv = SET.preview;
   if (!pv || pv.error) return;
   const mode = $("#scan-mode").value;
   const need = (r) => (mode === "new" ? r.new : mode === "missing" ? r.nodata + r.partial : r.games);
-  const byP = new Map(pv.platforms.map((r) => [r.platform, r]));
-  document.querySelectorAll(".scan-sel").forEach((c) => { c.checked = mode !== "all" && need(byP.get(c.dataset.p)) > 0; });
-  const tot = pv.platforms.reduce((a, r) => a + need(r), 0);
+  const sel = new Set([...document.querySelectorAll(".scan-sel:checked")].map((c) => c.dataset.p));
+  const rows = sel.size ? pv.platforms.filter((r) => sel.has(r.platform)) : pv.platforms;
+  const tot = rows.reduce((a, r) => a + need(r), 0);
   const n = tot.toLocaleString("it");
-  $("#scan-start").textContent = mode === "new" ? (tot ? `⟳ Cerca ${n} nuovi giochi` : "⟳ Cerca nuovi giochi")
-    : mode === "missing" ? `⟳ Completa i dati mancanti${tot ? ` (${n} giochi)` : ""}` : "⟳ Riscarica tutto";
+  const where = sel.size ? ` · ${sel.size} ${sel.size === 1 ? "console" : "console"}` : " · tutte le console";
+  $("#scan-start").textContent = (mode === "new" ? (tot ? `⟳ Cerca ${n} nuovi giochi` : "⟳ Cerca nuovi giochi")
+    : mode === "missing" ? `⟳ Completa i dati mancanti${tot ? ` (${n} giochi)` : ""}` : "⟳ Riscarica tutto") + where;
 }
 
 function renderScanJob(js) {
@@ -1753,6 +1755,7 @@ function bind() {
   $("#scan-mode").onchange = applyScanMode;
   $("#scan-table").addEventListener("change", (e) => {
     if (e.target.id === "scan-all") document.querySelectorAll(".scan-sel").forEach((c) => { c.checked = e.target.checked; });
+    if (e.target.id === "scan-all" || e.target.classList?.contains("scan-sel")) applyScanMode();
   });
   $("#scan-unknown").addEventListener("change", async (e) => {
     const s = e.target.closest(".map-folder");
@@ -1824,6 +1827,13 @@ function bind() {
     if (a) { e.preventDefault(); api("/api/open", { body: { url: a.dataset.open } }); }
   });
   $("#scan-plan").onclick = showPlan;
+  $("#roms-change").onclick = async () => {
+    let p = window.pywebview?.api ? await pickPath("folder") : prompt("Percorso della cartella delle ROM", $("#scan-root").textContent);
+    if (!p) return;
+    try { await api("/api/roms", { body: { path: p } }); } catch (e) { return toast(e.message, true); }
+    toast("Cartella delle ROM aggiornata");
+    loadScan();
+  };
   document.querySelector('[data-tab="src"]')?.addEventListener("click", () => { pollHltb(); pollCollart(); });
   $("#collart-missing").onclick = () => startCollart("missing");
   $("#collart-all").onclick = () => startCollart("all");

@@ -1,8 +1,31 @@
 # GameScraper
 
-Scraper di metadati e media per collezioni di ROM, divise per console. È il successore moderno e molto più veloce di [Skyscraper](skyscraper/) (C++/Qt5, non più mantenuto, conservato nella cartella `skyscraper/` come riferimento).
+Scraper di metadati e media per collezioni di ROM, divise per console, con una libreria in stile Playnite (desktop e Big Picture per il controller). È il successore moderno e molto più veloce di [Skyscraper](https://github.com/Gemba/skyscraper) (C++/Qt5).
 
-## Avvio rapido (Windows)
+## Download
+
+Gli eseguibili sono nella pagina **Releases** del repository:
+
+| Sistema | File | Avvio |
+|---|---|---|
+| Windows 10/11 (64 bit) | `GameScraper-<versione>-windows-x64.zip` | estrai e apri `GameScraper.exe` |
+| macOS 11+ (Apple Silicon) | `GameScraper-<versione>-macos-arm64.zip` | estrai e apri `GameScraper.app` |
+| Linux (64 bit) | `GameScraper-<versione>-linux-x64.tar.gz` | estrai e avvia `GameScraper/GameScraper` |
+
+Al primo avvio scegli la cartella delle ROM in **Impostazioni › Nuovi giochi › 📁 Cambia…**. Configurazione, cache e libreria stanno nella cartella dell'utente (`%LOCALAPPDATA%\GameScraper` su Windows, `~/Library/Application Support/GameScraper` su macOS, `~/.local/share/GameScraper` su Linux); per una versione **portatile** metti un `config.toml` accanto all'eseguibile. Nella stessa cartella c'è anche `gamescraper-cli` per i comandi da terminale (vedi [Comandi](#comandi)).
+
+Gli eseguibili non sono firmati: su Windows SmartScreen chiede conferma ("Ulteriori informazioni › Esegui comunque"), su macOS la prima volta apri l'app con clic destro › Apri (oppure `xattr -cr GameScraper.app`).
+
+### Creare gli eseguibili
+
+Su GitHub li crea il workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) a ogni tag di versione (`git tag v1.0.0 && git push origin v1.0.0`): build su Windows, macOS e Linux e pubblicazione nella release. In locale (solo per il sistema in uso):
+
+```bash
+pip install -r requirements.txt pyinstaller
+pyinstaller packaging/gamescraper.spec --noconfirm     # risultato in dist/GameScraper/
+```
+
+## Avvio rapido dai sorgenti (Windows)
 
 ```powershell
 python -m pip install -r requirements.txt
@@ -14,7 +37,7 @@ python -m gamescraper run -p snes,psx    # solo alcune console
 Le cartelle console vengono cercate sotto la radice ROM **anche annidate**, fino a 4 livelli. Il programma riconosce sia i nomi brevi (`snes`, `psx`, `Mega Drive`, `genesis`…) sia i nomi dei set No-Intro/Redump, anche con suffissi (`Nintendo - GameCube - NKit RVZ [zstd-19-128k]` → gc). Le cartelle con nomi diversi si mappano in `[platform_folders]`. Elenco completo con `python -m gamescraper platforms`.
 
 ```
-E:/Roms/
+D:/ROM/
   snes/                                     *.sfc *.smc *.zip
   psx/                                      *.chd *.cue *.m3u
   switch/<gioco>/                           una cartella per gioco (anche ps3, psvita, xbox, xbox360)

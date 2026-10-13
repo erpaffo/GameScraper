@@ -8,6 +8,53 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import sys
+
+FROZEN = getattr(sys, "frozen", False)  # eseguibile creato con PyInstaller
+
+
+def app_data_dir() -> Path:
+    """Cartella dei dati dell'utente (config, cache, impostazioni) per l'eseguibile."""
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+    return base / "GameScraper"
+
+
+DEFAULT_CONFIG = """# GameScraper - configurazione (creata al primo avvio).
+# La cartella delle ROM si sceglie dall'app: Impostazioni > Nuovi giochi > Cambia.
+# Tutte le opzioni sono descritte in config.example.toml (nel repository).
+
+[paths]
+cache = "cache"
+output = "output"
+"""
+
+
+def _default_config_path() -> Path | None:
+    """config.toml: cartella corrente, cartella del progetto (sviluppo), cartella dell'eseguibile
+    (versione portatile) e infine la cartella dei dati dell'utente, creata al primo avvio."""
+    cands = [Path("config.toml")]
+    if FROZEN:
+        cands.append(Path(sys.executable).resolve().parent / "config.toml")
+    else:
+        cands.append(Path(__file__).resolve().parent.parent / "config.toml")
+    for c in cands:
+        if c.exists():
+            return c
+    if FROZEN:
+        d = app_data_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        p = d / "config.toml"
+        if not p.exists():
+            p.write_text(DEFAULT_CONFIG, encoding="utf-8")
+        return p
+    return None
+
+
 DEFAULT_FIELDS = ["title", "description", "developer", "publisher", "genres", "release_date", "players", "rating"]
 ALL_MEDIA = ["cover", "screenshot", "title", "wheel", "marquee", "video", "box3d", "fanart"]
 
@@ -81,6 +128,8 @@ def apply_settings(cfg: Config):
         else:
             cfg.launch.pop(pid, None)
     cfg.platform_folders.update(s.get("platform_folders", {}))
+    if (s.get("paths") or {}).get("roms"):  # cartella ROM scelta dall'app
+        cfg.roms = Path(os.path.expandvars(os.path.expanduser(s["paths"]["roms"])))
     from . import platforms as _P
     _P.register_custom(s.get("custom_platforms", []))
     for pid, v in s.get("stores", {}).items():
@@ -133,10 +182,7 @@ def save_settings(cfg: Config, **sections):
 def load(path: str | os.PathLike | None) -> Config:
     cfg = Config()
     if path is None:
-        for cand in ("config.toml", Path(__file__).resolve().parent.parent / "config.toml"):
-            if Path(cand).exists():
-                path = cand
-                break
+        path = _default_config_path()
     if path is None:
         apply_settings(cfg)
         return cfg

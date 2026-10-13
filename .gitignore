@@ -1,6 +1,34 @@
+# Dati personali dell'utente (mai nel repository: contengono chiavi, account e la libreria)
+config.toml
+settings.json
 cache/
 output/
-config.toml
+/plugins/
+/themes/
+
+# Python
 __pycache__/
-*.pyc
-settings.json
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# Build degli eseguibili (PyInstaller)
+build/
+dist/
+release/
+
+# Progetti esterni tenuti solo come riferimento locale
+skyscraper/
+switch-library/
+
+# Varie
+*.log
+*.tmp
+scrape.lock
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

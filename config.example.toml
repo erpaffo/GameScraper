@@ -7,7 +7,7 @@
 # Cartella radice delle ROM. Le cartelle console vengono cercate anche in profondita' (fino a 4 livelli):
 # riconosce id/alias ("snes", "psx", "Mega Drive") e i nomi dei set No-Intro/Redump
 # ("Myrient/No-Intro/Nintendo - Game Boy Advance", "Redump/Nintendo - GameCube - NKit RVZ [...]").
-roms = "E:/Roms"
+roms = "D:/ROM"
 cache = "cache"      # dati + media scaricati (riutilizzati tra un'esecuzione e l'altra)
 output = "output"    # output/<console>/games.json, games.csv, missing.txt, media/<tipo>/
 
@@ -52,8 +52,8 @@ link_media = true                      # hardlink cache -> output (istantaneo, n
 description = ["screenscraper", "igdb", "thegamesdb", "arcadedb"]
 
 [screenscraper]
-user = "erpaffo"          # il tuo account screenscraper.fr
-password = "paffo410"
+user = ""                # il tuo account screenscraper.fr
+password = ""
 # Credenziali SVILUPPATORE: richiedile sul forum ScreenScraper (sezione API / devid).
 # Senza devid ScreenScraper non risponde alle API.
 devid = ""
@@ -69,8 +69,8 @@ media_parallel = false   # false = i download dei media rispettano anche loro il
 
 [igdb]
 # https://api-docs.igdb.com/#account-creation  (app Twitch -> Client ID + Client Secret)
-client_id = "p036w3fjrf9knqy351yav8a5r5h84d"
-client_secret = "kgimxmoyg9xb3dnzsnq6pd65g8266e"
+client_id = ""
+client_secret = ""
 rate = 4                 # richieste/s (limite IGDB: 4)
 search_fallback = true   # dopo il batch per nome esatto, ricerca fuzzy per i giochi non trovati
 
@@ -86,7 +86,7 @@ api_key = ""
 # rate = 3
 
 [thegamesdb]
-api_key = "fb566b1d9078b91f0b91adb41d40867fa856aac8498ecd1f30fbf4003f58b307 "
+api_key = ""             # https://forums.thegamesdb.net (chiave API)
 rate = 2
 quota_reserve = 20
 
