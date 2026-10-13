@@ -1,7 +1,7 @@
 # Crea gli eseguibili per Windows, macOS e Linux e li pubblica nella release.
 #
 # Avvio: crea e invia un tag di versione, es.
-#   git tag v1.0.0 && git push origin v1.0.0
+#   git tag v0.1.0 && git push origin v0.1.0
 # oppure lancia il workflow a mano da GitHub (Actions > Release > Run workflow): in quel caso gli
 # eseguibili restano scaricabili come "artifact" del workflow, senza creare una release.
 

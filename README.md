@@ -18,7 +18,7 @@ Gli eseguibili non sono firmati: su Windows SmartScreen chiede conferma ("Ulteri
 
 ### Creare gli eseguibili
 
-Su GitHub li crea il workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) a ogni tag di versione (`git tag v1.0.0 && git push origin v1.0.0`): build su Windows, macOS e Linux e pubblicazione nella release. In locale (solo per il sistema in uso):
+Su GitHub li crea il workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) a ogni tag di versione (`git tag v0.1.0 && git push origin v0.1.0`): build su Windows, macOS e Linux e pubblicazione nella release. In locale (solo per il sistema in uso):
 
 ```bash
 pip install -r requirements.txt pyinstaller
