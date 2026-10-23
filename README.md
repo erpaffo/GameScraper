@@ -45,6 +45,16 @@ D:/ROM/
   Minerva_Myrient/Redump/Nintendo - Wii U - WUX/          *.zip
 ```
 
+## Telefono e streaming
+
+**App per il telefono** (Impostazioni › 📱 Telefono e streaming › *Attiva l'accesso dal telefono*): una web app servita dal PC in HTTPS sulla rete di casa, da aggiungere alla schermata Home. Si abbina inquadrando il QR (codice di 6 cifre, valido 10 minuti, usabile una volta); senza abbinamento non si raggiunge nulla e anche da abbinati il telefono può solo sfogliare la libreria, avviare/chiudere i giochi, fare schermate e fare da controller.
+
+- **Controller sullo schermo**: diventa un controller Xbox virtuale sul PC (serve il driver [ViGEmBus](https://github.com/nefarius/ViGEmBus/releases)), fino a 4 telefoni = 4 giocatori.
+- **Giroscopio**: modalità *Movimento* = protocollo DSU/cemuhook su `127.0.0.1:26760` per Cemu, Ryujinx, Dolphin, Azahar/Citra (nell'emulatore scegli la sorgente di movimento DSU); modalità *Mira* = l'inclinazione muove la levetta destra, per i giochi senza giroscopio.
+- La prima apertura mostra l'avviso "connessione non privata" (certificato del tuo PC): *Avanzate › Procedi*. Windows può chiedere di consentire l'app sulle reti private.
+
+**Streaming da remoto** con [Sunshine](https://app.lizardbyte.dev/Sunshine) (sul PC) e [Moonlight](https://moonlight-stream.org) (telefono, tablet, TV, altro PC): *Pubblica in Moonlight* aggiunge a Sunshine "GameScraper Big Picture" e i tuoi giochi principali con le copertine (le altre app di Sunshine restano). Moonlight avvia `gamescraper-cli play --key …`, che resta aperto finché giochi: lo streaming si chiude da solo a fine partita.
+
 ## Output
 
 ```

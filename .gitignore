@@ -32,3 +32,6 @@ scrape.lock
 .DS_Store
 Thumbs.db
 desktop.ini
+
+docs/
+release.*

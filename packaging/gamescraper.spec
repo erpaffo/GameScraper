@@ -20,10 +20,11 @@ datas = [
     (str(APP / "themes"), "gamescraper/app/themes"),
     (str(APP / "plugins"), "gamescraper/app/plugins"),
     (str(ROOT / "config.example.toml"), "."),
+    (str(ROOT / "gamescraper" / "remote" / "vendor"), "gamescraper/remote/vendor"),  # ViGEmClient.dll
 ]
 datas += collect_data_files("fake_useragent")  # usata da howlongtobeatpy
 hidden = (collect_submodules("uvicorn") + collect_submodules("gamescraper") + collect_submodules("rich._unicode_data")
-          + ["h2", "hpack", "hyperframe", "multipart", "PIL.WebPImagePlugin"])
+          + collect_submodules("qrcode") + ["h2", "hpack", "hyperframe", "multipart", "PIL.WebPImagePlugin"])
 excludes = ["tkinter", "matplotlib", "numpy", "pytest", "playwright", "IPython"]
 
 icon_ico = str(ROOT / "packaging" / "icon.ico")

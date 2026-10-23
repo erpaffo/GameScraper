@@ -100,6 +100,34 @@ def test_profiles_and_shots(tmp):
     assert parse_hotkey("ctrl+shift+s") and parse_hotkey("f10") and parse_hotkey("ctrl+boh") is None
 
 
+def test_remote():
+    import struct
+    import zlib
+
+    from gamescraper.remote import phone, sunshine
+    from gamescraper.remote.dsu import DSUServer
+    # cancello del telefono: solo le funzioni previste
+    ok = lambda m, p: any(mm == m and r.match(p) for mm, r in phone._ALLOWED)  # noqa: E731
+    assert ok("GET", "/api/library") and ok("POST", "/api/game/12/play") and ok("WS", "/m/ws")
+    assert not ok("GET", "/api/phone") and not ok("POST", "/api/open") and not ok("POST", "/api/game/1/open-folder")
+    assert not ok("POST", "/api/scan") and not ok("GET", "/api/settings") and not ok("POST", "/api/play-key")
+    # DSU: risposta alla richiesta di versione con CRC valido
+    srv = DSUServer(port=0)
+    body = struct.pack("<I", 0x100000)
+    pk = bytearray(struct.pack("<4sHHII", b"DSUC", 1001, len(body), 0, 1) + body)
+    struct.pack_into("<I", pk, 8, zlib.crc32(pk))
+    (r,) = srv.handle(bytes(pk), ("127.0.0.1", 1))
+    chk = bytearray(r)
+    crc = struct.unpack_from("<I", chk, 8)[0]
+    struct.pack_into("<I", chk, 8, 0)
+    assert r[:4] == b"DSUS" and zlib.crc32(chk) == crc and struct.unpack_from("<H", r, 20)[0] == 1001
+    pk[-1] ^= 1  # CRC sbagliato: ignorato
+    assert srv.handle(bytes(pk), ("127.0.0.1", 1)) == []
+    # Sunshine: si riconoscono solo le app di GameScraper
+    assert sunshine.ours({"cmd": '"x.exe" play --key "snes/a"'}) and sunshine.ours({"cmd": '"x.exe" bigpicture'})
+    assert not sunshine.ours({"cmd": "steam://open/bigpicture"}) and not sunshine.ours({"name": "Desktop"})
+
+
 if __name__ == "__main__":
     test_allkeyshop()
     test_hltb()
@@ -107,4 +135,5 @@ if __name__ == "__main__":
         test_status_and_wishlist(tmp)
     with tempfile.TemporaryDirectory() as tmp:
         test_profiles_and_shots(tmp)
+    test_remote()
     print("TUTTI I TEST OK")

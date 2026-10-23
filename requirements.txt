@@ -8,3 +8,5 @@ pillow>=10
 pywebview>=5
 psutil>=5
 howlongtobeatpy>=1.0
+qrcode>=7          # QR per abbinare il telefono
+cryptography>=42   # certificato HTTPS per l'app del telefono

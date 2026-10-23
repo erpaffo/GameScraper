@@ -142,10 +142,91 @@ def cmd_library(args):
         build(cfg, log=console.print, progress=prog)
 
 
+def cmd_relink(args):
+    from . import relink
+    from .library.build import build
+    cfg = C.load(args.config)
+    pairs = relink.plan(cfg, log=console.print)
+    for old, new, title, path in pairs:
+        console.print(f"  {title}  ->  {path}")
+    console.print(f"{len(pairs)} giochi da riassociare.")
+    if args.apply and pairs:
+        relink.apply(cfg, pairs, log=console.print)
+        with _progress() as prog:
+            build(cfg, log=console.print, progress=prog)
+    elif pairs:
+        console.print("Anteprima: rilancia con --apply per eseguire.")
+
+
 def cmd_app(args):
     from .app.server import run
     cfg = C.load(args.config)
     run(cfg, port=args.port, browser=args.browser, bigpicture=args.bigpicture)
+
+
+def _local_server(cfg):
+    """URL di un GameScraper gia' aperto, altrimenti ne avvia uno senza finestra in questo processo."""
+    from .app.server import _is_gamescraper, _port_free
+    port = int(cfg.app.get("port", 8765))
+    if _is_gamescraper(port):
+        return f"http://127.0.0.1:{port}", None
+    import threading
+
+    import uvicorn
+
+    from .app.server import create_app
+    free = port if _port_free(port) else next(q for q in range(port + 1, port + 50) if _port_free(q))
+    srv = uvicorn.Server(uvicorn.Config(create_app(cfg), host="127.0.0.1", port=free, log_level="warning"))
+    threading.Thread(target=srv.run, daemon=True).start()
+    while not srv.started:
+        time.sleep(0.05)
+    return f"http://127.0.0.1:{free}", srv
+
+
+def cmd_play(args):
+    """Avvia un gioco e resta aperto finche' si gioca (per Sunshine/Moonlight, scorciatoie, script)."""
+    import httpx
+    cfg = C.load(args.config)
+    url, srv = _local_server(cfg)
+    with httpx.Client(base_url=url, timeout=30) as c:
+        r = c.post("/api/play-key", json={"key": args.key})
+        if r.status_code != 200:
+            console.print(f"[red]{r.json().get('detail', r.text)}[/]")
+            sys.exit(1)
+        console.print(f"Avviato: {r.json().get('title')}")
+        seen = False
+        while True:
+            time.sleep(1.5)
+            st = c.get("/api/running").json()
+            if st.get("status") in ("starting", "extracting", "running"):
+                seen = True
+                continue
+            if st.get("status") == "error":
+                console.print(f"[red]{st.get('message')}[/]")
+                sys.exit(1)
+            if seen or st.get("status") == "finished":
+                break
+    if srv:
+        srv.should_exit = True
+
+
+def cmd_bigpicture(args):
+    """Big Picture a schermo intero (per lo streaming con Moonlight): usa l'app gia' aperta se c'e'."""
+    cfg = C.load(args.config)
+    from .app.server import _is_gamescraper, run
+    port = int(cfg.app.get("port", 8765))
+    if not _is_gamescraper(port):
+        run(cfg, port=port, bigpicture=True)
+        return
+    try:
+        import webview
+    except ImportError:
+        import webbrowser
+        webbrowser.open(f"http://127.0.0.1:{port}/bigpicture")
+        return
+    webview.create_window("GameScraper Big Picture", f"http://127.0.0.1:{port}/bigpicture", fullscreen=True,
+                          background_color="#0b0d12")
+    webview.start()
 
 
 def main(argv=None):
@@ -167,11 +248,16 @@ def main(argv=None):
         common(sub.add_parser(name))
     sub.add_parser("stats")
     sub.add_parser("library", help="ricostruisce la libreria del frontend (giochi unificati + collezioni)")
+    rl = sub.add_parser("relink", help="riassocia i dati dei giochi rinominati/spostati (anteprima; --apply per eseguire)")
+    rl.add_argument("--apply", action="store_true")
     ap_app = sub.add_parser("app", help="avvia il frontend")
     ap_app.add_argument("--port", type=int, default=8765)
     ap_app.add_argument("--browser", action="store_true", help="apri nel browser invece che in una finestra")
     ap_app.add_argument("--bigpicture", action="store_true", help="avvia in modalita' Big Picture (schermo intero, controller)")
     sub.add_parser("platforms")
+    pl = sub.add_parser("play", help="avvia un gioco e attende che finisca (usato da Sunshine/Moonlight)")
+    pl.add_argument("--key", required=True, help="chiave del gioco (es. snes/...)")
+    sub.add_parser("bigpicture", help="Big Picture a schermo intero (usa l'app gia' aperta se c'e')")
     pp = sub.add_parser("purge")
     pp.add_argument("--source")
     pp.add_argument("-p", "--platform")
@@ -191,8 +277,14 @@ def main(argv=None):
             cmd_scan_and(args, False, True)
         elif cmd == "library":
             cmd_library(args)
+        elif cmd == "relink":
+            cmd_relink(args)
         elif cmd == "app":
             cmd_app(args)
+        elif cmd == "play":
+            cmd_play(args)
+        elif cmd == "bigpicture":
+            cmd_bigpicture(args)
         elif cmd == "stats":
             cmd_stats(args)
         elif cmd == "platforms":

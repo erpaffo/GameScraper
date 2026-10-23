@@ -154,12 +154,27 @@
         <button type="button" class="tab" data-tab="src">🔌 Fonti</button>
         <button type="button" class="tab" data-tab="acc">🛒 Account</button>
         <button type="button" class="tab" data-tab="emu">🎮 Emulatori</button>
+        <button type="button" class="tab" data-tab="remote">📱 Telefono e streaming</button>
         <button type="button" class="tab" data-tab="look">🎨 Aspetto</button>
         <button type="button" class="tab" data-tab="lib">▦ Libreria</button>
       </div>
       <button class="icon-btn">✕</button>
     </form>
     <div class="dlg-body">
+      <!-- ---------------- telefono e streaming -->
+      <section data-pane="remote">
+        <h3>📱 App per il telefono</h3>
+        <p class="muted small">Dal telefono sfogli la libreria, avvii i giochi sul PC e usi il telefono come controller (con giroscopio).
+          Funziona sulla rete di casa (Wi-Fi), con connessione cifrata e abbinamento: nessun altro sulla rete può usarla.</p>
+        <label class="chk"><input type="checkbox" id="ph-on"> Attiva l'accesso dal telefono</label>
+        <div id="ph-box"></div>
+        <h3>📡 Streaming: gioca da remoto con Moonlight</h3>
+        <p class="muted small">Lo streaming usa <a href="#" data-open="https://app.lizardbyte.dev/Sunshine">Sunshine</a> sul PC e
+          <a href="#" data-open="https://moonlight-stream.org">Moonlight</a> (gratis per Android, iPhone, tablet, TV, PC, Mac) dove vuoi giocare.
+          GameScraper pubblica in Moonlight la Big Picture e i tuoi giochi principali con le copertine.</p>
+        <div id="sun-box"></div>
+      </section>
+
       <!-- ---------------- scraping -->
       <section data-pane="scan">
         <p class="muted">Cartella ROM: <code id="scan-root"></code> <button class="btn" id="roms-change" type="button">📁 Cambia…</button>

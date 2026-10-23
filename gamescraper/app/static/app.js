@@ -1259,6 +1259,71 @@ async function saveProfile(reset = false) {
   openDetail(PF.id);
 }
 
+/* ---- telefono e streaming */
+let phoneTimer = 0;
+const EMU_DSU = [
+  ["Cemu (Wii U)", "Opzioni › Impostazioni di input › scheda del controller › Movimento: «DSU» (cemuhook), 127.0.0.1:26760."],
+  ["Ryujinx (Switch)", "Opzioni › Impostazioni › Input › Configura › Movimento: «CemuHook compatible», server 127.0.0.1, porta 26760, slot del giocatore."],
+  ["Dolphin (Wii)", "Controller › Sorgenti di input alternative › DSU Client: attiva, 127.0.0.1:26760; poi nel Wii Remote scegli il dispositivo DSUClient."],
+  ["Azahar / Citra (3DS)", "Emulazione › Configura › Controlli › Movimento/Touch: «CemuhookUDP», 127.0.0.1:26760."],
+];
+async function loadRemote() {
+  clearTimeout(phoneTimer);
+  let ph, sun;
+  try { [ph, sun] = await Promise.all([api("/api/phone"), api("/api/sunshine")]); } catch (e) { return toast(e.message, true); }
+  $("#ph-on").checked = ph.enabled;
+  const mins = ph.code_until ? Math.max(0, Math.round((ph.code_until - Date.now() / 1000) / 60)) : 0;
+  $("#ph-box").innerHTML = !ph.enabled ? "" : ph.error ? `<p class="status-bad">${esc(ph.error)}</p>` : !ph.running ? `<p class="muted">Avvio…</p>` : `
+    <div class="ph-pair">
+      <div class="ph-qr">${ph.qr}</div>
+      <div class="ph-steps">
+        <b>Abbina un telefono</b>
+        <ol>
+          <li>Collega il telefono alla stessa rete Wi-Fi del PC.</li>
+          <li>Inquadra il QR con la fotocamera, oppure apri <code>${esc(ph.urls[0] || "")}</code> e inserisci il codice
+            <span class="ph-code">${esc(ph.code || "")}</span> <span class="muted small">(valido ancora ${mins} min, <a href="#" id="ph-newcode">nuovo codice</a>)</span></li>
+          <li>Il telefono avvisa che la connessione «non è privata» (il certificato è del tuo PC): scegli <i>Avanzate › Procedi</i>.</li>
+          <li>Aggiungi la pagina alla schermata Home: diventa un'app.</li>
+        </ol>
+        <p class="muted small">La prima volta Windows può chiedere di consentire GameScraper sulle reti private: rispondi Sì.</p>
+      </div>
+    </div>
+    <h4>Telefoni abbinati</h4>
+    ${ph.devices.length ? `<table class="emu">${ph.devices.map((d) => `<tr><td>📱 ${esc(d.name)}</td>
+      <td class="muted small">abbinato ${new Date(d.created * 1000).toLocaleDateString("it")} · ultimo uso ${new Date(d.last * 1000).toLocaleString("it", { dateStyle: "short", timeStyle: "short" })}</td>
+      <td><button class="btn" data-revoke="${esc(d.id)}">Revoca</button></td></tr>`).join("")}</table>` : `<p class="muted small">Nessuno.</p>`}
+    <h4>Controller dal telefono</h4>
+    <p class="small">${ph.vigem ? "✅ Controller virtuale Xbox pronto (ViGEmBus)" : `❌ ${esc(ph.vigem_error)} — <a href="#" data-open="https://github.com/nefarius/ViGEmBus/releases">scarica ViGEmBus</a>`}<br>
+      ${ph.dsu ? "✅ Giroscopio per gli emulatori: server DSU attivo su 127.0.0.1:26760" : `❌ ${esc(ph.dsu_error || "Server DSU non attivo")}`}</p>
+    ${ph.controllers.length ? `<p class="small">Collegati ora: ${ph.controllers.map((c) => `🎮 Giocatore ${c.slot + 1} — ${esc(c.name)}${c.motion ? " · 🌀 movimento" : ""}`).join(" · ")}</p>` : ""}
+    <details class="small"><summary>Come attivare il giroscopio negli emulatori</summary>
+      <ul>${EMU_DSU.map(([n, t]) => `<li><b>${n}</b>: ${t}</li>`).join("")}</ul>
+      <p class="muted">Per i giochi senza giroscopio, nell'app del telefono scegli 🎯 <b>Mira</b>: inclinando il telefono si muove la levetta destra.</p>
+    </details>`;
+  const s = sun;
+  $("#sun-box").innerHTML = !s.installed ? `<p>Sunshine non è installato. <a href="#" data-open="https://github.com/LizardByte/Sunshine/releases">Scaricalo</a>, poi riapri questa scheda.</p>`
+    : `<p class="small">${s.service === "running" ? "✅ Sunshine è in esecuzione" : s.service === "stopped"
+      ? `⏸ Sunshine è installato ma fermo. <button class="btn" id="sun-start">▶ Avvia Sunshine</button> <span class="muted">(chiede i permessi di amministratore)</span>` : "Sunshine installato"}
+      · <a href="#" data-open="${esc(s.web)}">interfaccia web di Sunshine</a> (per abbinare Moonlight con il PIN)</p>
+    <div class="row wrap">
+      <label>Utente di Sunshine <input class="field" id="sun-user" value="${esc(s.user)}" autocomplete="off"></label>
+      <label>Password <input class="field" id="sun-pass" type="password" placeholder="${s.has_password ? "già salvata" : ""}" autocomplete="new-password"></label>
+      <label>Giochi da pubblicare <input class="field" id="sun-count" type="number" min="0" max="100" value="${s.count}" style="width:80px"></label>
+      <button class="btn primary" id="sun-pub">📡 Pubblica in Moonlight</button>
+    </div>
+    ${s.error ? `<p class="status-bad small">${esc(s.error)}</p>` : ""}
+    <p class="muted small">Verranno pubblicati: <b>GameScraper Big Picture</b> (da lì scegli qualsiasi gioco col controller)
+      ${s.preview.length ? ` e ${s.preview.length} giochi (in corso, preferiti, recenti): ${esc(s.preview.slice(0, 8).join(", "))}${s.preview.length > 8 ? "…" : ""}` : ""}.
+      Le altre app di Sunshine non vengono toccate.</p>
+    ${s.last ? `<p class="small">Ultima pubblicazione: ${new Date(s.last.time * 1000).toLocaleString("it", { dateStyle: "short", timeStyle: "short" })} · ${s.last.published} app</p>` : ""}
+    ${s.apps ? `<p class="small muted">App in Moonlight ora: ${esc(s.apps.map((a) => a.name).join(" · "))}</p>` : ""}`;
+  if (ph.enabled && SET.tab === "remote" && $("#settings").open) phoneTimer = setTimeout(loadRemote, ph.running ? 5000 : 1000);
+}
+async function phoneSet(body) {
+  try { await api("/api/phone", { body }); } catch (e) { toast(e.message, true); }
+  loadRemote();
+}
+
 /* ---- metadati degli store (solo database offline) */
 let smetaTimer = 0, smetaRunning = false;
 async function pollStoreMeta(started = false) {
@@ -1553,6 +1618,7 @@ function showTab(tab) {
   document.querySelectorAll("[data-pane]").forEach((p) => p.classList.toggle("active", p.dataset.pane === tab));
   if (tab === "scan") { loadScan(); renderCustomConsoles(); }
   else if (tab === "emu") loadEmu();
+  else if (tab === "remote") loadRemote();
   else if (tab === "acc") loadAccounts();
   else if (tab === "src") loadSources();
   else if (tab === "look") loadAppearance();
@@ -1989,6 +2055,26 @@ function bind() {
   $("#collart-all").onclick = () => startCollart("all");
   $("#collart-stop").onclick = () => api("/api/collart/cancel", { body: {} });
   $("#smeta-all").onclick = () => startStoreMeta(false);
+  $("#ph-on").onchange = (e) => phoneSet({ enabled: e.target.checked });
+  $('[data-pane="remote"]').addEventListener("click", async (e) => {
+    const t = e.target;
+    const o = t.closest("[data-open]");
+    if (o) { e.preventDefault(); api("/api/open", { body: { url: o.dataset.open } }); return; }
+    if (t.id === "ph-newcode") { e.preventDefault(); await api("/api/phone/code", { body: {} }); loadRemote(); }
+    else if (t.dataset.revoke) {
+      if (!confirm("Revocare questo telefono? Dovrà essere abbinato di nuovo.")) return;
+      await api(`/api/phone/devices/${t.dataset.revoke}`, { method: "DELETE" }); loadRemote();
+    } else if (t.id === "sun-start") {
+      try { await api("/api/sunshine/start", { body: {} }); toast("Avvio di Sunshine…"); setTimeout(loadRemote, 4000); } catch (err) { toast(err.message, true); }
+    } else if (t.id === "sun-pub") {
+      t.disabled = true; t.textContent = "Pubblicazione…";
+      try {
+        await api("/api/sunshine", { body: { user: $("#sun-user").value, password: $("#sun-pass").value, count: $("#sun-count").value, publish: true } });
+        toast("Pubblicato: apri Moonlight e aggiorna l'elenco del PC");
+      } catch (err) { toast(err.message, true); }
+      loadRemote();
+    }
+  });
   $("#prof-dlg").addEventListener("input", pfRefresh);
   $("#prof-dlg").addEventListener("change", pfRefresh);
   $("#pf-cancel").onclick = () => $("#prof-dlg").close();
