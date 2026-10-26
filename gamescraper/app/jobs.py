@@ -287,7 +287,10 @@ def preview(cfg, library_files: set[str], incomplete: dict[str, tuple[int, int]]
     rows = []
     for p, folder in targets:
         entries = list_entries(p, folder)
-        new = sum(1 for path, _ in entries if str(path) not in library_files)
+        # i [BIOS] non entrano mai in libreria (a meno di show_bios): non sono "nuovi", nessuno scraping li farebbe sparire
+        skip_bios = not getattr(cfg, "collections", {}).get("show_bios")
+        new = sum(1 for path, _ in entries if str(path) not in library_files
+                  and not (skip_bios and path.name.startswith("[BIOS]")))
         nodata, partial = (incomplete or {}).get(p.id, (0, 0))
         rows.append({"platform": p.id, "name": p.name, "folder": str(folder.relative_to(cfg.roms)),
                      "games": len(entries), "new": new, "nodata": nodata, "partial": partial})

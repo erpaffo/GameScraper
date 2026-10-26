@@ -65,6 +65,7 @@ class Config:
     cache: Path = Path("cache")
     output: Path = Path("output")
     platform_folders: dict[str, str] = field(default_factory=dict)
+    switch_keys: str = ""  # prod.keys per leggere i giochi Switch; vuoto = si cerca in Ryujinx/Eden/yuzu
 
     sources: list[str] = field(default_factory=lambda: ["libretro", "launchbox", "tgdb", "arcadedb", "igdb", "screenscraper",
                                                        "rawg", "thegamesdb", "wikipedia"])
@@ -149,6 +150,10 @@ def apply_settings(cfg: Config):
     sc = s.get("scrape", {})
     if sc.get("sources"):
         cfg.sources = list(sc["sources"])
+    if (s.get("paths") or {}).get("switch_keys"):
+        cfg.switch_keys = s["paths"]["switch_keys"]
+    if "nsp" not in cfg.sources:  # titolo/publisher/icona letti dal file Switch: sempre per primi (offline)
+        cfg.sources.insert(0, "nsp")
 
 
 def set_setting(cfg: Config, key: str, value):
@@ -204,6 +209,7 @@ def load(path: str | os.PathLike | None) -> Config:
     cfg.cache = p(paths.get("cache", "cache"))
     cfg.output = p(paths.get("output", "output"))
     cfg.platform_folders = d.get("platform_folders", {})
+    cfg.switch_keys = paths.get("switch_keys", "")
 
     s = d.get("scrape", {})
     for k in ("sources", "fields", "media", "regions", "languages", "min_match", "max_hash_mb",

@@ -9,6 +9,9 @@
 # ("Myrient/No-Intro/Nintendo - Game Boy Advance", "Redump/Nintendo - GameCube - NKit RVZ [...]").
 roms = "D:/ROM"
 cache = "cache"      # dati + media scaricati (riutilizzati tra un'esecuzione e l'altra)
+# Giochi Switch (NSP/XCI): titolo, publisher e icona si leggono dal file con il tuo prod.keys.
+# Se vuoto lo cerca da solo (Ryujinx, Eden, yuzu).
+# switch_keys = "C:/percorso/prod.keys"
 output = "output"    # output/<console>/games.json, games.csv, missing.txt, media/<tipo>/
 
 # Se una cartella non viene riconosciuta automaticamente, mappala qui: "nome cartella" = "id piattaforma"

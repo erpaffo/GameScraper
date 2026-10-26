@@ -208,10 +208,30 @@ function tileEl(g) {
   if (g.cover) {
     const img = el.querySelector("img");
     img.onload = () => img.classList.add("ok");
-    img.onerror = () => img.remove();
-    img.src = `/img/${g.id}/cover?w=${Math.round(S.tw * (window.devicePixelRatio || 1))}`;
+    const src = `/img/${g.id}/cover?w=${Math.round(S.tw * (window.devicePixelRatio || 1))}`;
+    let tries = 0;
+    // un errore puo' essere passeggero (app che riparte, disco occupato) o dovuto a numeri di gioco vecchi dopo una
+    // ricostruzione della libreria: si ricontrolla la libreria e si riprova prima di rinunciare
+    img.onerror = () => {
+      if (++tries > 2) return img.remove();
+      syncLibrary();
+      setTimeout(() => { if (img.isConnected) img.src = `${src}&r=${tries}`; }, 1200 * tries);
+    };
+    img.src = src;
   }
   return el;
+}
+
+/* La libreria nella pagina puo' diventare vecchia: una ricostruzione fatta altrove (scansione, CLI, altra finestra)
+   cambia i numeri dei giochi, e copertine e dati non si trovano piu'. Si confronta la data di costruzione. */
+let syncBusy = false;
+async function syncLibrary() {
+  if (syncBusy || !S.games.length) return;
+  syncBusy = true;
+  try {
+    const st = await api("/api/status");
+    if (!st.building && st.built_at && st.built_at !== S.builtAt) await reload(true);
+  } catch { /* server non raggiungibile: si riprova al prossimo controllo */ } finally { syncBusy = false; }
 }
 
 function refreshGrid(keepScroll = false) {
@@ -636,7 +656,7 @@ async function openDetail(id) {
   document.querySelectorAll(".tile.selected").forEach((t) => t.classList.remove("selected"));
   S.nodes.get(id)?.classList.add("selected");
   let d;
-  try { d = await api(`/api/game/${id}`); } catch (e) { return toast(e.message, true); }
+  try { d = await api(`/api/game/${id}`); } catch (e) { syncLibrary(); return toast(e.message, true); }
   S.detail = d;
   const hero = d.media.hero || d.media.screenshot || d.media.title || d.media.header || d.media.cover;
   $("#detail .hero-bg").style.backgroundImage = hero ? `url("${hero}?w=1280")` : "none";
@@ -824,6 +844,68 @@ function pickCollection(anchor, gameId, current) {
 async function play(id) {
   try { await api(`/api/game/${id}/play`, { body: {} }); } catch (e) { return toast(e.message, true); }
   pollRunning();
+}
+
+/* ------------------------------------------------------------------ menu del tasto destro su un gioco */
+function closeCtx() { document.getElementById("ctxmenu")?.remove(); }
+
+async function setGrp(g, field, value) {
+  await api(`/api/game/${g.id}/flag`, { body: { field, value } });
+  if (field === "last_played") g.grp.last = 0;
+  else g.grp[field] = field === "status" ? value || "" : value ? 1 : 0;
+  renderSidebar();
+  refreshGrid(true);
+  if (S.detail?.id === g.id) openDetail(g.id);
+}
+
+/** Le categorie da cui il gioco si puo' togliere: preferiti, giocati di recente, stato e collezioni. */
+function ctxRemovals(g) {
+  const grp = g.grp, out = [];
+  if (grp.favorite) out.push({ l: "Preferiti", view: "favorites", f: () => setGrp(g, "favorite", false) });
+  if (grp.last > 0) out.push({ l: "Giocati di recente", view: "recent", f: () => setGrp(g, "last_played", null) });
+  if (grp.status) out.push({ l: STATUS[grp.status]?.label || grp.status, view: "status", id: grp.status, f: () => setGrp(g, "status", "") });
+  for (const i of grp.colls) {
+    const c = S.colls[i];
+    if (!c || c.hidden) continue;
+    out.push({ l: c.name, view: "collection", id: c.slug, f: async () => {
+      await api(`/api/collections/${encodeURIComponent(c.slug)}/members`, { body: { game: g.id, action: "remove" } });
+      await reload(true);
+    } });
+  }
+  return out;
+}
+
+function openCtx(e, g) {
+  closeCtx();
+  const grp = g.grp, rem = ctxRemovals(g);
+  const here = rem.find((r) => r.view === S.view.type && (r.id ?? null) === (S.view.id ?? null));
+  const pt = { getBoundingClientRect: () => ({ left: e.clientX, bottom: e.clientY }) };
+  const rows = [];
+  if (g.store !== "online") rows.push({ l: "▶ Gioca", f: () => play(g.id) });
+  rows.push({ l: "Dettagli", f: () => openDetail(g.id) });
+  if (!g.store) rows.push({ l: "📂 Mostra nella cartella", f: () => api(`/api/game/${g.id}/open-folder`, { body: {} }) });
+  if (here) rows.push("-", { l: `✖ Rimuovi da «${here.l}»`, f: here.f, hl: 1 });
+  rows.push("-", { l: grp.favorite ? "★ Togli dai preferiti" : "☆ Aggiungi ai preferiti", f: () => setGrp(g, "favorite", !grp.favorite) });
+  rows.push({ l: "＋ Aggiungi a una collezione…", f: () => pickCollection(pt, g.id, grp.colls.map((i) => S.colls[i]?.slug)) });
+  rows.push({ h: "Stato" });
+  for (const [k, s] of Object.entries(STATUS)) if (grp.status !== k) rows.push({ l: `${s.icon} ${s.label}`, f: () => setGrp(g, "status", k) });
+  const others = rem.filter((r) => r !== here);
+  if (others.length) rows.push({ h: "Rimuovi da" }, ...others.map((r) => ({ l: `✖ ${r.l}`, f: r.f })));
+  rows.push("-", { l: grp.hidden ? "Mostra di nuovo" : "Nascondi dalla libreria", f: () => setGrp(g, "hidden", !grp.hidden) });
+
+  const m = document.createElement("div");
+  m.id = "ctxmenu";
+  m.innerHTML = rows.map((r, i) => r === "-" ? "<hr>" : r.h ? `<div class="ch">${esc(r.h)}</div>`
+    : `<div class="ci${r.hl ? " hl" : ""}" data-i="${i}">${esc(r.l)}</div>`).join("");
+  document.body.appendChild(m);
+  m.style.left = Math.max(6, Math.min(e.clientX, innerWidth - m.offsetWidth - 8)) + "px";
+  m.style.top = Math.max(6, Math.min(e.clientY, innerHeight - m.offsetHeight - 8)) + "px";
+  m.onclick = async (ev) => {
+    const it = ev.target.closest(".ci");
+    if (!it) return;
+    closeCtx();
+    try { await rows[+it.dataset.i].f(); } catch (err) { toast(err.message, true); }
+  };
 }
 
 let pollTimer = 0;
@@ -1846,6 +1928,20 @@ function bind() {
   GS.on("uiChanged", () => { if (S.games.length) { renderSidebar(); } });
   layer.addEventListener("click", (e) => { const t = e.target.closest(".tile"); if (t) openDetail(+t.dataset.id); });
   layer.addEventListener("dblclick", (e) => { const t = e.target.closest(".tile"); if (t) play(+t.dataset.id); });
+  layer.addEventListener("contextmenu", (e) => {
+    const t = e.target.closest(".tile");
+    const g = t && S.byId.get(+t.dataset.id);
+    if (!g) return;
+    e.preventDefault();
+    openCtx(e, g);
+  });
+  document.addEventListener("mousedown", (e) => { if (!e.target.closest("#ctxmenu")) closeCtx(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeCtx(); });
+  scroller.addEventListener("scroll", () => closeCtx(), { passive: true });
+  window.addEventListener("blur", closeCtx);
+  window.addEventListener("focus", syncLibrary);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) syncLibrary(); });
+  setInterval(syncLibrary, 20000);
   scroller.addEventListener("scroll", scheduleRender, { passive: true });
   new ResizeObserver(() => { layout(); render(); }).observe(scroller);
 

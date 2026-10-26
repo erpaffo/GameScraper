@@ -104,6 +104,32 @@ def main():
                 assert d["user"]["play_count"] == 1 and d["user"]["playtime"] >= 1.0, d["user"]
                 print(f"ok  avvio con emulatore, tempo registrato {d['user']['playtime']:.1f} s")
 
+                # tasto destro > "Rimuovi da Giocati di recente": azzera l'ultima partita, il tempo resta
+                assert c2.get("/api/library").json()["groups"]["rows"][ruby[6]][3] > 0
+                assert c2.post(f"/api/game/{ruby[0]}/flag", json={"field": "last_played", "value": 123}).status_code == 200
+                row = c2.get("/api/library").json()["groups"]["rows"][ruby[6]]
+                assert row[3] == 0 and row[4] >= 1.0, row
+                assert c2.get("/api/status").json()["built_at"] == 1.0  # il client lo confronta per accorgersi di una nuova libreria
+                print("ok  rimozione da Giocati di recente e built_at nello stato")
+
+                # immagini remote: un host che non risponde viene saltato per un po' (non tiene appese le richieste)
+                import httpx
+                calls = []
+
+                def dead(*a, **k):
+                    calls.append(a[0])
+                    raise httpx.ConnectTimeout("x")
+                real_get, httpx.get = httpx.get, dead
+                try:
+                    u = "https://cdn.allkeyshop.com/images/a.webp"
+                    assert c2.get("/remote-img", params={"u": u}).status_code == 404
+                    t0 = time.time()
+                    assert c2.get("/remote-img", params={"u": u.replace("a.webp", "b.webp")}).status_code == 404
+                    assert len(calls) == 1 and time.time() - t0 < 1, calls
+                finally:
+                    httpx.get = real_get
+                print("ok  host remoto irraggiungibile saltato senza attese")
+
                 # console senza emulatore: errore chiaro
                 r = c2.post(f"/api/game/{kh[0]}/play")
                 assert r.status_code == 409 and "PlayStation Portable" in r.json()["detail"], r.text

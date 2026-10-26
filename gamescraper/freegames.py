@@ -25,6 +25,8 @@ GAMERPOWER = "https://www.gamerpower.com/api/giveaways"
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
                     "Chrome/130.0 Safari/537.36", "Referer": "https://www.allkeyshop.com/"}
 TTL = 3 * 3600
+AKS_TTL = 12 * 3600  # allkeyshop scarta le connessioni dopo poche richieste: si interroga di rado
+AKS_RETRY = 3 * 3600  # dopo un errore di rete non si riprova prima di questo tempo
 
 DRM_NAMES = {"steam": "Steam", "epic": "Epic Games Store", "amazon": "Prime Gaming", "gog": "GOG", "ubisoft": "Ubisoft",
              "ea": "EA app", "battlenet": "Battle.net", "none": ""}
@@ -72,10 +74,7 @@ def fetch_aks(client: httpx.Client) -> list[dict]:
               "apiKey": "aks"}
     r = client.get(AKS_WIDGET, params=params)
     r.raise_for_status()
-    items = parse_aks(r.text)
-    if not items:  # in futuro la pagina potrebbe includere il riquadro direttamente
-        items = parse_aks(client.get(AKS_PAGE).text)
-    return items
+    return parse_aks(r.text)  # la pagina del blog NON contiene il riquadro (si carica dal widget): una sola richiesta
 
 
 _GP_SUFFIX = re.compile(r"\s*\([^()]*\)\s*(?:giveaway|key)$|\s+(?:giveaway|key)$", re.I)
@@ -103,6 +102,26 @@ def fetch_gamerpower(client: httpx.Client) -> list[dict]:
     return out
 
 
+STEAM_SEARCH = "https://store.steampowered.com/search/results/"
+_ST_ROW = re.compile(r'<a href="([^"]+)"[^>]*data-ds-appid="(\d+)".*?class="title">([^<]*)<.*?data-discount="(\d+)"', re.S)
+
+
+def fetch_steam(client: httpx.Client) -> list[dict]:
+    """Giochi Steam normalmente a pagamento che ora costano 0 (sconto 100%): niente free to play.
+    category1=998 = solo giochi (no DLC/colonne sonore); specials=1 = solo in offerta, quindi i free to play non compaiono."""
+    r = client.get(STEAM_SEARCH, params={"query": "", "start": 0, "count": 100, "specials": 1, "maxprice": "free",
+                                         "category1": 998, "cc": "it", "l": "italian", "infinite": 1, "json": 1})
+    r.raise_for_status()
+    out = []
+    for url, appid, title, disc in _ST_ROW.findall(r.json().get("results_html", "")):
+        if int(disc) == 100:
+            out.append({"title": html.unescape(title).strip(), "full_title": html.unescape(title).strip(),
+                        "url": f"https://store.steampowered.com/app/{appid}/", "kind": "Free to keep (100% off)",
+                        "cover": f"https://cdn.cloudflare.steamstatic.com/steam/apps/{appid}/header.jpg",
+                        "console": "pc", "drm": "steam", "source": "steam"})
+    return out
+
+
 def get(cache, force: bool = False, log=print) -> dict:
     hit = cache.kv_get("freegames")
     ttl = TTL if not (hit or {}).get("errors") else 20 * 60  # se una fonte non rispondeva si riprova prima
@@ -110,10 +129,25 @@ def get(cache, force: bool = False, log=print) -> dict:
         return hit
     items, errors = [], []
     with httpx.Client(headers=UA, timeout=25, follow_redirects=True) as c:
+        aks = cache.kv_get("freegames_aks") or {}
+        if aks.get("items") and time.time() < aks.get("next", 0):
+            items += aks["items"]  # elenco recente (o sito irraggiungibile da poco): niente nuova richiesta
+        else:
+            try:
+                with httpx.Client(headers=UA, timeout=httpx.Timeout(25, connect=8), follow_redirects=True) as ac:
+                    got = fetch_aks(ac)
+                cache.kv_set("freegames_aks", {"items": got, "time": time.time(), "next": time.time() + AKS_TTL})
+                items += got
+            except Exception as e:
+                errors.append(f"allkeyshop: {type(e).__name__}: {e}"[:200])
+                if aks.get("items"):  # si tiene l'ultimo elenco buono e si riprova piu' tardi
+                    aks["next"] = time.time() + AKS_RETRY
+                    cache.kv_set("freegames_aks", aks)
+                    items += aks["items"]
         try:
-            items += fetch_aks(c)
+            items += fetch_steam(c)
         except Exception as e:
-            errors.append(f"allkeyshop: {type(e).__name__}: {e}"[:200])
+            errors.append(f"Steam: {type(e).__name__}: {e}"[:200])
         try:
             from .matching import normalize
             have = {normalize(i["title"]) for i in items}

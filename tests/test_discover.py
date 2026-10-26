@@ -14,6 +14,30 @@ from gamescraper.wishlist import _alert  # noqa: E402
 HERE = Path(__file__).parent
 
 
+def test_allkeyshop_live_widget_e_blocco():
+    """Widget reale (2026-10-24, con Prime) e comportamento quando allkeyshop non risponde."""
+    items = freegames.parse_aks((HERE / "fixtures" / "aks_widget_live.html").read_text(encoding="utf-8"))
+    prime = [i for i in items if i["kind"] == "Free with Prime"]
+    assert len(items) == 16 and len(prime) == 9 and prime[0]["url"].startswith("https://luna.amazon.com/")
+
+    class KV:
+        d = {"freegames_aks": {"items": [{"title": "Hue", "url": "u", "kind": "Free with Prime"}], "next": 0}}
+        kv_get = lambda self, k: self.d.get(k)  # noqa: E731
+        kv_set = lambda self, k, v: self.d.__setitem__(k, v)  # noqa: E731
+
+    def boom(*a, **k):
+        raise freegames.httpx.ConnectTimeout("blocco")
+    saved = freegames.fetch_aks, freegames.fetch_steam, freegames.fetch_gamerpower
+    freegames.fetch_aks, freegames.fetch_steam, freegames.fetch_gamerpower = boom, lambda c: [], lambda c: []
+    try:
+        kv = KV()
+        r = freegames.get(kv, force=True)
+        assert [i["title"] for i in r["items"]] == ["Hue"] and r["errors"], r  # elenco precedente mantenuto
+        assert kv.d["freegames_aks"]["next"] > 0  # e non si riprova subito
+    finally:
+        freegames.fetch_aks, freegames.fetch_steam, freegames.fetch_gamerpower = saved
+
+
 def test_allkeyshop():
     items = freegames.parse_aks((HERE / "fixtures" / "aks_free.html").read_text(encoding="utf-8"))
     titles = [i["title"] for i in items]
@@ -130,6 +154,7 @@ def test_remote():
 
 if __name__ == "__main__":
     test_allkeyshop()
+    test_allkeyshop_live_widget_e_blocco()
     test_hltb()
     with tempfile.TemporaryDirectory() as tmp:
         test_status_and_wishlist(tmp)

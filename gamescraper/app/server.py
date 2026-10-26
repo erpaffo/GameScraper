@@ -40,6 +40,7 @@ from .. import stores as STORES
 STORE_NAMES = {p.id: p.name for p in STORES.PROVIDERS}
 STORE_NAMES["online"] = "Store online"
 _REMOTE_SEM = threading.Semaphore(4)  # immagini remote scaricate al massimo 4 alla volta
+_REMOTE_DOWN: dict[str, float] = {}  # host che non risponde -> fino a quando non si riprova (secondi)
 from ..library.build import build
 from ..library.userdata import UserData
 from ..matching import normalize
@@ -293,9 +294,11 @@ def create_app(cfg) -> FastAPI:
     @app.post("/api/game/{gid}/flag")
     def api_flag(gid: int, body: dict = Body(...)):
         field, value = body.get("field"), body.get("value")
-        if field not in ("favorite", "hidden", "status"):
+        if field not in ("favorite", "hidden", "status", "last_played"):
             raise HTTPException(400, "campo non valido")
-        if field == "status":
+        if field == "last_played":  # "rimuovi da Giocati di recente": si azzera solo l'ultima partita, tempo e avvii restano
+            value = None
+        elif field == "status":
             if value not in ("", None, "backlog", "playing", "done", "dropped"):
                 raise HTTPException(400, "stato non valido")
             value = value or None
@@ -1309,7 +1312,16 @@ def create_app(cfg) -> FastAPI:
     @app.get("/api/status")
     def api_status():
         return {k: state[k] for k in ("building", "build_stats", "thumbs_total", "thumbs_done")} | {
-            "build_log": state["build_log"][-8:], "has_library": bool(lib.games) or lib.built_at > 0}
+            "build_log": state["build_log"][-8:], "has_library": bool(lib.games) or lib.built_at > 0,
+            "built_at": lib.built_at}
+
+    @app.post("/api/focus")
+    def api_focus():
+        """Una seconda copia dell'app chiede di riportare in primo piano la finestra gia' aperta."""
+        fn = WINDOW_FOCUS["fn"]
+        if fn:
+            fn()
+        return {"window": bool(fn)}
 
     def _rebuild():
         if job["current"].status == "running":
@@ -1381,15 +1393,23 @@ def create_app(cfg) -> FastAPI:
         import httpx
 
         from ..net import UA, sniff
+        from urllib.parse import urlparse
         h = hashlib.sha1(url_.encode()).hexdigest()
         folder = Path(cfg.cache) / "media" / "net"
         hit = next(iter(folder.glob(h + ".*")), None) if folder.exists() else None
         if hit:
             return hit.relative_to(cfg.cache).as_posix()
+        host = urlparse(url_).hostname or ""
         with _REMOTE_SEM:
+            # un host irraggiungibile (es. CDN che blocca l'IP) non deve tenere appese decine di richieste: il browser
+            # ha pochi collegamenti verso l'app e le copertine dei giochi resterebbero in coda dietro a queste
+            if _REMOTE_DOWN.get(host, 0) > time.time():
+                return None
             try:
-                r = httpx.get(url_, timeout=20, follow_redirects=True, headers={"User-Agent": UA})
-            except httpx.HTTPError:
+                r = httpx.get(url_, timeout=httpx.Timeout(10, connect=4), follow_redirects=True, headers={"User-Agent": UA})
+            except httpx.HTTPError as e:
+                if isinstance(e, (httpx.ConnectTimeout, httpx.ConnectError)):
+                    _REMOTE_DOWN[host] = time.time() + 300
                 return None
         ext = sniff(r.content[:16]) if r.status_code == 200 else None
         if not ext:
@@ -1794,7 +1814,8 @@ def create_app(cfg) -> FastAPI:
     # ------------------------------------------------------------ giochi gratis
     from .. import freegames as FG
     REMOTE_HOSTS = ("cdn.allkeyshop.com", "www.gamerpower.com", "gamerpower.com", "cdn1.epicgames.com",
-                    "shared.akamai.steamstatic.com", "cdn.akamai.steamstatic.com", "assets.isthereanydeal.com")
+                    "shared.akamai.steamstatic.com", "cdn.akamai.steamstatic.com", "assets.isthereanydeal.com",
+                    "cdn.cloudflare.steamstatic.com")
 
     @app.get("/api/free")
     def api_free(force: int = 0):
@@ -1873,6 +1894,21 @@ def _port_free(port: int) -> bool:
             return False
 
 
+WINDOW_FOCUS = {"fn": None}  # impostata quando l'app gira in una finestra nativa
+
+
+def _focus_running_window(port: int) -> bool:
+    import json as _json
+    import urllib.request
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/focus", data=b"{}", method="POST",
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=3) as r:
+            return bool(_json.loads(r.read()).get("window"))
+    except Exception:
+        return False
+
+
 def _is_gamescraper(port: int) -> bool:
     import urllib.request
     try:
@@ -1886,6 +1922,9 @@ def run(cfg, port: int = 8765, browser: bool = False, bigpicture: bool = False):
     import uvicorn
     if not _port_free(port):
         if _is_gamescraper(port):  # una copia e' gia' aperta: non se ne avvia un'altra sugli stessi dati
+            if not browser and _focus_running_window(port):
+                print("GameScraper e' gia' aperto: ho riportato in primo piano la sua finestra.")
+                return
             print(f"GameScraper e' gia' in esecuzione su http://127.0.0.1:{port}/ - lo apro nel browser. "
                   "Per aprirne un'altra usa --port.")
             import webbrowser
@@ -1991,8 +2030,10 @@ def run(cfg, port: int = 8765, browser: bool = False, bigpicture: bool = False):
                 return r[0] if r else None
 
         state_fs = {"on": bigpicture}
+        api = Api()
+        WINDOW_FOCUS["fn"] = api.focus_window
         webview.create_window("GameScraper", start_url, width=1500, height=940, min_size=(960, 600),
-                              background_color="#111318", js_api=Api(), fullscreen=bigpicture)
+                              background_color="#111318", js_api=api, fullscreen=bigpicture)
         webview.start()
     except Exception as e:  # pywebview non disponibile: si usa il browser
         print(f"Finestra desktop non disponibile ({e}), apro il browser: {url}")

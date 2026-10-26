@@ -60,7 +60,7 @@ class UserData:
                        "playtime": r[5], "preferred": r[6], "status": r[7]} for r in cur}
 
     def set_flag(self, key: str, field: str, value):
-        assert field in ("favorite", "hidden", "preferred", "status")
+        assert field in ("favorite", "hidden", "preferred", "status", "last_played")
         self._exec(f"INSERT INTO user_games(key, {field}) VALUES(?, ?) "
                    f"ON CONFLICT(key) DO UPDATE SET {field}=excluded.{field}", (key, value))
 

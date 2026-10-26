@@ -227,18 +227,27 @@ def sniff(data: bytes) -> str | None:
 async def download_media(client, url: str, dest_noext: Path, *, limiter: RateLimiter | None = None,
                          headers: dict | None = None) -> Path | None:
     """Scarica un file media, verifica che sia davvero un'immagine/video e lo salva con l'estensione giusta."""
-    try:
-        r = await request(client, "GET", url, limiter=limiter, headers=headers, retries=3)
-    except (httpx.HTTPError, OSError):
+    if url.startswith("file:"):  # immagine gia' sul disco (es. icona estratta da un NSP)
+        try:
+            content = await asyncio.to_thread(Path(url[5:]).read_bytes)
+        except OSError:
+            return None
+    else:
+        try:
+            r = await request(client, "GET", url, limiter=limiter, headers=headers, retries=3)
+        except (httpx.HTTPError, OSError):
+            return None
+        if r is None or r.status_code != 200:
+            return None
+        content = r.content
+    if len(content) < MIN_SIZE:
         return None
-    if r is None or r.status_code != 200 or len(r.content) < MIN_SIZE:
-        return None
-    ext = sniff(r.content[:16])
+    ext = sniff(content[:16])
     if not ext:
         return None
     dest = dest_noext.with_suffix("." + ext)
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(dest.suffix + ".part")
-    await asyncio.to_thread(tmp.write_bytes, r.content)
+    await asyncio.to_thread(tmp.write_bytes, content)
     await asyncio.to_thread(tmp.replace, dest)
     return dest
