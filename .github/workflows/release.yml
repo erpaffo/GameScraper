@@ -3,7 +3,8 @@
 # Avvio: crea e invia un tag di versione, es.
 #   git tag v0.1.0 && git push origin v0.1.0
 # oppure lancia il workflow a mano da GitHub (Actions > Release > Run workflow): in quel caso gli
-# eseguibili restano scaricabili come "artifact" del workflow, senza creare una release.
+# eseguibili restano scaricabili come "artifact" del workflow (direttamente lo zip / tar.gz, non uno zip
+# dentro un altro zip), senza creare una release.
 
 name: Release
 
@@ -54,6 +55,7 @@ jobs:
         run: pyinstaller packaging/gamescraper.spec --noconfirm --distpath dist --workpath build
 
       - name: Pacchetto
+        id: pack
         shell: bash
         run: |
           VER="${GITHUB_REF_NAME#v}"
@@ -61,23 +63,26 @@ jobs:
           OUT="GameScraper-${VER}-${{ matrix.name }}"
           mkdir -p release
           case "$RUNNER_OS" in
-            Windows) 7z a -tzip "release/${OUT}.zip" ./dist/GameScraper >/dev/null ;;
-            macOS)   ditto -c -k --keepParent dist/GameScraper.app "release/${OUT}.zip" ;;
-            Linux)   tar -czf "release/${OUT}.tar.gz" -C dist GameScraper ;;
+            Windows) FILE="release/${OUT}.zip";    7z a -tzip "$FILE" ./dist/GameScraper >/dev/null ;;
+            macOS)   FILE="release/${OUT}.zip";    ditto -c -k --keepParent dist/GameScraper.app "$FILE" ;;
+            Linux)   FILE="release/${OUT}.tar.gz"; tar -czf "$FILE" -C dist GameScraper ;;
           esac
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
           ls -la release
 
-      - uses: actions/upload-artifact@v4
+      # archive: false = il file (gia' uno zip / tar.gz) si scarica cosi' com'e', senza lo zip esterno che
+      # upload-artifact aggiunge di solito; il nome dell'artifact e' il nome del file.
+      - uses: actions/upload-artifact@v7
         with:
-          name: GameScraper-${{ matrix.name }}
-          path: release/*
+          path: ${{ steps.pack.outputs.file }}
+          archive: false
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: release
           merge-multiple: true

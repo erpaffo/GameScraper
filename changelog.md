@@ -1,9 +1,20 @@
 # Changelog
 
-Formato: le novità più recenti in alto. Le versioni seguono `gamescraper/__version__` (ora 0.1.7);
-la sezione «Non rilasciato» raccoglie le modifiche fatte dopo l'ultimo zip in `release\` (0.1.5) e non ancora impacchettate.
+Le novità più recenti in alto. L'ultima release è la **0.2.0**.
+
+Nota sui numeri: `release.bat` somma 0.0.1 alla versione scritta in `gamescraper/__init__.py` prima di compilare.
+Con `0.2.0` nell'init, lo zip e l'exe escono quindi come **0.2.1** (`GameScraper-0.2.1-windows-x64.zip`): è la 0.2.0 di questo file.
+Le build intermedie 0.1.6 – 0.1.9 sono state provate durante il lavoro e non sono elencate una per una: tutto ciò che
+contengono è nella 0.2.0.
 
 ## Non rilasciato
+
+### Corretto
+- **GitHub Actions**: gli artifact scaricati dal workflow erano uno zip contenente un altro zip (`upload-artifact`
+  impacchetta sempre quello che carica). Ora si usa `upload-artifact@v7` con `archive: false`: si scarica direttamente
+  `GameScraper-<versione>-<sistema>.zip` (o `.tar.gz` su Linux). Il job di release usa `download-artifact@v8`.
+
+## 0.2.0 (2026-10-25)
 
 ### Aggiunto
 - **Menu del tasto destro su un gioco** (schermata principale): Gioca, Dettagli, Mostra nella cartella,
@@ -42,7 +53,7 @@ la sezione «Non rilasciato» raccoglie le modifiche fatte dopo l'ultimo zip in 
 - Prime Gaming si legge solo tramite allkeyshop: GamerPower non lo elenca più e la pagina di Amazon richiede login.
 - L'exe non è stato provato con un gioco e un emulatore reali; il menu del tasto destro non è stato provato nell'interfaccia.
 
-## 0.1.5
+## 0.1.5 (2026-10-23)
 
 ### Aggiunto
 - **Emulatore Eden** per Switch (accanto a Ryujinx): argomenti `-g {rom}`, ricerca di `eden.exe`.
