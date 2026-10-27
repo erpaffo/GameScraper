@@ -53,6 +53,12 @@ dati mancanti dei giochi PC.
 Il tempo di gioco viene registrato anche per i giochi avviati tramite un launcher, riconoscendo il processo del gioco
 nella sua cartella. Steam fornisce anche il suo tempo totale.
 
+## Script, launcher e collegamenti
+
+Anche per i giochi PC valgono gli **script prima e dopo il gioco** (per tutti i giochi o nel **⚙ Profilo di avvio**
+del singolo gioco), la **chiusura automatica del launcher** a fine partita e il **🖥 Collegamento sul desktop**:
+sono spiegati in [Giocare](giocare.md#script-prima-e-dopo-il-gioco).
+
 ## Store non ufficiali
 
 Gli elenchi di giochi PC che **non** sono store ufficiali (siti di repack o di download diretto) si aggiungono nella

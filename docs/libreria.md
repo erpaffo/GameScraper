@@ -82,6 +82,8 @@ Azioni principali:
 - **Collezioni**: aggiungi o togli il gioco da una collezione.
 - **Versioni**: le altre versioni dello stesso gioco (regioni, revisioni, altri store); puoi scegliere quale usare
   come principale.
+- **⚙ Profilo di avvio** (emulatore, argomenti e script solo per questo gioco) e **🖥 Collegamento sul desktop**:
+  vedi [Giocare](giocare.md#profilo-di-avvio-di-un-singolo-gioco).
 - **Mancano: …** con **⟳ Cerca dati mancanti**: riprova le fonti solo per questo gioco e le sue versioni.
 - Sezioni aggiuntive secondo il gioco: salvataggi, RetroAchievements, aggiornamenti e DLC Switch, port PC
   disponibili. Sono descritte nei rispettivi capitoli.

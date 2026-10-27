@@ -93,10 +93,15 @@ Nel frattempo puoi già cercare, aprire e avviare i tuoi giochi.
 
 ## Aggiornare l'app
 
-In **Impostazioni › Info** l'app controlla su GitHub se c'è una versione nuova (al massimo una volta ogni 12 ore,
-oppure subito con **↻ Controlla aggiornamenti**) e mostra un avviso una sola volta per versione.
+All'avvio l'app controlla su GitHub se c'è una versione nuova (al massimo una volta ogni 12 ore; subito con
+**↻ Controlla aggiornamenti** in **Impostazioni › Info**). Se c'è, compare un piccolo pop-up
+**⬆ Nuova versione …**, una sola volta per versione:
 
-Quando c'è una versione nuova compare **⬇ Installa e riavvia**:
+- un clic sul pop-up scarica e installa la nuova versione (se l'app non può installarla da sola, per esempio
+  avviata dai sorgenti, apre la pagina di download);
+- **✕** lo chiude; l'aggiornamento resta disponibile in **Impostazioni › Info**.
+
+In **Impostazioni › Info**, con una versione nuova disponibile, c'è anche il pulsante **⬇ Installa e riavvia**:
 
 1. l'app scarica il file adatto a **come è installata** e mostra l'avanzamento;
 2. controlla che il file non sia danneggiato (checksum SHA-256 pubblicato da GitHub);

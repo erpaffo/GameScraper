@@ -22,13 +22,44 @@ sovrascrivere il comando di una console in `[launch.<console>]` (vedi [Riferimen
 
 ### Profilo di avvio di un singolo gioco
 
-Nel dettaglio di un gioco, **Profilo di avvio** cambia il modo di avviare **solo quel gioco** (tutte le sue
+Nel dettaglio di un gioco, **⚙ Profilo di avvio** cambia il modo di avviare **solo quel gioco** (tutte le sue
 versioni). I campi vuoti usano le impostazioni della console:
 
 - emulatore e core RetroArch;
 - eseguibile diverso (per esempio un'altra versione dell'emulatore);
 - argomenti al posto di quelli predefiniti;
-- argomenti aggiuntivi, messi prima del file del gioco (per esempio `-f` per lo schermo intero).
+- argomenti aggiuntivi, messi prima del file del gioco (per esempio `-f` per lo schermo intero);
+- **script prima dell'avvio** e **script dopo la chiusura** (vedi sotto).
+
+Per i giochi PC il profilo contiene solo i due script: il gioco si avvia sempre come prevede il suo store.
+
+## Script prima e dopo il gioco
+
+In **Impostazioni › Emulatori › Avvio dei giochi** si indicano due script eseguiti per **tutti i giochi**, console e
+PC:
+
+- **Prima dell'avvio**: per esempio per cambiare la risoluzione dello schermo o attivare l'HDR;
+- **Dopo la chiusura**: per rimettere le cose com'erano.
+
+Uno script è un comando oppure un file `.bat` o `.ps1`. Riceve due variabili d'ambiente: `GAMESCRAPER_TITLE` (titolo
+del gioco) e `GAMESCRAPER_KEY` (chiave del gioco nella libreria), così lo stesso script può comportarsi diversamente
+per giochi diversi.
+
+Ogni gioco può avere i suoi script nel **⚙ Profilo di avvio**: vengono eseguiti **dopo** quelli di tutti i giochi.
+
+## Chiudere il launcher dello store
+
+Sempre in **Impostazioni › Emulatori › Avvio dei giochi**, l'opzione **Chiudi il launcher dello store** chiude a fine
+partita Steam, Epic, GOG Galaxy, Battle.net o Amazon Games, **solo se l'aveva aperto il gioco**: un launcher che era
+già aperto prima resta aperto. La chiusura avviene qualche secondo dopo la fine della partita, così il launcher
+finisce di sincronizzare i salvataggi; Steam viene chiuso in modo pulito.
+
+## Collegamento sul desktop
+
+Nel dettaglio di un gioco, **🖥 Collegamento sul desktop** crea un collegamento con l'icona del gioco: quella
+dell'eseguibile per i giochi PC avviati da un `.exe`, altrimenti ricavata dalla copertina. Il collegamento avvia il gioco **tramite
+GameScraper**: valgono emulatore, profilo e script, e il tempo di gioco viene registrato come quando lo avvii
+dall'app. Non è disponibile per i giochi degli store online, che non sono installati.
 
 ## Avviare un gioco
 

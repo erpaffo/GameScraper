@@ -41,11 +41,31 @@ Un gioco che hai già in libreria è segnato con *già in libreria*.
 | Prezzi | Fonte | Cosa serve |
 |---|---|---|
 | Store ufficiali (Steam, GOG, Epic, Humble…) | IsThereAnyDeal | Chiave gratuita (⚙ della lista); senza chiave, il prezzo di Steam per i giochi con codice Steam |
-| Negozi di key | GG.deals | Chiave gratuita (⚙ della lista); solo giochi PC con codice Steam |
+| Negozi di key | **allkeyshop** | Niente: ogni gioco aggiunto viene cercato da solo su allkeyshop |
+| Negozi di key (in più) | GG.deals | Chiave gratuita (⚙ della lista); solo giochi PC con codice Steam |
 
-Per ogni gioco la lista mostra il prezzo attuale, lo sconto, il **minimo storico** e, con GG.deals, il prezzo più
-basso dei negozi di key con lo sconto rispetto al prezzo pieno ufficiale (per esempio 59,99 € su Steam → 18,50 € =
-−69%). **🔑 ↗** apre il confronto dei negozi di key, **Apri ↗** la pagina dello store.
+Per ogni gioco la lista mostra il prezzo attuale, lo sconto, il **minimo storico** e il prezzo della key più
+economica, con lo sconto rispetto al prezzo pieno ufficiale (per esempio 59,99 € su Steam → 18,50 € = −69%).
+**🔑 ↗** apre il confronto dei negozi di key, **Apri ↗** la pagina dello store.
+
+### Tutte le offerte di un gioco
+
+Un clic su un gioco della lista apre il dettaglio dei prezzi letto da allkeyshop:
+
+- **Steam**: prezzo e sconto attuali, con il minimo storico di Steam;
+- **Key più economica**;
+- **tutte le offerte**, con negozio, regione, edizione, coupon e prezzo (le offerte di *account* sono separate dalle
+  key);
+- il **minimo storico delle key**.
+
+Se allkeyshop ha trovato il gioco sbagliato, o non l'ha trovato, incolla nel dettaglio l'indirizzo della sua pagina
+su allkeyshop. **↻ Aggiorna** rimette il gioco in testa alla coda. Collegamenti rapidi: **allkeyshop ↗** e
+**Steam ↗**.
+
+allkeyshop blocca chi fa troppe richieste, quindi l'app procede piano: **una richiesta al minuto**, ogni gioco al
+massimo una volta al giorno, lo storico una volta al mese, e una **pausa di 6 ore** se il sito rifiuta. La lista
+mostra quanti giochi sono in coda (*🔑 key: in coda*) e quanto manca; un gioco che il sito non conosce è segnato
+*🔑 non trovato su allkeyshop*.
 
 I prezzi si controllano al massimo due volte al giorno, oppure subito con **↻ Controlla prezzi**. Nelle impostazioni
 della lista (⚙) si scelgono anche il **paese** e lo **sconto minimo** per gli avvisi.

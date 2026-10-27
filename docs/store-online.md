@@ -46,6 +46,8 @@ Nella stessa finestra:
   quando c'è un link magnet. Con una sola fonte resta **⬇ Scarica (browser)**.
 - I giochi solo online **non contano come posseduti**: non entrano nel conteggio della console, in «Multigiocatore
   locale» né nei consigli basati sui tuoi giochi.
+- Una console con uno store online compare nella barra laterale **anche se non hai nessun suo gioco**: così puoi
+  sfogliarne il catalogo.
 
 ### Copertine e descrizioni
 
@@ -224,6 +226,10 @@ Plugin**, voce *Link → Store* nella barra laterale) legge una di queste pagine
 Il plugin **Store Minerva** (voce nella barra laterale) aggiunge allo store online di ogni console le cartelle di
 minerva-archive.org elencate su r-roms.github.io, poi ne legge l'elenco dei giochi. **Importa da r-roms** mostra il
 log dell'importazione; i link già presenti restano, e al termine la libreria si ricostruisce.
+
+Per **Switch** aggiunge anche tre elenchi completi **preimpostati**: l'indice dei giochi di NXBrew (formato `type_b`),
+Ziperto NSP (`type_c`) e Ziperto XCI (`type_d`). Quando una console ha più elenchi di formati diversi, il plugin
+toglie il tipo fisso da `settings.json`, così ogni pagina viene riconosciuta da sola.
 
 ## Per chi programma
 
