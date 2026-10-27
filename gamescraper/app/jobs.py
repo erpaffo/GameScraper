@@ -292,7 +292,8 @@ def preview(cfg, library_files: set[str], incomplete: dict[str, tuple[int, int]]
         new = sum(1 for path, _ in entries if str(path) not in library_files
                   and not (skip_bios and path.name.startswith("[BIOS]")))
         nodata, partial = (incomplete or {}).get(p.id, (0, 0))
-        rows.append({"platform": p.id, "name": p.name, "folder": str(folder.relative_to(cfg.roms)),
+        label = str(folder.relative_to(cfg.roms)) if folder.is_relative_to(cfg.roms) else str(folder)  # cartella aggiuntiva
+        rows.append({"platform": p.id, "name": p.name, "folder": label,
                      "games": len(entries), "new": new, "nodata": nodata, "partial": partial})
     # cartelle in radice che non sono console e non contengono console riconosciute
     found_paths = [f for _, f in targets]
@@ -304,4 +305,6 @@ def preview(cfg, library_files: set[str], incomplete: dict[str, tuple[int, int]]
             unknown.append(d.name)
     except OSError:
         pass
-    return {"root": str(cfg.roms), "platforms": rows, "unknown": unknown}
+    from ..config import rom_roots
+    extra = [{"path": str(r), "online": r.exists()} for r in rom_roots(cfg)[1:]]
+    return {"root": str(cfg.roms), "platforms": rows, "unknown": unknown, "extra": extra}

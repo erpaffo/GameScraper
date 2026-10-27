@@ -1,0 +1,32 @@
+{
+  "Count": 2,
+  "Total": 2,
+  "Results": [
+    {
+      "GameID": 1,
+      "Title": "Sonic the Hedgehog",
+      "ImageIcon": "/Images/067895.png",
+      "ConsoleID": 1,
+      "ConsoleName": "Mega Drive / Genesis",
+      "MaxPossible": 23,
+      "NumAwarded": 23,
+      "NumAwardedHardcore": 23,
+      "MostRecentAwardedDate": "2024-04-23T21:28:49+00:00",
+      "HighestAwardKind": "mastered",
+      "HighestAwardDate": "2024-04-23T21:28:49+00:00"
+    },
+    {
+      "GameID": 20246,
+      "Title": "~Hack~ Knuckles the Echidna in Sonic the Hedgehog",
+      "ImageIcon": "/Images/074560.png",
+      "ConsoleID": 1,
+      "ConsoleName": "Mega Drive / Genesis",
+      "MaxPossible": 20,
+      "NumAwarded": 10,
+      "NumAwardedHardcore": 10,
+      "MostRecentAwardedDate": "2023-10-27T02:52:34+00:00",
+      "HighestAwardKind": "beaten-hardcore",
+      "HighestAwardDate": "2023-10-27T02:52:34+00:00"
+    }
+  ]
+}

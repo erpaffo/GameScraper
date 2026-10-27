@@ -11,7 +11,6 @@ Senza --apply mostra solo cosa farebbe.
 from __future__ import annotations
 
 import json
-import shutil
 import sqlite3
 import time
 from pathlib import Path
@@ -63,7 +62,11 @@ def apply(cfg, pairs, log=print):
     cache = Path(cfg.cache)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     for name in ("cache.db", "userdata.db"):
-        shutil.copy2(cache / name, cache / f"{name}.{stamp}.bak")
+        # backup di sqlite e non copia del file: userdata.db e' in WAL e puo' essere aperto dall'app
+        src, dst = sqlite3.connect(cache / name), sqlite3.connect(cache / f"{name}.{stamp}.bak")
+        src.backup(dst)
+        src.close()
+        dst.close()
     dbs = {n: sqlite3.connect(cache / n) for n in ("cache.db", "userdata.db")}
     for db_name, table in TABLES:
         db = dbs[db_name]

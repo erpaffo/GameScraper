@@ -20,6 +20,7 @@ datas = [
     (str(APP / "themes"), "gamescraper/app/themes"),
     (str(APP / "plugins"), "gamescraper/app/plugins"),
     (str(ROOT / "config.example.toml"), "."),
+    (str(ROOT / "changelog.md"), "."),  # mostrato in Impostazioni > Info
     (str(ROOT / "gamescraper" / "remote" / "vendor"), "gamescraper/remote/vendor"),  # ViGEmClient.dll
 ]
 datas += collect_data_files("fake_useragent")  # usata da howlongtobeatpy

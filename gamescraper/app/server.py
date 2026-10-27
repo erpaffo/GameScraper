@@ -20,6 +20,7 @@ import sys
 import re
 import threading
 import time
+import zipfile
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -31,6 +32,9 @@ from fastapi.staticfiles import StaticFiles
 
 from .. import config as C
 from .. import platforms as P
+from .. import backup as BK
+from .. import ports as PT
+from .. import relink as RL
 from ..library import launcher as L
 from . import extensions as X
 from .icons import CREDIT
@@ -139,6 +143,7 @@ def create_app(cfg) -> FastAPI:
     from ..remote import phone as PH
     phone_hub = PH.PhoneHub(cfg, C.save_settings)
     PH.register(app, phone_hub, STATIC)
+    app.state.phone_hub = phone_hub  # per i test (vibrazioni verso il telefono)
     plugin_errors = X.load_backends(app, cfg, events)
     thumbs_dir = Path(cfg.cache) / "thumbs"
     state = {"building": False, "build_log": [], "build_stats": None, "thumbs_total": 0, "thumbs_done": 0}
@@ -182,6 +187,8 @@ def create_app(cfg) -> FastAPI:
                     "play_count": sum(u.get("play_count") or 0 for u in us),
                     # stato: quello della versione principale, altrimenti il primo impostato
                     "status": ug.get(primary["key"], {}).get("status") or next((u.get("status") for u in us if u.get("status")), "") or "",
+                    "note": next((u.get("note") for u in us if u.get("note")), "") or "",
+                    "my_rating": max((u.get("my_rating") or 0 for u in us), default=0),
                 }
             return {"colls": colls, "groups": gdata}
 
@@ -214,7 +221,7 @@ def create_app(cfg) -> FastAPI:
                 if members[0].get("store") != "online":  # i giochi solo online non contano come posseduti
                     plats[members[0]["platform"]] += 1
             return {
-                "built_at": lib.built_at,
+                "built_at": lib.built_at, "user_rev": user.rev,
                 "platforms": sorted(({"id": p, "name": P.PLATFORMS[p].name if p in P.PLATFORMS else p, "count": n}
                                      for p, n in plats.items()), key=lambda x: x["name"].lower()),
                 "collections": [{"slug": c["slug"], "name": c["name"], "auto": c["auto"], "custom": c["custom"],
@@ -284,6 +291,7 @@ def create_app(cfg) -> FastAPI:
                 "installed": bool(g.get("installed")) if g.get("store") else True,
                 "can_install": bool(g.get("install_uri")), "page": g.get("page"),
                 "store_playtime": g.get("store_playtime") or 0,
+                "ports": [] if g.get("store") else _port_links()["by_grp"].get(g["grp"], []),
                 "emulator": (STORE_NAMES.get(g.get("store"), "PC") if g.get("store")
                              else (plan["emulator"] + (f" ({plan['core']})" if plan["core"] else "")) if plan else None)}
 
@@ -294,9 +302,15 @@ def create_app(cfg) -> FastAPI:
     @app.post("/api/game/{gid}/flag")
     def api_flag(gid: int, body: dict = Body(...)):
         field, value = body.get("field"), body.get("value")
-        if field not in ("favorite", "hidden", "status", "last_played"):
+        if field not in ("favorite", "hidden", "status", "last_played", "note", "my_rating"):
             raise HTTPException(400, "campo non valido")
-        if field == "last_played":  # "rimuovi da Giocati di recente": si azzera solo l'ultima partita, tempo e avvii restano
+        if field == "note":
+            value = str(value or "").strip()[:4000] or None
+        elif field == "my_rating":
+            if value not in (None, "", 0, 1, 2, 3, 4, 5):
+                raise HTTPException(400, "voto non valido (1-5)")
+            value = int(value) if value else None
+        elif field == "last_played":  # "rimuovi da Giocati di recente": si azzera solo l'ultima partita, tempo e avvii restano
             value = None
         elif field == "status":
             if value not in ("", None, "backlog", "playing", "done", "dropped"):
@@ -539,7 +553,8 @@ def create_app(cfg) -> FastAPI:
     def api_sunshine():
         d = SUN.install_dir()
         conf = _sun_conf()
-        st = {"installed": bool(d), "service": SUN.service_state(), "user": conf.get("user", ""),
+        st = {"installed": bool(d), "service": SUN.service_state(), "start_mode": SUN.start_mode() if d else "",
+              "user": conf.get("user", ""),
               "has_password": bool(conf.get("password")), "count": conf.get("count", 24),
               "last": conf.get("last"), "web": SUN.API, "apps": None, "error": ""}
         if d and conf.get("user") and conf.get("password") and st["service"] != "stopped":
@@ -584,6 +599,14 @@ def create_app(cfg) -> FastAPI:
         conf["last"] = {"time": time.time(), **r}
         C.save_settings(cfg, app={"sunshine": conf})
         return api_sunshine()
+
+    @app.get("/api/stream/optimize")
+    def api_stream_optimize():
+        """Controlli sul PC per abbassare la latenza dello streaming (Sunshine, encoder, rete)."""
+        try:
+            return {"checks": SUN.optimize_checks()}
+        except Exception as e:
+            return {"checks": [{"level": "warn", "title": "Controllo non riuscito", "detail": f"{type(e).__name__}: {e}"}]}
 
     @app.post("/api/sunshine/start")
     def api_sunshine_start():
@@ -849,7 +872,7 @@ def create_app(cfg) -> FastAPI:
         try:
             out = []
             for P_ in STORES.PROVIDERS:
-                if P_.id == "manual":  # i giochi aggiunti a mano non sono uno store da importare
+                if P_.id in ("manual", "ports"):  # giochi aggiunti a mano e port PC non sono uno store da importare
                     continue
                 try:
                     det = P_(cfg, c, None, lambda *a: None).detected()
@@ -949,6 +972,24 @@ def create_app(cfg) -> FastAPI:
         except Exception as e:
             setup_state.update(status="error", phase=f"Errore: {type(e).__name__}: {e}")
             say(setup_state["phase"])
+
+    @app.post("/api/roms/extra")
+    def api_roms_extra(body: dict = Body(...)):
+        """Aggiunge (action=add) o toglie (action=remove) una cartella ROM aggiuntiva (es. un altro disco)."""
+        raw = str(body.get("path") or "").strip().strip('"')
+        p = Path(os.path.expandvars(os.path.expanduser(raw)))
+        cur = [str(x) for x in cfg.extra_roms]
+        if body.get("action") == "remove":
+            cur = [x for x in cur if x != raw]
+        else:
+            if not raw or not p.is_dir():
+                raise HTTPException(400, "Cartella non trovata")
+            p = p.resolve()
+            if p == Path(cfg.roms).resolve() or str(p) in cur:
+                raise HTTPException(400, "Cartella gia' presente")
+            cur.append(str(p))
+        C.save_settings(cfg, paths={"extra_roms": cur})
+        return {"extra": [{"path": str(r), "online": r.exists()} for r in C.rom_roots(cfg)[1:]]}
 
     @app.post("/api/roms")
     def api_roms(body: dict = Body(...)):
@@ -1267,6 +1308,29 @@ def create_app(cfg) -> FastAPI:
         except FileNotFoundError as e:
             raise HTTPException(404, str(e))
 
+    def _relink_busy():
+        if state["building"] or job["current"].status == "running":
+            raise HTTPException(409, "Uno scraping o un aggiornamento e' gia' in corso")
+
+    @app.get("/api/relink/plan")
+    def api_relink_plan():
+        """Giochi i cui file non esistono piu' e cartelle nuove che sembrano la stessa cosa rinominata."""
+        _relink_busy()
+        pairs = RL.plan(cfg, log=lambda m: None)
+        return {"pairs": [{"old": o, "new": n, "title": t, "path": p} for o, n, t, p in pairs]}
+
+    @app.post("/api/relink/apply")
+    def api_relink_apply(body: dict = Body(...)):
+        _relink_busy()
+        want = set(body.get("new") or [])
+        # l'abbinamento si ricalcola qui: il client sceglie solo quali applicare, non le chiavi da spostare
+        pairs = [x for x in RL.plan(cfg, log=lambda m: None) if x[1] in want]
+        if not pairs:
+            raise HTTPException(404, "Nessun abbinamento da applicare (le cartelle sono cambiate?)")
+        RL.apply(cfg, pairs, log=lambda m: None)
+        threading.Thread(target=_rebuild, daemon=True).start()
+        return {"applied": len(pairs)}
+
     @app.post("/api/folders")
     def api_folders(body: dict = Body(...)):
         folder, pid = (body.get("folder") or "").strip(), (body.get("platform") or "").strip()
@@ -1309,11 +1373,377 @@ def create_app(cfg) -> FastAPI:
         job["current"].cancel()
         return job["current"].state()
 
+    # ------------------------------------------------------------ copie di sicurezza dei dati utente
+    def _auto_backup():
+        try:
+            BK.auto(cfg)
+        except Exception as e:  # una copia mancata non deve impedire l'avvio
+            print(f"backup automatico non riuscito: {type(e).__name__}: {e}", file=sys.stderr)
+
+    threading.Thread(target=_auto_backup, daemon=True).start()
+
+    @app.get("/api/backups")
+    def api_backups():
+        return {"folder": str(BK.folder(cfg)), "items": BK.list_backups(cfg)}
+
+    @app.post("/api/backups")
+    def api_backup_create():
+        return {"name": BK.create(cfg).name}
+
+    @app.post("/api/backups/restore")
+    def api_backup_restore(body: dict = Body(...)):
+        if launcher.running().get("status") in ("starting", "extracting", "running"):
+            raise HTTPException(409, "Chiudi il gioco in corso prima di ripristinare")  # registrerebbe la partita sui dati vecchi
+        try:
+            return BK.restore(cfg, body.get("name") or "", user=user)
+        except (FileNotFoundError, ValueError) as e:
+            raise HTTPException(400, str(e))
+
+    # ------------------------------------------------------------ RetroAchievements: obiettivi dei giochi retro
+    from .. import retroachievements as RA
+
+    def _ra_conf() -> dict:
+        return dict(cfg.app.get("retroachievements") or {})
+
+    @app.get("/api/ra")
+    def api_ra_state():
+        c = _ra_conf()
+        return {"username": c.get("username", ""), "has_key": bool(c.get("key"))}
+
+    @app.post("/api/ra")
+    def api_ra_save(body: dict = Body(...)):
+        """Salva nome utente e Web API key (profilo di retroachievements.org) dopo averli provati con una richiesta."""
+        c = _ra_conf()
+        if "username" in body:
+            c["username"] = str(body.get("username") or "").strip()
+        if body.get("key"):
+            c["key"] = str(body["key"]).strip()
+        if c.get("username") and c.get("key"):
+            try:
+                with RA.client(c["username"], c["key"]) as rc:
+                    RA.user_progress(rc, count=1)
+            except RA.RAError as e:
+                raise HTTPException(400, str(e))
+        C.save_settings(cfg, app={"retroachievements": c})
+        cfg.app["retroachievements"] = c
+        return api_ra_state()
+
+    @app.get("/api/game/{gid}/ra")
+    def api_game_ra(gid: int, force: int = 0):
+        """Obiettivi del gioco e progresso dell'utente. Cache: catalogo della console 7 giorni, abbinamento 30 giorni,
+        progresso 30 minuti (force=1 lo riscarica)."""
+        g = lib.get(gid)
+        conf = _ra_conf()
+        if not (conf.get("username") and conf.get("key")):
+            return {"configured": False}
+        try:
+            cid = RA.resolve_console_id(g["platform"])
+        except KeyError:
+            return {"configured": True, "supported": False}
+        from ..cache import Cache
+        cache = Cache(cfg.cache)
+        try:
+            with RA.client(conf["username"], conf["key"]) as rc:
+                mk = f"ra_match:{g['key']}"
+                ra_id = cache.kv_get(mk, max_age=30 * 86400)
+                if ra_id is None:
+                    catalog = cache.kv_get(f"ra_gamelist:{cid}", max_age=7 * 86400)
+                    if catalog is None:
+                        catalog = RA.game_list(rc, cid)
+                        cache.kv_set(f"ra_gamelist:{cid}", catalog)
+                    f = Path(g["files"][0]) if g.get("files") else None
+                    # il titolo in libreria puo' essere tradotto ("Versione Smeraldo"): RetroAchievements usa i nomi
+                    # inglesi, come il nome canonico (No-Intro) e di solito il nome del file
+                    from ..scanner import clean_title
+                    names = [n for n in dict.fromkeys([g["title"], g.get("canonical") or "", clean_title(f.stem) if f else ""]) if n]
+                    md5 = None
+                    if g["platform"] in RA._RAW_MD5_CONSOLES | {"snes"}:
+                        # cartucce senza intestazione: l'hash RA e' l'MD5 della ROM, gia' noto dal DAT No-Intro (anche per gli .zip)
+                        for p in g.get("files") or []:
+                            row = cache.db.execute("SELECT data FROM files WHERE path=?", (p,)).fetchone()
+                            d = json.loads(row[0]) if row else {}
+                            md5 = (d.get("dat_md5") or d.get("md5") or "").lower() or None
+                            if md5:
+                                break
+                    md5 = md5 or (RA.rom_hash(f, g["platform"]) if f else None)
+                    hit = next((h for h in (RA.match_game(n, catalog, rom_md5=md5) for n in names) if h), None)
+                    ra_id = hit["id"] if hit else 0
+                    cache.kv_set(mk, ra_id)
+                if not ra_id:
+                    return {"configured": True, "supported": True, "found": False}
+                pk = f"ra_prog:{conf['username']}:{ra_id}"
+                prog = None if force else cache.kv_get(pk, max_age=1800)
+                if prog is None:
+                    prog = RA.game_progress(rc, ra_id)
+                    cache.kv_set(pk, prog)
+        except RA.RAError as e:
+            return {"configured": True, "supported": True, "error": str(e)}
+        finally:
+            cache.close()
+        return {"configured": True, "supported": True, "found": True, "game": prog,
+                "url": f"https://retroachievements.org/game/{ra_id}"}
+
+    # ------------------------------------------------------------ esportazione per altri frontend (ES-DE, Pegasus)
+    export_state = {"running": False}
+
+    @app.post("/api/export/frontend")
+    def api_export_frontend(body: dict = Body(...)):
+        from .. import frontends
+        fmt = body.get("format")
+        if fmt not in ("esde", "pegasus"):
+            raise HTTPException(400, "formato non valido (esde o pegasus)")
+        raw = str(body.get("out_dir") or "").strip().strip('"')
+        out = Path(os.path.expandvars(os.path.expanduser(raw))) if raw else Path(cfg.output) / fmt
+        if export_state["running"]:
+            raise HTTPException(409, "Esportazione gia' in corso")
+        export_state["running"] = True
+        try:
+            out.mkdir(parents=True, exist_ok=True)
+            fn = frontends.export_esde if fmt == "esde" else frontends.export_pegasus
+            summary = fn(Path(cfg.cache), out, [p for p in body.get("platforms") or [] if p in P.PLATFORMS] or None)
+        except OSError as e:
+            raise HTTPException(400, f"Cartella non scrivibile: {e}")
+        finally:
+            export_state["running"] = False
+        return {"ok": True, "summary": summary, "games": sum(summary.values()), "out_dir": str(out)}
+
+    # ------------------------------------------------------------ Switch: aggiornamento e DLC presenti nella cartella
+    switch_keys: dict = {}
+
+    @app.get("/api/game/{gid}/switch")
+    def api_game_switch(gid: int):
+        """{update, dlc} dalla cache della fonte nsp; se mancano (gioco scansionato prima) si leggono dalla cartella."""
+        g = lib.get(gid)
+        if g["platform"] != "switch" or not g.get("files"):
+            return {}
+        from ..cache import Cache
+        c = Cache(cfg.cache)
+        try:
+            nsp = (c.all_resources([g["key"]]).get(g["key"]) or {}).get("nsp") or {}
+        finally:
+            c.close()
+        if "switch_update" in nsp or "switch_dlc" in nsp:
+            return {"update": nsp.get("switch_update"), "dlc": int(nsp.get("switch_dlc") or 0)}
+        folder = Path(g["files"][0])
+        if not folder.is_dir():
+            return {}
+        from .. import switchmeta
+        try:
+            if "k" not in switch_keys:
+                switch_keys["k"] = switchmeta.load_keys(getattr(cfg, "switch_keys", ""))
+            fc = switchmeta.folder_contents(folder, switch_keys["k"])
+        except Exception as e:  # chiavi mancanti o pacchetto illeggibile: nessuna informazione, nessun errore
+            return {"error": f"{type(e).__name__}: {e}"[:160]}
+        return {"update": fc.get("update_display") or (str(fc["update"]) if fc.get("update") is not None else None),
+                "dlc": fc.get("dlc") or 0}
+
+    # ------------------------------------------------------------ salvataggi dei giochi (copie di sicurezza)
+    from ..library import saves as SV
+
+    def _saves_of(g: dict) -> tuple[str, list[Path]]:
+        """(emulatore, cartelle/file dei salvataggi) del gioco, con l'emulatore che lo avvierebbe adesso."""
+        if g.get("store") == "ports":  # port PC: con portable.txt i salvataggi stanno nella sua cartella
+            m = PT.all_installed(cfg).get(g["key"].split(":", 1)[1])
+            return "Port PC", PT.user_files(Path(m["folder"]), m) if m else []
+        p = P.PLATFORMS.get(g["platform"])
+        try:
+            pl = L.plan(cfg, p, user.profile(g["key"])) if p and not g.get("store") else None
+        except L.LaunchError:
+            pl = None
+        if not pl or not SV.supported(pl["emulator"]):
+            return (pl or {}).get("emulator") or "", []
+        tid = ""
+        if g["platform"] == "switch":
+            from ..cache import Cache
+            c = Cache(cfg.cache)
+            try:
+                tid = ((c.all_resources([g["key"]]).get(g["key"]) or {}).get("nsp") or {}).get("titleid") or ""
+            finally:
+                c.close()
+        stem = Path(g["files"][0]).stem if g.get("files") else ""
+        return pl["emulator"], SV.game_saves(pl["emulator"], pl.get("exe"), rom_stem=stem, title_id=tid)
+
+    @app.get("/api/game/{gid}/saves")
+    def api_saves(gid: int):
+        g = lib.get(gid)
+        emu, paths = _saves_of(g)
+        return {"emulator": emu, "supported": SV.supported(emu) or emu == "Port PC", "paths": [str(x) for x in paths],
+                "items": SV.list_backups(cfg, g["key"])}
+
+    @app.post("/api/game/{gid}/saves")
+    def api_saves_backup(gid: int):
+        g = lib.get(gid)
+        emu, paths = _saves_of(g)
+        out = SV.backup(cfg, g["key"], g["title"], paths) if paths else None
+        if not out:
+            raise HTTPException(404, f"Nessun salvataggio trovato per questo gioco ({emu or 'emulatore non configurato'})")
+        return {"name": out.name}
+
+    @app.post("/api/game/{gid}/saves/restore")
+    def api_saves_restore(gid: int, body: dict = Body(...)):
+        g = lib.get(gid)
+        if launcher.running().get("status") in ("starting", "extracting", "running"):
+            raise HTTPException(409, "Chiudi il gioco prima di ripristinare i salvataggi")  # l'emulatore li riscriverebbe
+        try:
+            return SV.restore(cfg, g["key"], body.get("name") or "")
+        except (FileNotFoundError, ValueError) as e:
+            raise HTTPException(400, str(e))
+
+    def _saves_after_game(st: dict):
+        """A fine partita: copia dei salvataggi di quel gioco (se l'emulatore e' supportato)."""
+        g = lib.by_key.get(st.get("key") or "")
+        if not g or not (SV.supported(st.get("emulator_id") or "") or g.get("store") == "ports")                 or not cfg.app.get("save_backups", True):
+            return
+        try:
+            _, paths = _saves_of(g)
+            size = sum(f.stat().st_size for p in paths for f in ([p] if p.is_file() else p.rglob("*")) if f.is_file())
+            if paths and size <= 1 << 30:  # oltre 1 GB (x10 copie) solo a mano: non si riempie il disco in silenzio
+                SV.backup(cfg, g["key"], g["title"], paths, "dopo-partita")
+        except Exception as e:  # una copia mancata non deve disturbare
+            print(f"copia dei salvataggi non riuscita: {type(e).__name__}: {e}", file=sys.stderr)
+
+    events.on("game_stopped", lambda st: threading.Thread(target=_saves_after_game, args=(st,), daemon=True).start())
+
+    # ------------------------------------------------------------ versione, novita' e aggiornamenti
+    @app.get("/api/about")
+    def api_about():
+        from .. import __version__, updates
+        return {"version": __version__, "changelog": updates.changelog(), "data_dir": str(C.settings_path(cfg).parent)}
+
+    @app.get("/api/update")
+    def api_update(force: int = 0):
+        from .. import updates
+        from ..cache import Cache
+        c = Cache(cfg.cache)
+        try:
+            return updates.check(c, force=bool(force))
+        finally:
+            c.close()
+
+    # ------------------------------------------------------------ salute: problemi da sistemare, in un posto solo
+    @app.get("/api/health")
+    def api_health():
+        """Controlli veloci (nessuna richiesta in rete). Ogni voce: livello ok/warn/error, testo e, se c'e', l'azione
+        dell'interfaccia che la risolve (fix: scheda delle impostazioni, scraping o copia dei dati)."""
+        out = []
+
+        def add(level, title, detail="", fix=None):
+            out.append({"level": level, "title": title, "detail": detail, "fix": fix})
+
+        def num(n):
+            return f"{n:,}".replace(",", ".")
+
+        def roms():
+            roots = C.rom_roots(cfg)
+            off = [r for r in roots if not r.exists()]
+            if len(off) == len(roots):
+                add("error", "Cartella delle ROM non raggiungibile", f"{cfg.roms} (disco scollegato o cartella spostata?)",
+                    {"label": "Cambia cartella", "tab": "scan"})
+            elif off:
+                add("warn", f"{len(off)} cartelle ROM non raggiungibili", ", ".join(map(str, off))
+                    + ". I loro giochi spariscono dalla libreria al prossimo aggiornamento finché il disco non torna "
+                    "(i dati restano salvati).", {"label": "Nuovi giochi", "tab": "scan"})
+            else:
+                add("ok", "Cartelle delle ROM raggiungibili", ", ".join(map(str, roots)))
+
+        def emulators():
+            with lib.lock:
+                pids = sorted({g["platform"] for g in lib.games if not g.get("store")} & set(P.PLATFORMS))
+            bad = [r for r in (_emu_row(p) for p in pids) if not r["effective"]]
+            if bad:
+                add("warn", f"{len(bad)} console senza emulatore pronto",
+                    "; ".join(f"{r['name']}: {r['problem']}" for r in bad[:8]) + ("…" if len(bad) > 8 else ""),
+                    {"label": "Emulatori", "tab": "emu"})
+            elif pids:
+                add("ok", "Emulatori pronti per tutte le console", f"{len(pids)} console")
+
+        def switch_keys():
+            with lib.lock:
+                has = any(g["platform"] == "switch" for g in lib.games)
+            if not has:
+                return
+            from .. import switchmeta
+            found = switchmeta.key_candidates(getattr(cfg, "switch_keys", ""))
+            if found:
+                add("ok", "prod.keys trovato: metadati Switch letti dai file", str(found[0]))
+            else:
+                add("warn", "prod.keys non trovato", "Senza chiavi i giochi Switch usano solo le fonti online. "
+                    "Indicalo in config.toml, [paths] switch_keys, oppure installa le chiavi in Ryujinx/Eden.")
+
+        def library():
+            with lib.lock:
+                prim = [g for g in lib.games if g["is_primary"] and not g.get("store")]
+            nodata = sum(1 for g in prim if not g["found"])
+            nocover = sum(1 for g in prim if g["found"] and "cover" not in g["media"])
+            fix = {"label": "Completa i dati mancanti", "scan": "missing"}
+            if nodata:
+                add("warn", f"{num(nodata)} giochi senza dati", "Nessuna fonte li ha riconosciuti.", fix)
+            if nocover:
+                add("warn", f"{num(nocover)} giochi senza copertina", "", fix)
+            if not nodata and not nocover:
+                add("ok", "Tutti i giochi hanno dati e copertina", num(len(prim)))
+
+        def missing_files():
+            with lib.lock:
+                rows = [(g["title"], g["files"]) for g in lib.games if g["files"] and not g.get("store")]
+            gone = [t for t, fl in rows if not any(Path(f).exists() for f in fl)]
+            if gone:
+                add("warn", f"{num(len(gone))} giochi con i file non trovati",
+                    ", ".join(gone[:6]) + ("…" if len(gone) > 6 else "") + ". Se hai rinominato o spostato le cartelle, "
+                    "riassociali da Nuovi giochi prima di aggiornare la libreria.", {"label": "Nuovi giochi", "tab": "scan"})
+            else:
+                add("ok", "Tutti i file dei giochi sono presenti", num(len(rows)))
+
+        def sources():
+            from ..cache import Cache
+            c = Cache(cfg.cache)
+            try:
+                fg = c.kv_get("freegames") or {}
+            finally:
+                c.close()
+            errs = [e.split(":")[0] for e in fg.get("errors", []) if e != "reset"]
+            down = [f"immagini da {h}" for h, until in _REMOTE_DOWN.items() if until > time.time()]
+            if errs or down:
+                add("warn", "Alcune fonti online non rispondono", "; ".join(errs + down)
+                    + ". Si riprova da solo più tardi; intanto si usa l'ultimo elenco salvato.")
+
+        def backups():
+            last = BK.list_backups(cfg)
+            if not last:
+                add("warn", "Nessuna copia dei tuoi dati", "", {"label": "Crea una copia", "backup": True})
+                return
+            days = int((time.time() - last[0]["time"]) / 86400)
+            old = days >= 8
+            add("warn" if old else "ok", f"Ultima copia dei tuoi dati: {'oggi' if not days else f'{days} giorni fa'}",
+                last[0]["name"], {"label": "Crea una copia", "backup": True} if old else None)
+
+        def streaming():
+            if not SUN.install_dir():
+                return
+            state, mode = SUN.service_state(), SUN.start_mode()
+            fix = {"label": "Avvia Sunshine (anche con Windows)", "sunshine": True}
+            if state == "stopped":
+                add("warn", "Sunshine è fermo: lo streaming verso TV e telefono non funziona",
+                    "Moonlight non trova il PC finché il servizio di Sunshine non è avviato.", fix)
+            elif state == "running" and mode and mode != "auto":
+                add("warn", "Sunshine non parte con Windows", "Dopo un riavvio lo streaming smette di funzionare.", fix)
+            elif state == "running":
+                add("ok", "Sunshine attivo: streaming pronto per Moonlight")
+
+        for fn in (roms, emulators, switch_keys, library, missing_files, sources, backups, streaming):
+            try:
+                fn()
+            except Exception as e:  # un controllo rotto non deve nascondere gli altri
+                add("warn", "Controllo non riuscito", f"{fn.__name__}: {type(e).__name__}: {e}")
+        order = {"error": 0, "warn": 1, "ok": 2}
+        return {"items": sorted(out, key=lambda x: order[x["level"]])}
+
     @app.get("/api/status")
     def api_status():
         return {k: state[k] for k in ("building", "build_stats", "thumbs_total", "thumbs_done")} | {
             "build_log": state["build_log"][-8:], "has_library": bool(lib.games) or lib.built_at > 0,
-            "built_at": lib.built_at}
+            "built_at": lib.built_at, "user_rev": user.rev,
+            "running": launcher.running().get("status") or ""}
 
     @app.post("/api/focus")
     def api_focus():
@@ -1699,10 +2129,12 @@ def create_app(cfg) -> FastAPI:
         items = user.wishlist()
         owned = {normalize(g["title"]) for g in lib.games if g.get("store") != "online"
                  and (g.get("store") is None or g.get("installed") or g.get("store"))}
+        hist = user.wish_history()
         for w in items:
             w["owned"] = normalize(w["title"]) in owned
+            w["history"] = hist.get(w["id"], [])
         return {"items": items, "settings": {"country": s["country"], "threshold": s["threshold"],
-                                             "has_key": bool(s["itad_key"])},
+                                             "has_key": bool(s["itad_key"]), "has_gg": bool(s["gg_key"])},
                 "unseen": sum(1 for w in items if w["alert"] and not w["seen"]), "checking": wish_state["checking"]}
 
     def _wish_check(force=False):
@@ -1773,8 +2205,9 @@ def create_app(cfg) -> FastAPI:
     @app.post("/api/wishlist/settings")
     def api_wishlist_settings(body: dict = Body(...)):
         cur = dict(cfg.app.get("wishlist") or {})
-        if "itad_key" in body:
-            cur["itad_key"] = (body.get("itad_key") or "").strip() or None
+        for k in ("itad_key", "gg_key"):
+            if k in body:
+                cur[k] = (body.get(k) or "").strip() or None
         if body.get("country"):
             cur["country"] = str(body["country"]).strip().upper()[:2]
         if body.get("threshold") not in (None, ""):
@@ -1815,7 +2248,9 @@ def create_app(cfg) -> FastAPI:
     from .. import freegames as FG
     REMOTE_HOSTS = ("cdn.allkeyshop.com", "www.gamerpower.com", "gamerpower.com", "cdn1.epicgames.com",
                     "shared.akamai.steamstatic.com", "cdn.akamai.steamstatic.com", "assets.isthereanydeal.com",
-                    "cdn.cloudflare.steamstatic.com")
+                    "cdn.cloudflare.steamstatic.com", "m.media-amazon.com",  # copertine Prime (feed LootScraper)
+                    "media.retroachievements.org",  # icone degli obiettivi
+                    "cdn2.steamgriddb.com", "ccdn.thunderstore.io", "gcdn.thunderstore.io")  # port PC e mod
 
     @app.get("/api/free")
     def api_free(force: int = 0):
@@ -1827,9 +2262,36 @@ def create_app(cfg) -> FastAPI:
             c.close()
         owned = {normalize(g["title"]) for g in lib.games if g.get("store") != "online"}
         wished = {normalize(w["title"]) for w in user.wishlist()}
-        items = [{**i, "owned": normalize(i["title"]) in owned, "wished": normalize(i["title"]) in wished}
+        fs = C.read_settings(cfg).get("free_state") or {}
+        seen, claimed = set(fs.get("seen") or []), set(fs.get("claimed") or [])
+        items = [{**i, "owned": normalize(i["title"]) in owned, "wished": normalize(i["title"]) in wished,
+                  "new": _free_id(i) not in seen, "claimed": _free_id(i) in claimed, "id": _free_id(i)}
                  for i in d.get("items", [])]
-        return {"items": items, "time": d.get("time"), "errors": d.get("errors", []), "stale": d.get("stale", False)}
+        new = sum(1 for i in items if i["new"] and not i["owned"] and not i["claimed"])
+        return {"items": items, "time": d.get("time"), "errors": d.get("errors", []), "stale": d.get("stale", False),
+                "new": new, "first": not fs}
+
+    def _free_id(i: dict) -> str:
+        return f"{i.get('source')}|{i.get('console')}|{normalize(i.get('title') or '')}"
+
+    @app.post("/api/free/mark")
+    def api_free_mark(body: dict = Body(...)):
+        """seen=true: tutti quelli in elenco non sono piu' «nuovi»; claim=<id> + value: riscattato si/no."""
+        from ..cache import Cache
+        c = Cache(cfg.cache)
+        try:
+            current = {_free_id(i) for i in (c.kv_get("freegames") or {}).get("items", [])}
+        finally:
+            c.close()
+        fs = C.read_settings(cfg).get("free_state") or {}
+        seen, claimed = set(fs.get("seen") or []), set(fs.get("claimed") or [])
+        if body.get("seen"):
+            seen |= current
+        if body.get("claim"):
+            (claimed.add if body.get("value", True) else claimed.discard)(str(body["claim"]))
+        # si tengono solo le offerte ancora in elenco: le liste non crescono all'infinito
+        C.set_setting(cfg, "free_state", {"seen": sorted(seen & current), "claimed": sorted(claimed & current)})
+        return {"ok": True}
 
     @app.get("/remote-img")
     def remote_img(u: str):
@@ -1840,6 +2302,259 @@ def create_app(cfg) -> FastAPI:
         if not rel:
             raise HTTPException(404)
         return FileResponse(Path(cfg.cache) / rel, headers={"Cache-Control": "public, max-age=604800"})
+
+    # ------------------------------------------------------------ port PC (ricompilazioni e decomp, catalogo di Quiver)
+    port_job: dict = {"status": "idle", "log": [], "slug": "", "done": 0, "total": 0}
+    port_links: dict = {"key": None, "by_slug": {}, "by_grp": {}}
+
+    def _port_links() -> dict:
+        """Port <-> ROM della libreria, ricalcolato solo quando cambiano la libreria o il catalogo."""
+        from ..cache import Cache
+        c = Cache(cfg.cache)
+        try:
+            cat = c.kv_get("ports:catalog") or {}
+        finally:
+            c.close()
+        key = (lib.built_at, cat.get("time"), len(lib.games))
+        if port_links["key"] != key:
+            idx = PT.rom_index(lib.games)
+            by_slug, by_grp = {}, defaultdict(list)
+            for e in cat.get("items") or []:
+                roms = PT.roms_for(e, idx)
+                if roms:
+                    by_slug[e["slug"]] = roms
+                    for g in {r["grp"]: r for r in roms}.values():
+                        by_grp[g["grp"]].append({"slug": e["slug"], "name": e["name"]})
+            port_links.update(key=key, by_slug=by_slug, by_grp=dict(by_grp), catalog=cat)
+        return port_links
+
+    def _port_or_404(slug: str) -> dict:
+        m = PT.all_installed(cfg).get(slug)
+        if not m:
+            raise HTTPException(404, "Port non installato")
+        return m
+
+    def _port_game_id(slug: str):
+        g = lib.by_key.get(f"windows/ports:{slug}")
+        return g["id"] if g else None
+
+    def _refresh_ports_store():
+        try:
+            _start_store_job(["ports"])
+        except HTTPException:  # store gia' in aggiornamento: il port compare al prossimo aggiornamento
+            port_job["log"].append("Aggiorna gli store (Impostazioni › Account) per vederlo nella libreria")
+
+    def _run_port_job(slug: str, fn):
+        def progress(done, total):
+            port_job.update(done=done, total=total)
+
+        def say(m):
+            port_job["log"].append(str(m))
+        try:
+            fn(progress, say)
+            port_job["status"] = "done"
+            _refresh_ports_store()
+        except Exception as e:
+            say(f"Errore: {type(e).__name__}: {e}")
+            port_job["status"] = "error"
+
+    def _start_port_job(slug: str, fn):
+        if port_job["status"] == "running":
+            raise HTTPException(409, "C'e' gia' un'installazione in corso")
+        port_job.update(status="running", log=[], slug=slug, done=0, total=0)
+        threading.Thread(target=_run_port_job, args=(slug, fn), daemon=True).start()
+        return port_job
+
+    @app.get("/api/ports")
+    def api_ports(force: int = 0):
+        from ..cache import Cache
+        c = Cache(cfg.cache)
+        try:
+            cat = PT.catalog(c, force=bool(force))
+            inst = PT.all_installed(cfg)
+            tok = PT._token(cfg)
+            upd = {s: PT.update_info(c, m, tok, bool(force)) for s, m in inst.items()}  # rete al massimo ogni 12 ore per repository
+        finally:
+            c.close()
+        links = _port_links()
+
+        def card(e: dict, m: dict | None) -> dict:
+            art = e.get("libraryArt") or e.get("art") or {}
+            sf = (e.get("launcher") or {}).get("setupFiles") or []
+            return {"slug": e["slug"], "name": e.get("name") or e["slug"], "project": e.get("projectName") or "",
+                    "description": e.get("description") or "",
+                    "consoles": e.get("consoles") or [], "developer": (e.get("developer") or {}).get("name", "")
+                    if isinstance(e.get("developer"), dict) else e.get("developer") or "",
+                    "cover": art.get("capsule") or e.get("artwork") or "", "hero": art.get("hero") or "",
+                    "version": e.get("lastReleaseVersion") or "", "tags": e.get("tags") or [],
+                    "recommended": e.get("recommended") or 0, "broken": e.get("reportBroken") or 0,
+                    "issues": e.get("reportIssues") or 0, "setup": sf, "mods": bool((e.get("launcher") or {}).get("mods")),
+                    "roms": [{"id": g["id"], "title": g["title"], "platform": g["platform"], "file": (g.get("files") or [""])[0]}
+                             for g in links["by_slug"].get(e["slug"], [])],
+                    "installed": {"version": m.get("version") or "", "exe": m.get("exe") or "", "folder": m["folder"],
+                                  "manual": bool(m.get("manual")), "skip": m.get("skip"), "game_id": _port_game_id(e["slug"]),
+                                  "repository": m.get("repository") or "", **upd.get(e["slug"], {})} if m else None}
+        items = [card(e, inst.get(e["slug"])) for e in cat.get("items") or []]
+        known = {e["slug"] for e in cat.get("items") or []}
+        items += [card({**m, "slug": s}, m) for s, m in inst.items() if s not in known]  # aggiunti a mano
+        names = {p.id: p.name for p in P.PLATFORMS.values()}
+        consoles = {cid: names.get(PT.platform_of(cid) or "", {"pc": "PC (DOS e vecchi giochi)", "mobile": "Mobile", "cdi": "Philips CD-i", "ps5": "PlayStation 5"}.get(cid, cid))
+                    for i in items for cid in i["consoles"]}
+        return {"items": items, "time": cat.get("time"), "error": cat.get("error"), "stale": cat.get("stale", False),
+                "consoles": consoles, "dir": str(PT.ports_dir(cfg)), "token": bool(PT._token(cfg))}
+
+    @app.get("/api/ports/job")
+    def api_ports_job():
+        return port_job
+
+    @app.post("/api/ports/install")
+    def api_ports_install(body: dict = Body(...)):
+        slug = str(body.get("slug") or "")
+        from ..cache import Cache
+
+        def run(progress, say):
+            c = Cache(cfg.cache)
+            try:
+                PT.install(cfg, c, slug, progress, say)
+            finally:
+                c.close()
+        return _start_port_job(slug, run)
+
+    @app.post("/api/ports/manual")
+    def api_ports_manual(body: dict = Body(...)):
+        """Port non in catalogo: da una cartella gia' scaricata o da un repository GitHub (utente/progetto)."""
+        name, console = (body.get("name") or "").strip(), (body.get("console") or "").strip()
+        consoles = [console] if console else []
+        if body.get("folder"):
+            try:
+                m = PT.add_folder(cfg, body["folder"].strip().strip('"'), name, consoles)
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+            _refresh_ports_store()
+            return m
+        repo = (body.get("repo") or "").strip()
+        return _start_port_job(repo, lambda progress, say: PT.add_repo(cfg, repo, name, consoles, progress, say))
+
+    @app.get("/api/ports/{slug}")
+    def api_port(slug: str):
+        """Dettaglio di un port installato: eseguibili, ROM richieste (con la ROM della libreria che va bene)."""
+        m = _port_or_404(slug)
+        e = next((x for x in _port_links().get("catalog", {}).get("items") or [] if x["slug"] == slug), {})
+        return {**m, "candidates": PT.exe_candidates(Path(m["folder"]), m.get("preferred")),
+                "setup": [{"id": sf.get("id"), "label": sf.get("label") or sf.get("id"),
+                           "destination": sf.get("destination"),
+                           "present": (Path(m["folder"]) / sf.get("destination", "")).is_file(),
+                           "accepted": [a.get("label") or "" for a in sf.get("accepted") or []]}
+                          for sf in (e.get("launcher") or {}).get("setupFiles") or []],
+                "user_files": len(PT.user_files(Path(m["folder"]), m)),
+                "mods": bool(m.get("mods")), "installed_mods": m.get("installed_mods") or {}}
+
+    @app.post("/api/ports/{slug}/update")
+    def api_port_update(slug: str):
+        m = _port_or_404(slug)
+        if m.get("manual"):
+            if not m.get("repository"):
+                raise HTTPException(400, "Questo port non e' legato a un repository")
+            return _start_port_job(slug, lambda progress, say: PT.add_repo(cfg, m["repository"], m.get("name", ""),
+                                                                          m.get("consoles"), progress, say))
+        return api_ports_install({"slug": slug})
+
+    @app.post("/api/ports/{slug}/exe")
+    def api_port_exe(slug: str, body: dict = Body(...)):
+        m = _port_or_404(slug)
+        if body.get("exe") not in PT.exe_candidates(Path(m["folder"]), m.get("preferred")):
+            raise HTTPException(400, "Eseguibile non valido")
+        PT.set_manifest(cfg, slug, exe=body["exe"])
+        _refresh_ports_store()
+        return {"ok": True}
+
+    @app.post("/api/ports/{slug}/skip")
+    def api_port_skip(slug: str, body: dict = Body(...)):
+        _port_or_404(slug)
+        PT.set_manifest(cfg, slug, skip=body.get("version") or None)
+        return {"ok": True}
+
+    @app.post("/api/ports/{slug}/uninstall")
+    def api_port_uninstall(slug: str):
+        _port_or_404(slug)
+        if launcher.running().get("status") in ("starting", "running") and launcher.running().get("key") == f"windows/ports:{slug}":
+            raise HTTPException(409, "Chiudi il gioco prima di disinstallarlo")
+        try:
+            PT.uninstall(cfg, slug)
+        except RuntimeError as e:
+            raise HTTPException(409, str(e))
+        _refresh_ports_store()
+        return {"ok": True}
+
+    @app.post("/api/ports/{slug}/rom")
+    def api_port_rom(slug: str, body: dict = Body(...)):
+        """Prima configurazione: copia nella cartella del port la ROM della libreria con l'hash richiesto."""
+        m = _port_or_404(slug)
+        links = _port_links()
+        e = next((x for x in links.get("catalog", {}).get("items") or [] if x["slug"] == slug), {})
+        sf = next((x for x in (e.get("launcher") or {}).get("setupFiles") or [] if x.get("id") == body.get("id")), None)
+        if not sf:
+            raise HTTPException(404, "File richiesto sconosciuto")
+        paths = [Path(f) for g in links["by_slug"].get(slug, []) for f in g.get("files") or []]
+        if not paths:
+            raise HTTPException(404, "Nella libreria non c'e' la ROM di questo gioco")
+        hit = PT.find_rom(sf, paths)
+        if not hit:
+            want = ", ".join(a.get("label") for a in sf.get("accepted") or [] if a.get("label")) or "quella indicata dal port"
+            raise HTTPException(400, f"Le ROM della libreria non sono la versione richiesta ({want}): l'hash non corrisponde")
+        try:
+            dst = PT.setup_rom(Path(m["folder"]), sf, *hit)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {"path": str(dst), "from": str(hit[0]) + (f" › {hit[1]}" if hit[1] else "")}
+
+    @app.get("/api/ports/{slug}/mods")
+    def api_port_mods(slug: str):
+        from ..cache import Cache
+        m = _port_or_404(slug)
+        c = Cache(cfg.cache)
+        try:
+            items = PT.mod_list(c, m.get("mods") or {})
+        finally:
+            c.close()
+        links = [{"provider": s.get("provider"), "url": s.get("sourceUrl")} for s in (m.get("mods") or {}).get("sources") or []]
+        return {"items": items, "links": links, "installed": m.get("installed_mods") or {}}
+
+    @app.post("/api/ports/{slug}/mods")
+    def api_port_mod_add(slug: str, body: dict = Body(...)):
+        from ..cache import Cache
+        m = _port_or_404(slug)
+        c = Cache(cfg.cache)
+        try:
+            mod = next((x for x in PT.mod_list(c, m.get("mods") or {}) if x["id"] == body.get("id")), None)
+        finally:
+            c.close()
+        if not mod:
+            raise HTTPException(404, "Mod non trovata")
+        try:
+            return PT.install_mod(cfg, slug, mod).get("installed_mods")
+        except (ValueError, OSError, zipfile.BadZipFile) as e:
+            raise HTTPException(400, f"Mod non installata: {e}")
+
+    @app.delete("/api/ports/{slug}/mods/{mod_id:path}")
+    def api_port_mod_del(slug: str, mod_id: str):
+        _port_or_404(slug)
+        return PT.remove_mod(cfg, slug, mod_id).get("installed_mods")
+
+    @app.post("/api/ports-settings")
+    def api_ports_settings(body: dict = Body(...)):
+        vals = {}
+        if "dir" in body:
+            d = (body.get("dir") or "").strip().strip('"')
+            if d and not Path(d).is_absolute():
+                raise HTTPException(400, "Indica un percorso completo (es. D:\\Ports)")
+            vals["ports_dir"] = d or None
+        if "token" in body:
+            vals["github_token"] = (body.get("token") or "").strip() or None
+        C.save_settings(cfg, app=vals)
+        if "ports_dir" in vals:
+            _refresh_ports_store()
+        return {"dir": str(PT.ports_dir(cfg)), "token": bool(PT._token(cfg))}
 
     # ------------------------------------------------------------ statistiche
     @app.get("/api/stats")

@@ -23,6 +23,7 @@ async function loadLibrary() {
   const lib = await api("/api/library");
   Object.assign(S, decodeLibrary(lib));
   S.skipDup = lib.skip_duplicates !== false;
+  S.userRev = lib.user_rev;
   S.catalogs = lib.catalogs || {};
   S.iconsCredit = lib.icons_credit || "";
   RECO.setPlatName(platName);
@@ -230,7 +231,9 @@ async function syncLibrary() {
   syncBusy = true;
   try {
     const st = await api("/api/status");
-    if (!st.building && st.built_at && st.built_at !== S.builtAt) await reload(true);
+    // libreria ricostruita altrove, oppure dati utente cambiati da un altro dispositivo (partita avviata dal telefono...)
+    if (!st.building && ((st.built_at && st.built_at !== S.builtAt) || (st.user_rev != null && st.user_rev !== S.userRev))) await reload(true);
+    if (["starting", "extracting", "running"].includes(st.running) && $("#running").hidden) pollRunning();
   } catch { /* server non raggiungibile: si riprova al prossimo controllo */ } finally { syncBusy = false; }
 }
 
@@ -429,7 +432,7 @@ function renderShopTools() {
 
 function viewTitle() {
   const v = S.view;
-  return { shots: "Schermate", free: "Giochi gratis", wishlist: "Lista desideri", stats: "Statistiche",
+  return { shots: "Schermate", free: "Giochi gratis", ports: "Port PC", wishlist: "Lista desideri", stats: "Statistiche",
     status: `${STATUS[v.id]?.icon || ""} ${STATUS[v.id]?.label || ""}`,
     smart: `${S.smart.find((x) => x.id === v.id)?.icon || "⚡"} ${S.smart.find((x) => x.id === v.id)?.name || "Collezione"}`,
     foryou: "Per te", multi: "Multigiocatore in locale", shop: "Store · da installare", all: "Tutti i giochi", favorites: "Preferiti", recent: "Giocati di recente", missing: "Senza dati",
@@ -471,15 +474,15 @@ function setView(v) {
   store.set("view", v);
   GS.emit("viewChanged", v);
   const pv = $("#plugin-view");
-  document.body.classList.toggle("foryou-mode", ["foryou", "free", "wishlist", "stats", "shots"].includes(v.type));
+  document.body.classList.toggle("foryou-mode", ["foryou", "free", "ports", "wishlist", "stats", "shots"].includes(v.type));
   if (v.type !== "collection") $("#coll-banner").hidden = true;
-  if (["free", "wishlist", "stats", "shots"].includes(v.type)) {
+  if (["free", "ports", "wishlist", "stats", "shots"].includes(v.type)) {
     $("#grid-scroll").hidden = true;
     pv.hidden = false;
     markActive();
     updateHeader();
     $("#view-count").textContent = "";
-    ({ free: renderFree, wishlist: renderWishlist, stats: renderStats, shots: renderShots })[v.type](pv);
+    ({ free: renderFree, ports: renderPorts, wishlist: renderWishlist, stats: renderStats, shots: renderShots })[v.type](pv);
     return;
   }
   if (v.type === "foryou") {
@@ -691,6 +694,8 @@ async function openDetail(id) {
       ${!pc || (d.installed && d.files.length) ? `<button class="btn" id="d-folder">📁 Cartella</button>` : ""}
       <button class="btn" id="d-hide">${u.hidden ? "Mostra" : "Nascondi"}</button>
       ${d.store === "manual" ? `<button class="btn" id="d-manual-del">🗑 Rimuovi</button>` : ""}
+      ${d.store === "ports" ? `<button class="btn" data-port="${esc(d.key.split(":").slice(1).join(":"))}">🕹 Gestisci port</button>` : ""}
+      ${(d.ports || []).map((p) => `<button class="btn" data-port="${esc(p.slug)}" title="Versione nativa per PC: ${esc(p.name)}">🕹 Disponibile come port PC</button>`).join("")}
       ${actions.map((a) => `<button class="btn" data-ga="${esc(a.id)}">${esc((a.icon ? a.icon + " " : "") + a.label)}</button>`).join("")}
     </div>
     ${d.missing && d.missing.length ? `<div class="d-missing"><span>Mancano: ${esc(d.missing.join(", "))}</span>`
@@ -705,6 +710,9 @@ async function openDetail(id) {
     ${ratingBlock(d)}
     ${online ? "" : `<div class="d-status">${Object.entries(STATUS).map(([k, s]) =>
       `<button class="btn st-btn${u.status === k ? " on st-" + k : ""}" data-status="${k}">${s.icon} ${s.label}</button>`).join("")}</div>`}
+    <div class="d-mine"><span class="muted small">Il mio voto</span><span class="d-stars">${[1, 2, 3, 4, 5].map((n) =>
+      `<button class="star${n <= (u.my_rating || 0) ? " on" : ""}" data-myrate="${n}" title="${n}/5">★</button>`).join("")}</span></div>
+    <textarea class="field d-note" id="d-note" rows="2" placeholder="Note personali (trucchi, a che punto sei, con chi giocarlo…)">${esc(u.note || "")}</textarea>
     ${d.hltb ? `<div class="d-hltb" title="Tempi medi dei giocatori su HowLongToBeat">
       ${[["Storia", d.hltb.main], ["Storia + extra", d.hltb.extra], ["Completista", d.hltb.complete]].filter(([, v]) => v)
         .map(([k, v]) => `<div><span>${k}</span><b>${fmtHours(v)}</b></div>`).join("")}
@@ -723,6 +731,7 @@ async function openDetail(id) {
       + (v.primary ? `<span class="muted">principale</span>` : `<button class="btn" data-pref="${v.id}">Usa questa</button>`)
       + (v.store && !v.installed ? `<button class="btn" data-install="${v.id}">⬇</button>`
         : `<button class="btn" data-play="${v.id}" ${d.emulator ? "" : "disabled"}>▶</button>`) + `</div>`).join("")}</div>` : ""}
+    ${pc && d.store !== "ports" ? "" : `<div id="d-saves"></div>`}
     <div id="d-ext"></div>
     <div class="d-h">File</div>
     <div class="files">${d.files.map(esc).join("<br>")}${d.crc ? `<br>CRC ${esc(d.crc)}` : ""}
@@ -732,7 +741,70 @@ async function openDetail(id) {
   $("#detail").scrollTop = 0;
   renderDetailSections(d);
   if (d.shots) loadDetailShots(d.id);
+  if (!pc || d.store === "ports") loadSaves(d);
+  if (d.platform === "switch") loadSwitchContents(d);
+  if (!pc) loadRA(d);
   GS.emit("gameOpened", d);
+}
+
+/* ---- RetroAchievements: obiettivi sbloccati (solo se l'account e' collegato e la console e' supportata) */
+async function loadRA(d, force = false) {
+  let r;
+  try { r = await api(`/api/game/${d.id}/ra${force ? "?force=1" : ""}`); } catch { return; }
+  if (S.detail !== d || !r.configured || !r.supported) return;
+  let box = $("#d-ra");
+  if (!box) { $("#d-ext").insertAdjacentHTML("beforebegin", `<div id="d-ra"></div>`); box = $("#d-ra"); }
+  if (r.error) { box.innerHTML = `<div class="d-h">🏆 RetroAchievements</div><p class="muted small">${esc(r.error)}</p>`; return; }
+  if (!r.found) { box.innerHTML = `<div class="d-h">🏆 RetroAchievements</div><p class="muted small">Gioco non trovato su RetroAchievements (o senza obiettivi).</p>`; return; }
+  const g = r.game, done = g.achievements.filter((a) => a.unlocked).length, tot = g.achievements.length || g.num_achievements;
+  const pct = tot ? Math.round(done / tot * 100) : 0;
+  box.innerHTML = `<div class="d-h">🏆 RetroAchievements <span class="muted small">${done}/${tot} · ${pct}%${g.highest_award_kind ? ` · ${esc(g.highest_award_kind)}` : ""}</span>
+      <a href="#" data-open="${esc(r.url)}" class="muted small">apri ↗</a> <a href="#" id="ra-refresh" class="muted small">↻</a></div>
+    <div class="ra-bar"><span style="width:${pct}%"></span></div>
+    <div class="ra-list">${g.achievements.map((a) => `<div class="ra-a${a.unlocked ? " on" : ""}" title="${esc(a.description)}${a.date_earned ? " · " + esc(a.date_earned) : ""}">
+      ${a.badge_url ? `<img loading="lazy" src="${remoteImg(a.unlocked ? a.badge_url : a.badge_locked_url)}" alt="" onerror="this.remove()">` : ""}
+      <span><b>${esc(a.title)}</b> <span class="muted small">${a.points} pt${a.unlocked_hardcore ? " · hardcore" : ""}</span><br><span class="muted small">${esc(a.description)}</span></span></div>`).join("")}</div>`;
+  box.onclick = (e) => {
+    if (e.target.id === "ra-refresh") { e.preventDefault(); loadRA(d, true); }
+    const o = e.target.closest("[data-open]");
+    if (o) { e.preventDefault(); api("/api/open", { body: { url: o.dataset.open } }); }
+  };
+}
+
+/* ---- Switch: aggiornamento installato e DLC presenti nella cartella del gioco */
+async function loadSwitchContents(d) {
+  let r;
+  try { r = await api(`/api/game/${d.id}/switch`); } catch { return; }
+  if (S.detail !== d || (!r.update && !r.dlc)) return;
+  const grid = $("#detail .d-grid");
+  if (grid) grid.insertAdjacentHTML("afterbegin", `<dt>Contenuti</dt><dd>${[r.update ? `<span class="tag">Aggiornamento ${esc(r.update)}</span>` : "",
+    r.dlc ? `<span class="tag">${r.dlc} DLC</span>` : ""].join(" ")}</dd>`);
+}
+
+/* ---- salvataggi del gioco: copie automatiche a fine partita, copia manuale e ripristino */
+async function loadSaves(d) {
+  let r;
+  try { r = await api(`/api/game/${d.id}/saves`); } catch { return; }
+  const box = $("#d-saves");
+  if (!box || S.detail !== d) return;
+  if (!r.supported && !r.items.length) return; // emulatore senza salvataggi per singolo gioco: niente sezione
+  box.innerHTML = `<div class="d-h">💾 Salvataggi <span class="muted small">${r.paths.length ? `${r.paths.length} trovati con ${esc(r.emulator)}` : "nessuno trovato"}</span></div>
+    <div class="saves">${r.paths.length ? `<button class="btn" id="sv-now">Copia adesso</button>` : ""}
+      ${r.items.map((b) => `<div class="sv-row"><span>${esc(fmtDate(b.time))}</span><span class="muted small">${esc(b.name.replace(/^\d{8}-\d{6}-?|\.zip$/g, "").replace(/-/g, " "))} · ${esc(fmtSize(b.size))}</span>`
+        + `<button class="btn sv-restore" data-name="${esc(b.name)}">Ripristina</button></div>`).join("")
+      || `<p class="muted small">Ancora nessuna copia: se ne crea una a ogni fine partita.</p>`}</div>`;
+  box.onclick = async (e) => {
+    if (e.target.id === "sv-now") {
+      try { await api(`/api/game/${d.id}/saves`, { body: {} }); toast("Copia dei salvataggi creata"); } catch (err) { return toast(err.message, true); }
+      return loadSaves(d);
+    }
+    const rb = e.target.closest(".sv-restore");
+    if (!rb) return;
+    if (!confirm(`Ripristinare i salvataggi del ${rb.closest(".sv-row").firstChild.textContent}?\nQuelli attuali vengono prima copiati, quindi si può annullare.`)) return;
+    try { const x = await api(`/api/game/${d.id}/saves/restore`, { body: { name: rb.dataset.name } }); toast(`Salvataggi ripristinati (${x.written} file)`); }
+    catch (err) { return toast(err.message, true); }
+    loadSaves(d);
+  };
 }
 
 function ratingBlock(d) {
@@ -1023,7 +1095,12 @@ async function renderFree(pv, force = false) {
   pv.innerHTML = `<div class="page"><p class="muted">Cerco i giochi gratis…</p></div>`;
   let d;
   try { d = await api(`/api/free${force ? "?force=1" : ""}`); } catch (e) { pv.innerHTML = `<div class="page"><p>${esc(e.message)}</p></div>`; return; }
-  $("#cnt-free").textContent = d.items.filter((i) => !i.upcoming).length || "";
+  if (d.first) d.items.forEach((i) => { i.new = false; }); // prima apertura: non sono tutti «nuovi»
+  freeBadge(d);
+  // prima quelli ancora da prendere, poi chi scade prima; senza scadenza in fondo
+  const endOf = (i) => (i.end ? Date.parse(i.end.replace(" ", "T")) || Infinity : Infinity);
+  d.items.sort((a, b) => (a.claimed || a.owned) - (b.claimed || b.owned) || endOf(a) - endOf(b));
+  api("/api/free/mark", { body: { seen: true } }).catch(() => {}); // da ora non sono piu' nuovi (l'etichetta resta in questa pagina)
   const draw = () => {
     const items = d.items.filter((i) => (!FREE_F.console || i.console === FREE_F.console) && (!FREE_F.kind || i.kind === FREE_F.kind));
     const kinds = [...new Set(d.items.map((i) => i.kind))];
@@ -1033,20 +1110,24 @@ async function renderFree(pv, force = false) {
       <div class="page-head"><div><h2>🎁 Giochi gratis adesso</h2>
         <p class="muted small">Da tenere, inclusi negli abbonamenti, weekend gratuiti e DLC gratis.
           Fonti: <a href="#" data-open="https://www.allkeyshop.com/blog/daily-game-deals/">allkeyshop.com</a> ·
-          <a href="#" data-open="https://www.gamerpower.com/">GamerPower</a>${d.time ? ` · aggiornato ${new Date(d.time * 1000).toLocaleString("it", { dateStyle: "short", timeStyle: "short" })}` : ""}</p>
+          <a href="#" data-open="https://www.gamerpower.com/">GamerPower</a> ·
+          <a href="#" data-open="https://store.steampowered.com/search/?specials=1&maxprice=free">Steam</a> ·
+          <a href="#" data-open="https://github.com/eikowagenknecht/lootscraper">LootScraper</a> (Prime)${d.time ? ` · aggiornato ${new Date(d.time * 1000).toLocaleString("it", { dateStyle: "short", timeStyle: "short" })}` : ""}</p>
         ${d.errors.length ? `<p class="warn small">⚠ ${d.errors.map((e) => esc(e.split(":")[0])).join(", ")} non ha risposto: ${d.stale ? "elenco dell'ultima volta" : "elenco parziale"}.</p>` : ""}</div>
         <button class="btn" id="free-refresh">↻ Aggiorna</button></div>
       <div class="pchips">${chip("console", "", "Tutte")}${cons.map((c) => chip("console", c, ({ pc: "🖥 PC", playstation: "PlayStation", xbox: "Xbox", switch: "Switch" })[c] || c)).join("")}
         <span class="sep"></span>${chip("kind", "", "Ogni offerta")}${kinds.map((k) => chip("kind", k, FREE_KIND[k] || k)).join("")}</div>
-      <div class="free-grid">${items.map((i, n) => `<div class="free-card${i.owned ? " owned" : ""}" data-n="${d.items.indexOf(i)}">
+      <div class="free-grid">${items.map((i, n) => `<div class="free-card${i.owned || i.claimed ? " owned" : ""}" data-n="${d.items.indexOf(i)}">
         <div class="fc-cover">${i.cover ? `<img loading="lazy" src="${remoteImg(i.cover)}" alt="" onerror="this.remove()">` : ""}
           <span class="fc-kind k-${fold(i.kind).replace(/[^a-z]+/g, "")}">${esc(FREE_KIND[i.kind] || i.kind)}</span>
           ${i.drm && i.drm !== "none" ? `<img class="fc-drm" src="/icons/store/${esc(({ amazon: "amazon", epic: "epic", steam: "steam", gog: "gog", battlenet: "battlenet" })[i.drm] || "manual")}" alt="" onerror="this.remove()">` : ""}
-          ${i.owned ? `<span class="fc-owned">✓ Già tuo</span>` : ""}</div>
+          ${i.owned ? `<span class="fc-owned">✓ Già tuo</span>` : i.claimed ? `<span class="fc-owned">✓ Riscattato</span>` : i.new ? `<span class="fc-new">Nuovo</span>` : ""}
+          ${i.wished && !i.owned ? `<span class="fc-wish" title="Nella tua lista desideri">♡</span>` : ""}</div>
         <div class="fc-info"><b title="${esc(i.full_title || i.title)}">${esc(i.title)}</b>
           <span class="muted small">${esc([({ pc: "PC", playstation: "PlayStation", xbox: "Xbox" })[i.console] || i.console,
             i.end ? "fino al " + new Date(i.end.replace(" ", "T")).toLocaleDateString("it") : "", i.worth ? "valore " + i.worth : ""].filter(Boolean).join(" · "))}</span>
-          <button class="btn primary fc-open" data-n="${d.items.indexOf(i)}">Apri ↗</button></div></div>`).join("")
+          <span class="fc-btns"><button class="btn primary fc-open" data-n="${d.items.indexOf(i)}">Apri ↗</button>
+          ${i.owned ? "" : `<button class="btn fc-claim" data-n="${d.items.indexOf(i)}" title="Segna come preso (o togli il segno)">${i.claimed ? "↺" : "✓ Preso"}</button>`}</span></div></div>`).join("")
         || `<p class="muted">Nessun gioco gratis con questi filtri.</p>`}</div></div>`;
   };
   draw();
@@ -1056,12 +1137,268 @@ async function renderFree(pv, force = false) {
     if (e.target.id === "free-refresh") { renderFree(pv, true); return; }
     const o = e.target.closest("[data-open]");
     if (o) { e.preventDefault(); api("/api/open", { body: { url: o.dataset.open } }); return; }
+    const cl = e.target.closest(".fc-claim");
+    if (cl) {
+      const it = d.items[+cl.dataset.n];
+      api("/api/free/mark", { body: { claim: it.id, value: !it.claimed } }).then(() => { it.claimed = !it.claimed; it.new = false; freeBadge(d); draw(); })
+        .catch((err) => toast(err.message, true));
+      return;
+    }
     const c = e.target.closest(".fc-open, .free-card");
     if (c) api("/api/open", { body: { url: d.items[+c.dataset.n].url } }).then(() => toast("Apro la pagina nel browser"));
   };
 }
+/** Numero nella barra laterale: le offerte nuove (🆕), altrimenti quante sono ancora da prendere. */
+function freeBadge(d) {
+  const todo = d.items.filter((i) => !i.upcoming && !i.owned && !i.claimed).length;
+  $("#cnt-free").textContent = d.new ? `🆕 ${d.new}` : todo || "";
+}
 const FREE_KIND = { "Free to keep": "Da tenere", "Free with Prime": "Con Prime", "Free with PS+": "Con PS Plus", Gamepass: "Game Pass",
   "Free DLC": "DLC gratis", "Free weekend": "Weekend gratis", "Free to play": "Free to play", "In arrivo": "In arrivo" };
+
+/* ---- pagina: port PC (ricompilazioni e decomp dal catalogo di Quiver Launcher) */
+const PORTS_F = { console: store.get("portsConsole", ""), mine: "", q: "", open: null };
+async function renderPorts(pv, force = false) {
+  if (PORTS_F.open) return renderPort(pv, PORTS_F.open);
+  pv.innerHTML = `<div class="page"><p class="muted">Leggo il catalogo dei port…</p></div>`;
+  let d;
+  try { d = await api(`/api/ports${force ? "?force=1" : ""}`); } catch (e) { pv.innerHTML = `<div class="page"><p>${esc(e.message)}</p></div>`; return; }
+  S.ports = d;
+  portsBadge(d);
+  const rank = (i) => (i.installed?.update ? 0 : i.installed ? 1 : i.roms.length ? 2 : 3);
+  d.items.sort((a, b) => rank(a) - rank(b) || b.recommended - a.recommended || collator.compare(a.name, b.name));
+  const cons = Object.entries(d.consoles).map(([id, name]) => [id, name, d.items.filter((i) => i.consoles.includes(id)).length])
+    .sort((a, b) => b[2] - a[2]);
+  const chip = (k, v, l) => `<button class="pchip${PORTS_F[k] === v ? " on" : ""}" data-f="${k}" data-v="${esc(v)}">${esc(l)}</button>`;
+  pv.innerHTML = `<div class="page">
+    <div class="page-head"><div><h2>🕹 Port PC</h2>
+      <p class="muted small">Giochi console ricompilati o ricostruiti per girare su Windows senza emulatore. Quasi tutti chiedono
+        la tua ROM originale: quelli segnati «🎮 ROM» li hai già nella libreria. Catalogo:
+        <a href="#" data-open="https://github.com/tgeorgiadis/quiver-launcher">Quiver Launcher</a>${d.time ? ` · aggiornato ${new Date(d.time * 1000).toLocaleString("it", { dateStyle: "short", timeStyle: "short" })}` : ""}</p>
+      ${d.error ? `<p class="warn small">⚠ Il catalogo non ha risposto (${esc(d.error)}): ${d.stale ? "elenco dell'ultima volta" : "nessun elenco salvato"}.</p>` : ""}</div>
+      <span class="fc-btns pt-tools"><button class="btn" id="pt-add">＋ Aggiungi a mano</button><button class="btn" id="pt-set">⚙</button>
+        <button class="btn" id="pt-refresh">↻ Aggiorna</button></span></div>
+    <div id="pt-form"></div>
+    <div class="pchips"><input id="pt-q" class="field" placeholder="Cerca…" value="${esc(PORTS_F.q)}" autocomplete="off">
+      ${chip("mine", "", "Tutti")}${chip("mine", "rom", "🎮 Ho la ROM")}${chip("mine", "inst", "✓ Installati")}${chip("mine", "upd", "⬆ Da aggiornare")}
+      <span class="sep"></span>${chip("console", "", "Ogni console")}${cons.map(([id, name, n]) => chip("console", id, `${name} (${n})`)).join("")}</div>
+    <div class="free-grid" id="pt-grid"></div></div>`;
+  const draw = () => {
+    const q = fold(PORTS_F.q);
+    const items = d.items.filter((i) => (!PORTS_F.console || i.consoles.includes(PORTS_F.console))
+      && (!PORTS_F.mine || (PORTS_F.mine === "rom" ? i.roms.length : PORTS_F.mine === "inst" ? i.installed : i.installed?.update))
+      && (!q || fold(`${i.name} ${i.project} ${i.developer} ${i.tags.join(" ")}`).includes(q)));
+    $("#pt-grid", pv).innerHTML = items.map((i) => `<div class="free-card" data-slug="${esc(i.slug)}">
+      <div class="fc-cover">${i.cover ? `<img loading="lazy" src="${remoteImg(gridThumb(i.cover))}" data-full="${esc(remoteImg(i.cover))}" alt=""
+          onerror="if (this.dataset.full && this.src.indexOf('thumb') > 0) { this.src = this.dataset.full; this.dataset.full = '' } else this.remove()">` : ""}
+        <span class="fc-kind">${esc(i.consoles.map((c) => d.consoles[c] || c).join(", "))}</span>
+        ${i.installed?.update ? `<span class="fc-new">⬆ ${esc(i.installed.latest)}</span>` : i.installed ? `<span class="fc-owned">✓ Installato</span>` : ""}
+        ${i.roms.length ? `<span class="fc-wish pt-rom" title="Hai la ROM: ${esc(i.roms.map((r) => r.title).join(", "))}">🎮 ROM</span>` : ""}</div>
+      <div class="fc-info"><b title="${esc(i.name)}">${esc(i.name)}</b>
+        <span class="muted small">${esc([i.project !== i.name ? i.project : "", i.developer, i.installed?.version || i.version].filter(Boolean).join(" · "))}</span></div></div>`).join("")
+      || `<p class="muted">Nessun port con questi filtri.</p>`;
+  };
+  draw();
+  $("#pt-q", pv).oninput = (e) => { PORTS_F.q = e.target.value; draw(); };
+  pv.onclick = async (e) => {
+    const f = e.target.closest("[data-f]");
+    if (f) {
+      PORTS_F[f.dataset.f] = f.dataset.v;
+      if (f.dataset.f === "console") store.set("portsConsole", f.dataset.v);
+      pv.querySelectorAll(`[data-f="${f.dataset.f}"]`).forEach((b) => b.classList.toggle("on", b === f));
+      return draw();
+    }
+    const o = e.target.closest("[data-open]");
+    if (o) { e.preventDefault(); api("/api/open", { body: { url: o.dataset.open } }); return; }
+    if (e.target.id === "pt-refresh") return renderPorts(pv, true);
+    if (e.target.id === "pt-set") {
+      $("#pt-form", pv).innerHTML = `<div class="d-note"><p class="small">Cartella dei port (vuota = predefinita):</p>
+        <input class="field" id="pt-dir" value="${esc(d.dir)}" style="width:100%">
+        <p class="small">Token GitHub (facoltativo: senza, GitHub permette 60 richieste all'ora) ${d.token ? "· <b>impostato</b>" : ""}</p>
+        <input class="field" id="pt-tok" type="password" placeholder="${d.token ? "lascia vuoto per non cambiarlo" : "ghp_…"}" style="width:100%">
+        <p><button class="btn primary" id="pt-set-save">Salva</button></p></div>`;
+      return;
+    }
+    if (e.target.id === "pt-set-save") {
+      const body = { dir: $("#pt-dir", pv).value };
+      if ($("#pt-tok", pv).value) body.token = $("#pt-tok", pv).value;
+      try { await api("/api/ports-settings", { body }); } catch (err) { return toast(err.message, true); }
+      toast("Impostazioni dei port salvate");
+      return renderPorts(pv);
+    }
+    if (e.target.id === "pt-add") {
+      $("#pt-form", pv).innerHTML = `<div class="d-note"><p class="small">Un port che non è nel catalogo: repository GitHub
+        (<code>utente/progetto</code>, si installa l'ultima release) <b>oppure</b> una cartella già scaricata con il suo .exe.</p>
+        <input class="field" id="pt-repo" placeholder="utente/progetto" style="width:100%">
+        <input class="field" id="pt-folder" placeholder="oppure: C:\\Giochi\\MioPort" style="width:100%">
+        <input class="field" id="pt-name" placeholder="Nome (facoltativo)">
+        <select class="field" id="pt-con"><option value="">Console originale…</option>${cons.map(([id, name]) => `<option value="${esc(id)}">${esc(name)}</option>`).join("")}</select>
+        <p><button class="btn primary" id="pt-add-go">Aggiungi</button></p></div>`;
+      return;
+    }
+    if (e.target.id === "pt-add-go") {
+      const body = { repo: $("#pt-repo", pv).value, folder: $("#pt-folder", pv).value, name: $("#pt-name", pv).value, console: $("#pt-con", pv).value };
+      let r;
+      try { r = await api("/api/ports/manual", { body }); } catch (err) { return toast(err.message, true); }
+      if (r.status === "running") { PORTS_F.open = null; return followPortJob(pv); }
+      toast(`${r.name} aggiunto`);
+      pollStores(true);
+      return renderPorts(pv);
+    }
+    const c = e.target.closest(".free-card");
+    if (c) { PORTS_F.open = c.dataset.slug; renderPort(pv, c.dataset.slug); }
+  };
+}
+
+/** Copertine di SteamGridDB: la miniatura (~50 KB) invece del PNG originale (~700 KB). */
+const gridThumb = (u) => u.replace(/^(https:\/\/cdn2\.steamgriddb\.com)\/grid\/(\w+)\.\w+$/, "$1/thumb/$2.jpg");
+
+function portsBadge(d) {
+  const n = d.items.filter((i) => i.installed?.update).length;
+  $("#cnt-ports").textContent = n ? `⬆ ${n}` : "";
+}
+
+async function renderPort(pv, slug) {
+  if (!S.ports) { try { S.ports = await api("/api/ports"); } catch (e) { return toast(e.message, true); } }
+  const i = S.ports.items.find((x) => x.slug === slug);
+  if (!i) { PORTS_F.open = null; return renderPorts(pv); }
+  const inst = i.installed;
+  let m = null;
+  if (inst) { try { m = await api(`/api/ports/${encodeURIComponent(slug)}`); } catch { /* cartella sparita: si vede come non installato */ } }
+  const cname = (c) => S.ports.consoles[c] || c;
+  const romFile = (r) => r.file.split(/[\\/]/).pop();
+  pv.innerHTML = `<div class="page port-page">
+    <p><button class="btn" id="pt-back">← Tutti i port</button></p>
+    ${i.hero ? `<div class="pt-hero"><img src="${remoteImg(i.hero)}" alt="" onerror="this.parentNode.remove()"></div>` : ""}
+    <h2>${esc(i.name)}</h2>
+    <p class="muted">${esc([i.project !== i.name ? i.project : "", i.consoles.map(cname).join(", "), i.developer, inst ? `installato ${inst.version}` : i.version ? `ultima versione ${i.version}` : ""].filter(Boolean).join(" · "))}</p>
+    ${i.broken ? `<p class="warn small">⚠ ${i.broken} giocator${i.broken === 1 ? "e lo segnala" : "i lo segnalano"} come non funzionante.</p>` : ""}
+    <p>${esc(i.description)}</p>
+    <div class="d-actions">
+      ${!inst ? `<button class="btn primary" id="pt-install">⬇ Installa</button>`
+        : `${inst.game_id ? `<button class="btn primary" id="pt-play">▶ Gioca</button><button class="btn" id="pt-lib">Scheda nella libreria</button>
+             <button class="btn" id="pt-folder">📁 Cartella</button>` : ""}
+           ${inst.update ? `<button class="btn primary" id="pt-update">⬆ Aggiorna a ${esc(inst.latest)}</button>
+             <button class="btn" id="pt-skip" title="Non segnalare più questa versione">Salta questa versione</button>` : ""}
+           ${inst.repository ? `<button class="btn" data-open="https://github.com/${esc(inst.repository)}">Progetto ↗</button>` : ""}
+           <button class="btn" id="pt-remove">🗑 Disinstalla</button>`}
+    </div>
+    <div id="pt-job"></div>
+    ${m && m.candidates.length > 1 ? `<div class="d-h">Eseguibile da avviare</div>
+      <select class="field" id="pt-exe">${m.candidates.map((x) => `<option${x === m.exe ? " selected" : ""}>${esc(x)}</option>`).join("")}</select>` : ""}
+    <div class="d-h">ROM originale</div>
+    ${i.roms.length ? i.roms.map((r) => `<div class="sv-row"><span>🎮 ${esc(r.title)}</span><span class="muted small" title="${esc(r.file)}">${esc(romFile(r))}</span>
+        <button class="btn" data-game="${r.id}">Apri</button></div>`).join("")
+      : `<p class="muted small">Non hai la ROM di questo gioco nella libreria. Il port ha bisogno della tua copia originale.</p>`}
+    ${m && m.setup.length ? m.setup.map((s) => `<div class="sv-row"><span>${esc(s.label)} <span class="muted small">→ ${esc(s.destination)}${s.accepted.filter(Boolean).length ? ` (${esc(s.accepted.filter(Boolean).join(", "))})` : ""}</span></span>
+        ${s.present ? `<span class="muted small">✓ presente</span>` : ""}
+        ${i.roms.length ? `<button class="btn" data-setup="${esc(s.id)}">${s.present ? "Ricopia" : "Copia dalla libreria"}</button>` : ""}</div>`).join("")
+      : inst && i.roms.length ? `<p class="muted small">Il port chiede la ROM al primo avvio: scegli il file «${esc(romFile(i.roms[0]))}»
+        (<a href="#" data-game-folder="${i.roms[0].id}">mostra nella cartella</a>).</p>` : ""}
+    ${m ? `<p class="muted small">${m.user_files} file tuoi (salvataggi, configurazione, mod) nella cartella: restano negli aggiornamenti
+      e si copiano con i salvataggi dalla scheda del gioco.</p>` : ""}
+    ${m && m.mods ? `<div class="d-h">Mod</div><div id="pt-mods"><button class="btn" id="pt-mods-load">Mostra le mod</button></div>` : ""}
+  </div>`;
+  pv.onclick = async (e) => {
+    const t = e.target, enc = encodeURIComponent(slug);
+    const o = t.closest("[data-open]");
+    if (o) { e.preventDefault(); api("/api/open", { body: { url: o.dataset.open } }); return; }
+    if (t.id === "pt-back") { PORTS_F.open = null; return renderPorts(pv); }
+    if (t.id === "pt-install" || t.id === "pt-update") {
+      try { await api(t.id === "pt-install" ? "/api/ports/install" : `/api/ports/${enc}/update`, { body: { slug } }); } catch (err) { return toast(err.message, true); }
+      return followPortJob(pv);
+    }
+    if (t.id === "pt-play") return play(inst.game_id);
+    if (t.id === "pt-lib") return openDetail(inst.game_id);
+    if (t.id === "pt-folder") return api(`/api/game/${inst.game_id}/open-folder`, { body: {} }).catch((err) => toast(err.message, true));
+    if (t.id === "pt-skip") {
+      await api(`/api/ports/${enc}/skip`, { body: { version: inst.latest } }).catch((err) => toast(err.message, true));
+      S.ports = null;
+      return renderPort(pv, slug);
+    }
+    if (t.id === "pt-remove") {
+      if (!confirm(`Disinstallare «${i.name}»? La cartella va nel Cestino (salvataggi compresi: copiali prima se ti servono).`)) return;
+      try { await api(`/api/ports/${enc}/uninstall`, { body: {} }); } catch (err) { return toast(err.message, true); }
+      toast(`${i.name} disinstallato`);
+      pollStores(true);
+      S.ports = null;
+      return renderPort(pv, slug);
+    }
+    if (t.dataset.game) return openDetail(+t.dataset.game);
+    if (t.dataset.gameFolder) { e.preventDefault(); return api(`/api/game/${t.dataset.gameFolder}/open-folder`, { body: {} }).catch((err) => toast(err.message, true)); }
+    if (t.dataset.setup) {
+      t.disabled = true;
+      try { const r = await api(`/api/ports/${enc}/rom`, { body: { id: t.dataset.setup } }); toast(`ROM copiata: ${r.path}`); }
+      catch (err) { t.disabled = false; return toast(err.message, true); }
+      return renderPort(pv, slug);
+    }
+    if (t.id === "pt-mods-load" || t.dataset.mod || t.dataset.modDel) return portMods(pv, slug, t);
+  };
+  pv.onchange = async (e) => {
+    if (e.target.id !== "pt-exe") return;
+    try { await api(`/api/ports/${encodeURIComponent(slug)}/exe`, { body: { exe: e.target.value } }); } catch (err) { return toast(err.message, true); }
+    toast("Eseguibile salvato");
+    pollStores(true);
+  };
+  const j = await api("/api/ports/job").catch(() => null);
+  if (j && j.status === "running" && j.slug === slug) followPortJob(pv);
+}
+
+async function portMods(pv, slug, t) {
+  const enc = encodeURIComponent(slug), box = $("#pt-mods", pv);
+  try {
+    if (t.dataset.mod) { t.disabled = true; await api(`/api/ports/${enc}/mods`, { body: { id: t.dataset.mod } }); toast("Mod installata"); }
+    if (t.dataset.modDel) { await api(`/api/ports/${enc}/mods/${encodeURIComponent(t.dataset.modDel)}`, { method: "DELETE" }); toast("Mod rimossa"); }
+  } catch (err) { t.disabled = false; return toast(err.message, true); }
+  box.innerHTML = `<p class="muted">Carico le mod…</p>`;
+  let r;
+  try { r = await api(`/api/ports/${enc}/mods`); } catch (err) { box.innerHTML = `<p class="muted">${esc(err.message)}</p>`; return; }
+  box.innerHTML = `${r.links.map((l) => `<a href="#" class="small" data-open="${esc(l.url)}">${esc(l.provider)} ↗</a>`).join(" · ")}
+    ${r.items.filter((x) => !x.nsfw).slice(0, 60).map((x) => `<div class="sv-row"><span><b>${esc(x.name)}</b> <span class="muted small">${esc(x.owner)} · ${esc(x.version)}</span><br>
+      <span class="muted small">${esc(x.description)}</span></span>
+      ${r.installed[x.id] ? `<button class="btn" data-mod-del="${esc(x.id)}">Rimuovi</button>` : `<button class="btn" data-mod="${esc(x.id)}">Installa</button>`}</div>`).join("")
+      || `<p class="muted small">Nessuna mod scaricabile da qui: usa i link sopra.</p>`}`;
+}
+
+/** Avanzamento di installazione/aggiornamento; alla fine la libreria si aggiorna con il port. */
+async function followPortJob(pv) {
+  let j;
+  do {
+    try { j = await api("/api/ports/job"); } catch { return; }
+    const box = $("#pt-job", pv);
+    if (box) {
+      const pct = j.total ? Math.round((j.done / j.total) * 100) : 0;
+      box.innerHTML = `<p class="small">${j.status === "running" ? `⏳ ${j.total ? `${pct}% · ${fmtSize(j.done)} di ${fmtSize(j.total)}` : j.done ? fmtSize(j.done) : ""}` : ""}</p>
+        <pre class="log">${esc(j.log.slice(-8).join("\n"))}</pre>`;
+    }
+    if (j.status === "running") await new Promise((r) => setTimeout(r, 1000));
+  } while (j.status === "running");
+  if (j.status === "error") return toast(j.log[j.log.length - 1] || "Installazione non riuscita", true);
+  toast("Port installato: lo aggiungo alla libreria");
+  pollStores(true);
+  S.ports = null;
+  if (PORTS_F.open && S.view.type === "ports") renderPort(pv, PORTS_F.open);
+  else if (S.view.type === "ports") renderPorts(pv);
+}
+
+/** Prezzo dei negozi di key, con lo sconto rispetto al prezzo pieno ufficiale (es. 60 € su Steam -> 9,50 € = -84%). */
+function keyPrice(w, money) {
+  const full = w.regular || w.price;
+  const cut = full ? Math.round((1 - w.key_price / full) * 100) : 0;
+  return `<span class="wl-key" title="Negozi di key (GG.deals)${w.key_low != null ? ` · minimo storico ${money(w.key_low, w.currency)}` : ""}">🔑 `
+    + `${cut > 0 ? `<span class="cut">-${cut}%</span>` : ""}<b>${money(w.key_price, w.currency)}</b></span>`;
+}
+
+/** Grafichino dello storico (un punto al giorno: il prezzo piu' basso tra store e negozi di key). */
+function priceSpark(hist, money, cur) {
+  const pts = (hist || []).map(([d, p, k]) => [d, Math.min(...[p, k].filter((v) => v != null))]).filter(([, v]) => isFinite(v));
+  if (pts.length < 2) return "";
+  const vs = pts.map(([, v]) => v), lo = Math.min(...vs), hi = Math.max(...vs), W = 90, H = 22;
+  const xy = pts.map(([, v], i) => `${(i / (pts.length - 1) * W).toFixed(1)},${(hi === lo ? H / 2 : H - 2 - (v - lo) / (hi - lo) * (H - 4)).toFixed(1)}`);
+  return `<span class="wl-spark" title="Da ${pts[0][0]}: minimo ${money(lo, cur)}, massimo ${money(hi, cur)}">`
+    + `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><polyline points="${xy.join(" ")}" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`
+    + ` min ${money(lo, cur)}</span>`;
+}
 
 /* ---- pagina: lista dei desideri */
 async function renderWishlist(pv) {
@@ -1073,12 +1410,15 @@ async function renderWishlist(pv) {
   pv.innerHTML = `<div class="page">
     <div class="page-head"><div><h2>♡ Lista desideri</h2>
       <p class="muted small">Prezzi degli store ufficiali${s.has_key ? " (IsThereAnyDeal: Steam, GOG, Epic, Humble e altri)" : " (Steam; aggiungi la chiave IsThereAnyDeal per confrontare tutti gli store)"}.
-        Avviso quando lo sconto supera il ${s.threshold}%, quando il prezzo scende sotto quello che indichi o tocca il minimo storico.</p></div>
+        ${s.has_gg ? "Negozi di key: GG.deals (prezzo più basso, giochi PC con codice Steam)." : "Aggiungi la chiave GG.deals (⚙) per vedere anche il prezzo più basso dei negozi di key."}
+        Avviso quando lo sconto supera il ${s.threshold}%, quando il prezzo (anche nei negozi di key) scende sotto quello che indichi o tocca il minimo storico.</p></div>
       <div class="row"><button class="btn" id="wl-import">⬇ Importa da Steam</button><button class="btn" id="wl-check">↻ Controlla prezzi</button>
         <button class="btn" id="wl-settings">⚙</button></div></div>
     <div class="wl-settings" hidden>
       <label>Chiave IsThereAnyDeal <input class="field" id="wl-key" placeholder="${s.has_key ? "già inserita (lascia vuoto per non cambiarla)" : "facoltativa"}">
         <a href="#" data-open="https://isthereanydeal.com/apps/my/">ottieni la chiave gratuita</a></label>
+      <label>Chiave GG.deals <input class="field" id="wl-gg" placeholder="${s.has_gg ? "già inserita (lascia vuoto per non cambiarla)" : "facoltativa: prezzi dei negozi di key"}">
+        <a href="#" data-open="https://gg.deals/api/">ottieni la chiave gratuita</a></label>
       <label>Paese <input class="field" id="wl-country" value="${esc(s.country)}" maxlength="2" style="width:60px"></label>
       <label>Avvisa da uno sconto del <input class="field" id="wl-thr" type="number" min="5" max="95" value="${s.threshold}" style="width:70px">%</label>
       <button class="btn primary" id="wl-save">Salva</button></div>
@@ -1088,11 +1428,13 @@ async function renderWishlist(pv) {
       <div class="wl-img">${steamImg(w) ? `<img src="${steamImg(w)}" alt="" onerror="this.remove()">` : ""}</div>
       <div class="wl-t"><b>${esc(w.title)}</b>${w.owned ? ` <span class="tag">già in libreria</span>` : ""}
         <span class="muted small">${w.checked ? `${esc(w.shop || "")} · controllato ${new Date(w.checked * 1000).toLocaleDateString("it")}` : "prezzo non ancora controllato"}
-          ${w.low != null ? ` · minimo storico ${money(w.low, w.currency)}` : ""}</span></div>
-      <div class="wl-price">${w.cut ? `<span class="cut">-${w.cut}%</span><s class="muted">${money(w.regular, w.currency)}</s>` : ""}<b>${money(w.price, w.currency)}</b></div>
+          ${w.low != null ? ` · minimo storico ${money(w.low, w.currency)}` : ""}</span>${priceSpark(w.history, money, w.currency)}</div>
+      <div class="wl-price">${w.cut ? `<span class="cut">-${w.cut}%</span><s class="muted">${money(w.regular, w.currency)}</s>` : ""}<b>${money(w.price, w.currency)}</b>
+        ${w.key_price != null ? keyPrice(w, money) : ""}</div>
       <div class="wl-alert">${w.alert ? `🔔 ${esc(w.alert)}` : ""}</div>
       <label class="wl-target" title="Avvisami quando costa meno di…">≤ <input class="field" type="number" step="0.5" min="0" data-target="${esc(w.id)}" value="${w.target ?? ""}" placeholder="€"></label>
       ${w.url ? `<button class="btn" data-open="${esc(w.url)}">Apri ↗</button>` : ""}
+      ${w.key_url ? `<button class="btn" data-open="${esc(w.key_url)}" title="Confronto dei negozi di key su GG.deals">🔑 ↗</button>` : ""}
       <button class="icon-btn" data-del="${esc(w.id)}" title="Togli dalla lista">✕</button></div>`).join("")
       || `<p class="muted">La lista è vuota: cerca un gioco qui sopra o importa la tua lista desideri di Steam.</p>`}</div></div>`;
   if (d.unseen) { api("/api/wishlist/seen", { body: {} }).then(() => pollWishBadge()); }
@@ -1126,6 +1468,7 @@ async function renderWishlist(pv) {
     else if (t.id === "wl-save") {
       const body = { country: $("#wl-country").value, threshold: $("#wl-thr").value };
       if ($("#wl-key").value.trim()) body.itad_key = $("#wl-key").value.trim();
+      if ($("#wl-gg").value.trim()) body.gg_key = $("#wl-gg").value.trim();
       try { await api("/api/wishlist/settings", { body }); } catch (err) { return toast(err.message, true); }
       toast("Impostazioni salvate"); renderWishlist(pv);
     } else if (t.id === "wl-check") {
@@ -1377,15 +1720,44 @@ async function loadRemote() {
     <h4>Controller dal telefono</h4>
     <p class="small">${ph.vigem ? "✅ Controller virtuale Xbox pronto (ViGEmBus)" : `❌ ${esc(ph.vigem_error)} — <a href="#" data-open="https://github.com/nefarius/ViGEmBus/releases">scarica ViGEmBus</a>`}<br>
       ${ph.dsu ? "✅ Giroscopio per gli emulatori: server DSU attivo su 127.0.0.1:26760" : `❌ ${esc(ph.dsu_error || "Server DSU non attivo")}`}</p>
-    ${ph.controllers.length ? `<p class="small">Collegati ora: ${ph.controllers.map((c) => `🎮 Giocatore ${c.slot + 1} — ${esc(c.name)}${c.motion ? " · 🌀 movimento" : ""}`).join(" · ")}</p>` : ""}
+    ${ph.controllers.length ? `<div class="lobby small">${[0, 1, 2, 3].map((slot) => {
+      const c = ph.controllers.find((x) => x.slot === slot);
+      return `<div class="lb-seat" style="--pc:${c ? c.color : "#555"}"><b>Giocatore ${c ? c.player : slot + 1}</b>
+        <span>${c ? `📱 ${esc(c.name)}${c.motion ? " · 🌀" : ""}` : `<i class="muted">libero</i>`}</span>
+        ${c ? `<select data-swap="${slot}"><option value="">Sposta al posto…</option>${[0, 1, 2, 3].filter((s) => s !== slot)
+          .map((s) => `<option value="${s}">${s + 1}</option>`).join("")}</select>` : ""}</div>`;
+    }).join("")}</div>` : ""}
+    <h4>Controller speciali</h4>
+    <div class="row wrap small">
+      <label class="chk"><input type="checkbox" id="ph-mouse" ${ph.mouse ? "checked" : ""}> Il telefono può muovere il mouse del PC
+        <span class="muted">(pistola ottica / touchpad: dà il controllo del mouse a chi ha un telefono abbinato)</span></label>
+    </div>
+    <div class="row wrap small">
+      <label>Microfono del telefono (SingStar) → uscita del PC
+        <select class="field" id="ph-mic"><option value="">Automatica (cavo virtuale, es. VB-Cable)</option>
+          ${ph.mic_devices.map((d) => `<option ${d === ph.mic_device ? "selected" : ""}>${esc(d)}</option>`).join("")}</select></label>
+      ${ph.mic_devices.some((d) => /CABLE|VB-Audio/i.test(d)) ? "" : `<span class="muted">Nessun cavo virtuale: <a href="#" data-open="https://vb-audio.com/Cable/">installa VB-Cable</a> (gratis), poi in PCSX2 scegli «CABLE Output» come microfono.</span>`}
+    </div>
+    <div class="row wrap small emusetup">
+      <label>Telefoni <input class="field" id="es-n" type="number" min="1" max="4" value="${Math.max(1, ph.controllers.length)}" style="width:60px"></label>
+      <button class="btn" data-es="pcsx2_buzz">🔴 Configura PCSX2 per Buzz!</button>
+      <button class="btn" data-es="pcsx2_guitar">🎸 Configura PCSX2 per la chitarra</button>
+      <button class="btn" data-es="dolphin_wii">🎮 Configura Dolphin per il Wii Remote</button>
+    </div>
+    <p class="muted small">Scrive le impostazioni dell'emulatore (chiudilo prima) e ne fa una copia accanto all'originale.
+      Buzz!: porta USB 1 = Buzz Controller, telefono N = giocatore N. Chitarra: le porte 1..N diventano chitarre.
+      Dolphin: Wii Remote 1..N = telefono 1..N, con Nunchuk, tasti e movimento dal server DSU.
+      <a href="#" data-esundo="pcsx2_buzz">Annulla PCSX2</a> · <a href="#" data-esundo="dolphin_wii">Annulla Dolphin</a></p>
     <details class="small"><summary>Come attivare il giroscopio negli emulatori</summary>
       <ul>${EMU_DSU.map(([n, t]) => `<li><b>${n}</b>: ${t}</li>`).join("")}</ul>
       <p class="muted">Per i giochi senza giroscopio, nell'app del telefono scegli 🎯 <b>Mira</b>: inclinando il telefono si muove la levetta destra.</p>
     </details>`;
   const s = sun;
   $("#sun-box").innerHTML = !s.installed ? `<p>Sunshine non è installato. <a href="#" data-open="https://github.com/LizardByte/Sunshine/releases">Scaricalo</a>, poi riapri questa scheda.</p>`
-    : `<p class="small">${s.service === "running" ? "✅ Sunshine è in esecuzione" : s.service === "stopped"
-      ? `⏸ Sunshine è installato ma fermo. <button class="btn" id="sun-start">▶ Avvia Sunshine</button> <span class="muted">(chiede i permessi di amministratore)</span>` : "Sunshine installato"}
+    : `<p class="small">${s.service === "running"
+      ? `✅ Sunshine è in esecuzione${s.start_mode && s.start_mode !== "auto" ? ` · ⚠ ma non parte con Windows: dopo un riavvio Moonlight non troverà il PC. <button class="btn" id="sun-start">Avvia sempre con Windows</button>` : ""}`
+      : s.service === "stopped"
+      ? `⏸ Sunshine è installato ma fermo: Moonlight non può trovare il PC. <button class="btn primary" id="sun-start">▶ Avvia Sunshine (anche con Windows)</button> <span class="muted">(chiede una volta i permessi di amministratore)</span>` : "Sunshine installato"}
       · <a href="#" data-open="${esc(s.web)}">interfaccia web di Sunshine</a> (per abbinare Moonlight con il PIN)</p>
     <div class="row wrap">
       <label>Utente di Sunshine <input class="field" id="sun-user" value="${esc(s.user)}" autocomplete="off"></label>
@@ -1394,11 +1766,17 @@ async function loadRemote() {
       <button class="btn primary" id="sun-pub">📡 Pubblica in Moonlight</button>
     </div>
     ${s.error ? `<p class="status-bad small">${esc(s.error)}</p>` : ""}
-    <p class="muted small">Verranno pubblicati: <b>GameScraper Big Picture</b> (da lì scegli qualsiasi gioco col controller)
+    <p class="muted small">Verranno pubblicati: <b>GameScraper Big Picture</b> (da lì scegli qualsiasi gioco col controller),
+      <b>▶ Gioco in corso</b> (lo schermo del PC: per entrare nel gioco avviato dall'app del telefono con «Gioca su questo telefono»)
       ${s.preview.length ? ` e ${s.preview.length} giochi (in corso, preferiti, recenti): ${esc(s.preview.slice(0, 8).join(", "))}${s.preview.length > 8 ? "…" : ""}` : ""}.
       Le altre app di Sunshine non vengono toccate.</p>
     ${s.last ? `<p class="small">Ultima pubblicazione: ${new Date(s.last.time * 1000).toLocaleString("it", { dateStyle: "short", timeStyle: "short" })} · ${s.last.published} app</p>` : ""}
     ${s.apps ? `<p class="small muted">App in Moonlight ora: ${esc(s.apps.map((a) => a.name).join(" · "))}</p>` : ""}`;
+  api("/api/stream/optimize").then((o) => {
+    const ico = { ok: "✓", warn: "⚠", info: "ℹ" };
+    $("#stream-opt").innerHTML = `<div class="health">` + o.checks.map((x) => `<div class="hl-row hl-${x.level === "info" ? "ok" : x.level}">`
+      + `<span class="hl-ico">${ico[x.level] || "•"}</span><div class="hl-txt"><b>${esc(x.title)}</b>${x.detail ? `<div class="muted small">${esc(x.detail)}</div>` : ""}</div></div>`).join("") + `</div>`;
+  }).catch(() => {});
   if (ph.enabled && SET.tab === "remote" && $("#settings").open) phoneTimer = setTimeout(loadRemote, ph.running ? 5000 : 1000);
 }
 async function phoneSet(body) {
@@ -1439,7 +1817,11 @@ async function pollStores(started = false) {
   if (js.status === "running") { storeTimer = setTimeout(pollStores, 1000); SET.storesRunning = true; return; }
   if (SET.storesRunning) {
     SET.storesRunning = false;
-    if (js.status === "done") { await reload(true); toast("Store aggiornati: libreria aggiornata"); }
+    if (js.status === "done") {
+      await reload(true);
+      toast("Store aggiornati: libreria aggiornata");
+      if (S.view.type === "ports") { S.ports = null; renderPorts($("#plugin-view")); } // pulsante «Gioca» del port appena installato
+    }
     else if (js.status === "error") toast(js.phase, true);
     if ($("#settings").open && SET.tab === "acc") loadAccounts();
   }
@@ -1571,12 +1953,13 @@ async function renderCustomConsoles() {
 
 /* ---- impostazioni › account degli store */
 async function loadAccounts() {
+  api("/api/ra").then((r) => { $("#ra-user").value = r.username; $("#ra-key").placeholder = r.has_key ? "già salvata (lascia vuoto per non cambiarla)" : ""; }).catch(() => {});
   let d;
   try { d = await api("/api/accounts"); } catch (e) { return toast(e.message, true); }
   SET.accounts = d;
   const when = d.refreshed ? new Date(d.refreshed * 1000).toLocaleString("it", { dateStyle: "short", timeStyle: "short" }) : "mai";
   $("#acc-info").textContent = `Ultimo aggiornamento: ${when}`;
-  $("#acc-table").innerHTML = d.stores.filter((x) => x.id !== "manual").map((x) => {
+  $("#acc-table").innerHTML = d.stores.filter((x) => x.id !== "manual" && x.id !== "ports").map((x) => {
     const a = x.account || {};
     let ctrl = "";
     if (x.id === "steam") {
@@ -1698,7 +2081,9 @@ function showTab(tab) {
   SET.tab = tab;
   document.querySelectorAll("#tabs .tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   document.querySelectorAll("[data-pane]").forEach((p) => p.classList.toggle("active", p.dataset.pane === tab));
-  if (tab === "scan") { loadScan(); renderCustomConsoles(); }
+  if (tab === "health") loadHealth();
+  else if (tab === "about") loadAbout();
+  else if (tab === "scan") { loadScan(); renderCustomConsoles(); }
   else if (tab === "emu") loadEmu();
   else if (tab === "remote") loadRemote();
   else if (tab === "acc") loadAccounts();
@@ -1708,7 +2093,105 @@ function showTab(tab) {
     const t = GS.ui.settingsTabs.find((x) => "ext:" + x.id === tab);
     const pane = document.querySelector(`[data-pane="${CSS.escape(tab)}"]`);
     if (t && pane) { pane.innerHTML = ""; Promise.resolve(t.render(pane, GS)).catch((e) => { pane.textContent = e.message; }); }
-  } else api("/api/status").then(showStatus);
+  } else { api("/api/status").then(showStatus); loadBackups(); }
+}
+
+/* ---- info: versione, aggiornamenti, novita' */
+/** Markdown minimo del changelog (titoli, elenchi, grassetto, codice). Il testo e' sempre passato da esc() prima. */
+function miniMd(md) {
+  const inline = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>");
+  let html = "", list = false;
+  for (const raw of md.split("\n")) {
+    const l = raw.trimEnd();
+    const li = /^\s*- (.*)/.exec(l), cont = list && /^\s{2,}\S/.test(l);
+    if (cont) { html = html.replace(/<\/li>$/, " " + inline(l.trim()) + "</li>"); continue; }
+    if (list && !li) { html += "</ul>"; list = false; }
+    if (li) { if (!list) { html += "<ul>"; list = true; } html += `<li>${inline(li[1])}</li>`; }
+    else if (l.startsWith("### ")) html += `<h5>${inline(l.slice(4))}</h5>`;
+    else if (l.startsWith("## ")) html += `<h4>${inline(l.slice(3))}</h4>`;
+    else if (l.startsWith("# ")) continue;
+    else if (l) html += `<p>${inline(l)}</p>`;
+  }
+  return html + (list ? "</ul>" : "");
+}
+
+async function loadAbout() {
+  try {
+    const a = await api("/api/about");
+    $("#about-ver").textContent = a.version;
+    $("#about-data").textContent = `· dati in ${a.data_dir}`;
+    $("#about-log").innerHTML = a.changelog ? miniMd(a.changelog) : `<p class="muted">Changelog non disponibile.</p>`;
+  } catch (e) { toast(e.message, true); }
+  checkUpdate(false, true);
+}
+
+async function checkUpdate(force = false, show = false) {
+  let u;
+  try { u = await api(`/api/update${force ? "?force=1" : ""}`); } catch (e) { if (show) $("#about-update").textContent = e.message; return; }
+  const txt = u.newer ? `È disponibile la versione ${u.latest} (installata: ${u.current}).`
+    : u.error && !u.latest ? `Impossibile controllare: ${u.error}`
+    : u.latest ? `Hai l'ultima versione (${u.current}).` : "Nessuna release pubblica su GitHub (repository privato o senza release): controllo non disponibile.";
+  if (show) {
+    $("#about-update").innerHTML = esc(txt) + (u.newer && u.url ? ` <a href="#" data-open="${esc(u.url)}">Scarica ↗</a>` : "");
+  } else if (u.newer && store.get("updateSeen", "") !== u.latest) {
+    store.set("updateSeen", u.latest); // un solo avviso per versione
+    toast(`${txt} Impostazioni › Info`);
+  }
+}
+
+/* ---- salute */
+async function loadHealth() {
+  $("#health-list").innerHTML = `<p class="muted">Controllo in corso…</p>`;
+  let d;
+  try { d = await api("/api/health"); } catch (e) { $("#health-list").innerHTML = `<p class="status-bad">${esc(e.message)}</p>`; return; }
+  const ico = { ok: "✓", warn: "⚠", error: "✖" };
+  SET.health = d.items;
+  $("#health-list").innerHTML = `<div class="health">` + d.items.map((x, i) => `<div class="hl-row hl-${x.level}">`
+    + `<span class="hl-ico">${ico[x.level]}</span><div class="hl-txt"><b>${esc(x.title)}</b>${x.detail ? `<div class="muted small">${esc(x.detail)}</div>` : ""}</div>`
+    + (x.fix ? `<button class="btn hl-fix" data-i="${i}">${esc(x.fix.label)}</button>` : "") + `</div>`).join("") + `</div>`;
+}
+
+async function healthFix(fix) {
+  if (fix.tab) return showTab(fix.tab);
+  if (fix.backup) { await backupNow(); return loadHealth(); }
+  if (fix.sunshine) {
+    try { await api("/api/sunshine/start", { body: {} }); } catch (e) { return toast(e.message, true); }
+    toast("Avvio di Sunshine: conferma la richiesta di Windows");
+    return setTimeout(loadHealth, 5000);
+  }
+  if (fix.scan) {
+    try { await api("/api/scan", { body: { mode: fix.scan } }); } catch (e) { return toast(e.message, true); }
+    SET.lastStatus = "running";
+    setScanRunning(true);
+    showTab("scan");
+  }
+}
+
+/* ---- copie di sicurezza dei dati utente */
+async function loadBackups() {
+  let d;
+  try { d = await api("/api/backups"); } catch (e) { return toast(e.message, true); }
+  $("#backup-list").innerHTML = d.items.length
+    ? `<table class="emu"><tr><th>Copia</th><th style="width:150px">Data</th><th style="width:80px" class="num">Dimensione</th><th style="width:110px"></th></tr>`
+      + d.items.map((b) => `<tr><td class="small">${esc(b.name)}</td><td>${esc(fmtDate(b.time))}</td><td class="num">${esc(fmtSize(b.size))}</td>`
+        + `<td><button class="btn bk-restore" data-name="${esc(b.name)}">Ripristina</button></td></tr>`).join("") + `</table>`
+      + `<p class="muted small">Cartella: <code>${esc(d.folder)}</code></p>`
+    : `<p class="muted small">Ancora nessuna copia.</p>`;
+}
+
+async function backupNow() {
+  try { const r = await api("/api/backups", { body: {} }); toast(`Copia creata: ${r.name}`); } catch (e) { return toast(e.message, true); }
+  loadBackups();
+}
+
+async function restoreBackup(name) {
+  if (!confirm(`Ripristinare «${name}»?
+I dati attuali vengono prima salvati in una nuova copia, quindi l'operazione si può annullare.`)) return;
+  let r;
+  try { r = await api("/api/backups/restore", { body: { name } }); } catch (e) { return toast(e.message, true); }
+  toast(`Ripristinato (${r.restored.join(", ")}). Copia dei dati precedenti: ${r.safety_copy}`);
+  await reload(true);
+  loadBackups();
 }
 
 async function pickPath(kind) {
@@ -1725,11 +2208,58 @@ async function loadScan() {
   SET.preview = pv;
   renderScan(pv, js);
   if (js.status === "running") pollScan();
+  else loadRenamed();
+}
+
+/* ---- altre cartelle ROM (altri dischi) */
+function renderExtraRoots(extra) {
+  $("#scan-extra").innerHTML = `<div class="muted small extra-roots">Altre cartelle ROM: `
+    + (extra.length ? extra.map((x) => `<span class="xr${x.online ? "" : " off"}" title="${x.online ? "" : "Non raggiungibile: disco scollegato?"}">`
+      + `<code>${esc(x.path)}</code>${x.online ? "" : " ⚠"} <a href="#" class="xr-del" data-path="${esc(x.path)}" title="Togli">✕</a></span>`).join(" ")
+      : "nessuna")
+    + ` <button class="btn" id="xr-add" type="button">＋ Aggiungi</button></div>`;
+}
+
+async function extraRoot(action, path) {
+  if (!path) return;
+  try { await api("/api/roms/extra", { body: { action, path } }); } catch (e) { return toast(e.message, true); }
+  toast(action === "add" ? "Cartella aggiunta: aggiorna la libreria o cerca i nuovi giochi" : "Cartella tolta");
+  loadScan();
+}
+
+/* ---- cartelle rinominate o spostate: i dati del gioco (metadati, tempo di gioco, collezioni) passano alla nuova cartella */
+async function loadRenamed() {
+  const box = $("#scan-renamed");
+  box.innerHTML = `<p class="muted small">Controllo delle cartelle rinominate…</p>`;
+  let d;
+  try { d = await api("/api/relink/plan"); } catch { box.innerHTML = ""; return; }
+  if (!d.pairs.length) { box.innerHTML = ""; return; }
+  box.innerHTML = `<div class="renamed"><b>⟲ ${d.pairs.length} giochi sembrano rinominati o spostati</b>
+    <div class="muted small">I loro dati (metadati, tempo di gioco, preferiti, collezioni) possono passare alla nuova cartella invece di ripartire da zero.
+    Prima dell'operazione si salva una copia dei database (*.bak).</div>
+    <div class="rn-list">${d.pairs.map((x) => `<label><input type="checkbox" class="rn-sel" data-new="${esc(x.new)}" checked>
+      <span>${esc(x.title)}</span> <span class="muted small">→ ${esc(x.path.split(/[\\/]/).slice(-2).join("/"))}</span></label>`).join("")}</div>
+    <button class="btn primary" id="relink-apply">Riassocia i selezionati</button></div>`;
+  $("#relink-apply").onclick = async () => {
+    const sel = [...document.querySelectorAll(".rn-sel:checked")].map((c) => c.dataset.new);
+    if (!sel.length) return;
+    try { const r = await api("/api/relink/apply", { body: { new: sel } }); toast(`${r.applied} giochi riassociati: aggiorno la libreria…`); }
+    catch (e) { return toast(e.message, true); }
+    box.innerHTML = "";
+    const tick = async () => {
+      const st = await api("/api/status");
+      if (st.building) return setTimeout(tick, 1000);
+      await reload(true);
+      loadScan();
+    };
+    tick();
+  };
 }
 
 function renderScan(pv, js) {
   if (pv.error) { $("#scan-table").innerHTML = `<p class="status-bad">${esc(pv.error)}</p>`; return; }
   $("#scan-root").textContent = pv.root;
+  renderExtraRoots(pv.extra || []);
   const fmt = (n) => (n ? n.toLocaleString("it") : "—");
   $("#scan-table").innerHTML = `<table class="emu"><tr><th style="width:28px"><input type="checkbox" id="scan-all" title="Seleziona tutte"></th>`
     + `<th>Console</th><th>Cartella</th><th class="num">Giochi</th><th class="num">Nuovi</th>`
@@ -1919,12 +2449,20 @@ function bind() {
       try { it?.onClick?.(GS); } catch (err) { toast(err.message, true); }
       return;
     }
+    if (a.dataset.view === "ports") PORTS_F.open = null; // dalla barra laterale: sempre il catalogo
     setView({ type: a.dataset.view, id: a.dataset.id || null });
   });
   $("#inst-filter").value = S.instFilter;
   $("#inst-filter").onchange = (e) => { S.instFilter = e.target.value; store.set("instFilter", S.instFilter); refreshGrid(); };
   $("#pc-add").onclick = () => openAddGame();
   $("#bp-btn").onclick = () => enterBigPicture();
+  $("#random-btn").onclick = () => {
+    // tra quelli mostrati; meglio se si possono avviare subito (niente da scaricare o installare)
+    const ready = S.items.filter((g) => !g.store || (g.store !== "online" && g.installed));
+    const pool = ready.length ? ready : S.items;
+    if (!pool.length) return toast("Nessun gioco in questa vista");
+    openDetail(pool[Math.floor(Math.random() * pool.length)].id);
+  };
   GS.on("uiChanged", () => { if (S.games.length) { renderSidebar(); } });
   layer.addEventListener("click", (e) => { const t = e.target.closest(".tile"); if (t) openDetail(+t.dataset.id); });
   layer.addEventListener("dblclick", (e) => { const t = e.target.closest(".tile"); if (t) play(+t.dataset.id); });
@@ -1941,7 +2479,7 @@ function bind() {
   window.addEventListener("blur", closeCtx);
   window.addEventListener("focus", syncLibrary);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) syncLibrary(); });
-  setInterval(syncLibrary, 20000);
+  setInterval(syncLibrary, 8000);
   scroller.addEventListener("scroll", scheduleRender, { passive: true });
   new ResizeObserver(() => { layout(); render(); }).observe(scroller);
 
@@ -2004,6 +2542,15 @@ function bind() {
   });
 
   $("#detail-close").onclick = closeDetail;
+  // la nota si salva quando si esce dal campo (change), senza ridisegnare la scheda
+  $("#detail").addEventListener("change", async (e) => {
+    const d = S.detail;
+    if (e.target.id !== "d-note" || !d) return;
+    const v = e.target.value.trim();
+    try { await api(`/api/game/${d.id}/flag`, { body: { field: "note", value: v } }); } catch (err) { return toast(err.message, true); }
+    d.user.note = v;
+    toast(v ? "Nota salvata" : "Nota cancellata");
+  });
   $("#detail").addEventListener("click", async (e) => {
     const d = S.detail;
     if (!d) return;
@@ -2013,6 +2560,7 @@ function bind() {
     else if (t.id === "d-torrent") api(`/api/game/${d.id}/torrent`, { body: {} }).then(() => toast("Link aperto nel client torrent"))
       .catch((err) => toast(err.message, true));
     else if (t.dataset.install) installGame(+t.dataset.install);
+    else if (t.dataset.port) { closeDetail(); PORTS_F.open = t.dataset.port; setView({ type: "ports" }); }
     else if (t.id === "d-page") api(`/api/game/${d.id}/store-page`, { body: {} }).catch((err) => toast(err.message, true));
     else if (t.id === "d-manual-del") {
       if (!confirm(`Rimuovere «${d.title}» dalla libreria? Il gioco sul disco non viene toccato.`)) return;
@@ -2025,6 +2573,12 @@ function bind() {
     }
     else if (t.id === "d-fav") setFlag("favorite", !d.user.favorite);
     else if (t.dataset.status) setFlag("status", d.user.status === t.dataset.status ? "" : t.dataset.status);
+    else if (t.dataset.myrate) {
+      const n = +t.dataset.myrate === d.user.my_rating ? 0 : +t.dataset.myrate; // stessa stella = togli il voto
+      try { await api(`/api/game/${d.id}/flag`, { body: { field: "my_rating", value: n } }); } catch (err) { return toast(err.message, true); }
+      d.user.my_rating = n;
+      document.querySelectorAll("#detail .star").forEach((b) => b.classList.toggle("on", +b.dataset.myrate <= n));
+    }
     else if (t.dataset.open) { e.preventDefault(); api("/api/open", { body: { url: t.dataset.open } }); }
     else if (t.id === "d-hide") setFlag("hidden", !d.user.hidden);
     else if (t.id === "d-folder") api(`/api/game/${d.id}/open-folder`, { body: {} }).catch((err) => toast(err.message, true));
@@ -2057,6 +2611,36 @@ function bind() {
   $("#settings-btn").onclick = () => openSettings();
   $("#scan-btn").onclick = () => openSettings("scan");
   $("#rebuild-btn").onclick = rebuild;
+  $("#backup-now").onclick = backupNow;
+  $("#ra-save").onclick = async () => {
+    const body = { username: $("#ra-user").value };
+    if ($("#ra-key").value.trim()) body.key = $("#ra-key").value.trim();
+    try { await api("/api/ra", { body }); toast("RetroAchievements collegato"); $("#ra-key").value = ""; loadAccounts(); }
+    catch (e) { toast(e.message, true); }
+  };
+  $('[data-pane="acc"]').addEventListener("click", (e) => {
+    const o = e.target.closest("[data-open]");
+    if (o) { e.preventDefault(); api("/api/open", { body: { url: o.dataset.open } }); }
+  });
+  $("#xf-pick").onclick = async () => { const p = window.pywebview?.api ? await pickPath("folder") : null; if (p) $("#xf-out").value = p; };
+  $("#xf-go").onclick = async (e) => {
+    e.target.disabled = true;
+    $("#xf-info").textContent = "Esportazione in corso (copia anche le immagini, può richiedere qualche minuto)…";
+    try {
+      const r = await api("/api/export/frontend", { body: { format: $("#xf-format").value, out_dir: $("#xf-out").value } });
+      $("#xf-info").textContent = `Esportati ${r.games.toLocaleString("it")} giochi di ${Object.keys(r.summary).length} console in ${r.out_dir}`;
+    } catch (err) { $("#xf-info").textContent = ""; toast(err.message, true); }
+    e.target.disabled = false;
+  };
+  $("#health-reload").onclick = loadHealth;
+  $("#about-check").onclick = () => checkUpdate(true, true);
+  $('[data-pane="about"]').addEventListener("click", (e) => {
+    const o = e.target.closest("[data-open]");
+    if (o) { e.preventDefault(); api("/api/open", { body: { url: o.dataset.open } }); }
+  });
+  setTimeout(() => checkUpdate(false, false), 15000); // all'avvio, in sottofondo (la risposta resta in cache 12 ore)
+  $("#health-list").addEventListener("click", (e) => { const b = e.target.closest(".hl-fix"); if (b) healthFix(SET.health[+b.dataset.i].fix); });
+  $("#backup-list").addEventListener("click", (e) => { const b = e.target.closest(".bk-restore"); if (b) restoreBackup(b.dataset.name); });
   $("#tabs").addEventListener("click", (e) => { const b = e.target.closest(".tab"); if (b) showTab(b.dataset.tab); });
 
   // scraping
@@ -2146,16 +2730,48 @@ function bind() {
     toast("Cartella delle ROM aggiornata");
     loadScan();
   };
+  $("#scan-extra").addEventListener("click", async (e) => {
+    const del = e.target.closest(".xr-del");
+    if (del) { e.preventDefault(); return extraRoot("remove", del.dataset.path); }
+    if (e.target.id === "xr-add") {
+      const p = window.pywebview?.api ? await pickPath("folder") : prompt("Percorso di un'altra cartella ROM (anche una sola console, es. D:\\Switch)");
+      extraRoot("add", p);
+    }
+  });
   document.querySelector('[data-tab="src"]')?.addEventListener("click", () => { pollHltb(); pollCollart(); });
   $("#collart-missing").onclick = () => startCollart("missing");
   $("#collart-all").onclick = () => startCollart("all");
   $("#collart-stop").onclick = () => api("/api/collart/cancel", { body: {} });
   $("#smeta-all").onclick = () => startStoreMeta(false);
   $("#ph-on").onchange = (e) => phoneSet({ enabled: e.target.checked });
+  $('[data-pane="remote"]').addEventListener("change", async (e) => {
+    const t = e.target;
+    if (t.id === "ph-mouse") phoneSet({ mouse: t.checked });
+    else if (t.id === "ph-mic") phoneSet({ mic_device: t.value });
+    else if (t.dataset.swap && t.value !== "") {
+      try { await api("/api/phone/swap", { body: { a: +t.dataset.swap, b: +t.value } }); } catch (err) { toast(err.message, true); }
+      loadRemote();
+    }
+  });
   $('[data-pane="remote"]').addEventListener("click", async (e) => {
     const t = e.target;
     const o = t.closest("[data-open]");
     if (o) { e.preventDefault(); api("/api/open", { body: { url: o.dataset.open } }); return; }
+    if (t.dataset.es) {
+      t.disabled = true;
+      try {
+        const r = await api("/api/phone/emusetup", { body: { what: t.dataset.es, players: +$("#es-n").value || 1 } });
+        toast("Fatto: " + r.note);
+      } catch (err) { toast(err.message, true); }
+      t.disabled = false;
+      return;
+    }
+    if (t.dataset.esundo) {
+      e.preventDefault();
+      if (!confirm("Rimettere le impostazioni dell'emulatore com'erano prima dell'ultima configurazione di GameScraper?")) return;
+      try { await api("/api/phone/emusetup", { body: { what: t.dataset.esundo, restore: true } }); toast("Impostazioni rimesse"); } catch (err) { toast(err.message, true); }
+      return;
+    }
     if (t.id === "ph-newcode") { e.preventDefault(); await api("/api/phone/code", { body: {} }); loadRemote(); }
     else if (t.dataset.revoke) {
       if (!confirm("Revocare questo telefono? Dovrà essere abbinato di nuovo.")) return;
@@ -2201,7 +2817,7 @@ function bind() {
   $("#hltb-all").onclick = () => startHltb("all");
   $("#hltb-stop").onclick = () => api("/api/hltb/cancel", { body: {} });
   pollWishBadge();
-  setTimeout(() => api("/api/free").then((d) => { $("#cnt-free").textContent = d.items.filter((i) => !i.upcoming && !i.owned).length || ""; }).catch(() => {}), 4000);
+  setTimeout(() => api("/api/free").then((d) => { if (d.first) d.new = 0; freeBadge(d); }).catch(() => {}), 4000);
   $("#smeta-missing").onclick = () => startStoreMeta(true);
   $("#smeta-close").onclick = () => $("#smeta").close();
   $("#smeta-stop").onclick = () => api("/api/stores/metadata/cancel", { body: {} });

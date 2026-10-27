@@ -42,6 +42,7 @@ CREATE TABLE games(id INTEGER PRIMARY KEY, key TEXT UNIQUE, platform TEXT, title
                    store TEXT, installed INT, launch TEXT, install_uri TEXT, page TEXT, store_playtime REAL,
                    install_dir TEXT, rating_count INT, rating_critics REAL, ratings TEXT, size INT, hltb TEXT);
 CREATE TABLE collections(slug TEXT PRIMARY KEY, name TEXT);
+CREATE INDEX games_grp ON games(grp);
 CREATE TABLE collection_games(slug TEXT, key TEXT, PRIMARY KEY(slug, key));
 CREATE TABLE meta(k TEXT PRIMARY KEY, v TEXT);
 """
@@ -476,7 +477,8 @@ def build(cfg, log=print, progress=None) -> dict:
     t0 = time.time()
     cache = Cache(cfg.cache)
     try:
-        if Path(cfg.roms).is_dir():
+        from ..config import rom_roots
+        if any(r.is_dir() for r in rom_roots(cfg)):
             targets = find_platform_dirs(cfg)
         else:
             targets = []

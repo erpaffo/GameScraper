@@ -1,10 +1,11 @@
-"""Lista dei desideri con avvisi di sconto, solo store ufficiali.
+"""Lista dei desideri con avvisi di sconto: store ufficiali e negozi di key (giochi PC).
 
-Prezzi: IsThereAnyDeal (chiave gratuita, https://isthereanydeal.com/apps/my/ - confronta gli store
-ufficiali come Steam, GOG, Epic, Humble...) oppure, senza chiave, il prezzo su Steam per i giochi
-che hanno un codice Steam. Il controllo avviene al massimo due volte al giorno; un avviso nasce
-quando lo sconto supera la soglia scelta, quando il prezzo scende sotto quello desiderato o quando
-tocca il minimo storico.
+Prezzi ufficiali: IsThereAnyDeal (chiave gratuita, https://isthereanydeal.com/apps/my/ - confronta Steam, GOG,
+Epic, Humble...) oppure, senza chiave, il prezzo su Steam per i giochi che hanno un codice Steam.
+Negozi di key: GG.deals (chiave gratuita, https://gg.deals/api/ - prezzo piu' basso tra i negozi di key e minimo
+storico), solo per i giochi con codice Steam. Il controllo avviene al massimo due volte al giorno; un avviso nasce
+quando lo sconto supera la soglia scelta, quando il prezzo (ufficiale o dei negozi di key) scende sotto quello
+desiderato o quando tocca il minimo storico.
 """
 
 from __future__ import annotations
@@ -17,14 +18,15 @@ import httpx
 from . import matching
 
 ITAD = "https://api.isthereanydeal.com"
+GGDEALS = "https://api.gg.deals/v1/prices/by-steam-app-id/"
 STEAM_STORE = "https://store.steampowered.com"
 UA = {"User-Agent": "GameScraper/1.0"}
 
 
 def settings(cfg) -> dict:
     w = dict(cfg.app.get("wishlist") or {})
-    return {"itad_key": w.get("itad_key") or "", "country": (w.get("country") or "IT").upper(),
-            "threshold": int(w.get("threshold") or 50)}
+    return {"itad_key": w.get("itad_key") or "", "gg_key": w.get("gg_key") or "",
+            "country": (w.get("country") or "IT").upper(), "threshold": int(w.get("threshold") or 50)}
 
 
 # ---------------------------------------------------------------- ricerca
@@ -71,13 +73,67 @@ def steam_wishlist(steamid: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------- prezzi
-def _alert(item: dict, price, regular, cut, low, threshold) -> str:
+def _num(v) -> float | None:
+    try:
+        return float(v) if v not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
+GG_REGIONS = {"au", "be", "br", "ca", "ch", "de", "dk", "es", "eu", "fi", "fr", "gb", "ie", "it", "nl", "no", "pl", "ru", "se", "tr", "us"}
+
+
+def _gg_region(region: str) -> str:
+    r = (region or "eu").strip().lower()
+    if r == "uk":
+        return "gb"
+    return r if r in GG_REGIONS else "eu"
+
+
+def gg_prices(c: httpx.Client, key: str, appids: list[str], region: str, log=print) -> dict[str, dict]:
+    """{appid: {"key": prezzo nei negozi di key, "key_low": minimo storico, "retail": prezzo ufficiale, "url": pagina}}."""
+    out: dict[str, dict] = {}
+    uniq = list(dict.fromkeys(str(a).strip() for a in appids if a and str(a).strip()))
+    reg = _gg_region(region)
+    for i in range(0, len(uniq), 100):  # limite GG.deals: fino a 100 ID per richiesta, 1000 richieste/ora
+        if i > 0:
+            time.sleep(0.5)
+        r = c.get(GGDEALS, params={"ids": ",".join(uniq[i:i + 100]), "key": key, "region": reg})
+        if r.status_code != 200:
+            log(f"GG.deals: HTTP {r.status_code} {r.text[:120]}")
+            break
+        body = r.json() if r.content else {}
+        if not isinstance(body, dict) or body.get("success") is False:
+            msg = (body.get("data") or {}).get("message") if isinstance(body, dict) and isinstance(body.get("data"), dict) else ""
+            log(f"GG.deals: risposta non valida {msg}".strip())
+            break
+        data = body.get("data")
+        if not isinstance(data, dict):
+            break
+        for appid, g in data.items():
+            if not isinstance(g, dict):  # es. null per un appid sconosciuto
+                continue
+            p = g.get("prices") if isinstance(g.get("prices"), dict) else {}
+            if _num(p.get("currentKeyshops")) is None and _num(p.get("currentRetail")) is None:
+                continue
+            out[str(appid)] = {"key": _num(p.get("currentKeyshops")), "key_low": _num(p.get("historicalKeyshops")),
+                               "retail": _num(p.get("currentRetail")), "retail_low": _num(p.get("historicalRetail")),
+                               "url": g.get("url"), "currency": p.get("currency")}
+        if r.headers.get("x-ratelimit-remaining") == "0":
+            break
+    return out
+
+
+def _alert(item: dict, price, regular, cut, low, threshold, key_price=None) -> str:
+    target = item.get("target")
+    if target and key_price is not None and key_price <= target and (price is None or key_price < price):
+        return f"Sotto il tuo prezzo ({target:.2f}) nei negozi di key: {key_price:.2f}"
     if price is None:
         return ""
     if price == 0 and regular:
         return "Gratis!"
-    if item.get("target") and price <= item["target"]:
-        return f"Sotto il tuo prezzo ({item['target']:.2f})"
+    if target and price <= target:
+        return f"Sotto il tuo prezzo ({target:.2f})"
     if low is not None and price <= low and cut:
         return "Minimo storico"
     if cut and cut >= threshold:
@@ -93,7 +149,19 @@ def check(cfg, user, log=print, force: bool = False) -> dict:
     alerts: list[str] = []
     if not stale:
         return {"checked": 0, "alerts": []}
+    saved: set[str] = set()
     with httpx.Client(headers=UA, timeout=30) as c:
+        keys: dict[str, dict] = {}
+        if s["gg_key"]:
+            try:
+                keys = gg_prices(c, s["gg_key"], [w["steam_appid"] for w in stale if w["steam_appid"]], s["country"], log)
+            except (httpx.HTTPError, ValueError) as e:  # i prezzi ufficiali si controllano comunque
+                log(f"GG.deals: {type(e).__name__}: {e}")
+
+        def save(w, *a):
+            _save(user, w, *a, key=keys.get(w["steam_appid"]))
+            saved.add(w["id"])
+
         if s["itad_key"]:
             # codici IsThereAnyDeal mancanti: dal codice Steam o dal titolo
             for w in stale:
@@ -126,8 +194,8 @@ def check(cfg, user, log=print, force: bool = False) -> dict:
                     continue
                 d = deals[0]
                 pr, rg = (d.get("price") or {}).get("amount"), (d.get("regular") or {}).get("amount")
-                _save(user, w, pr, rg, d.get("cut") or 0, (d.get("shop") or {}).get("name", ""), d.get("url", ""), low,
-                      (d.get("price") or {}).get("currency", "EUR"), s["threshold"], alerts)
+                save(w, pr, rg, d.get("cut") or 0, (d.get("shop") or {}).get("name", ""), d.get("url", ""), low,
+                     (d.get("price") or {}).get("currency", "EUR"), s["threshold"], alerts)
         # senza chiave (o giochi senza codice IsThereAnyDeal): prezzo su Steam
         rest = [w for w in stale if w["steam_appid"] and not (s["itad_key"] and w["itad_id"])]
         for i in range(0, len(rest), 40):
@@ -144,17 +212,41 @@ def check(cfg, user, log=print, force: bool = False) -> dict:
                 if not po:  # gratuito o non in vendita
                     user.wish_update(w["id"], checked=time.time())
                     continue
-                _save(user, w, po["final"] / 100, po["initial"] / 100, po.get("discount_percent") or 0, "Steam",
-                      f"{STEAM_STORE}/app/{w['steam_appid']}", None, po.get("currency", "EUR"), s["threshold"], alerts)
+                save(w, po["final"] / 100, po["initial"] / 100, po.get("discount_percent") or 0, "Steam",
+                     f"{STEAM_STORE}/app/{w['steam_appid']}", None, po.get("currency", "EUR"), s["threshold"], alerts)
             time.sleep(1)
+        # nessun prezzo ufficiale trovato ma prezzo nei negozi di key (es. gioco non piu' in vendita su Steam)
+        for w in stale:
+            k = keys.get(w["steam_appid"])
+            if w["id"] not in saved and k:
+                save(w, w["price"], w["regular"], w["cut"] or 0, w["shop"] or "", w["url"] or "", w["low"],
+                     w["currency"] or k.get("currency") or "EUR", s["threshold"], alerts)
     return {"checked": len(stale), "alerts": alerts}
 
 
-def _save(user, w, price, regular, cut, shop, url, low, currency, threshold, alerts):
-    a = _alert(w, price, regular, cut, low, threshold)
-    new = bool(a) and (a != (w["alert"] or "") or (w["price"] is not None and price is not None and price < w["price"]))
+def _cheaper(new, old) -> bool:
+    return new is not None and old is not None and new < old
+
+
+def own_low(points, today: str) -> float | None:
+    """Prezzo piu' basso (store o key) visto nei giorni precedenti a oggi."""
+    vals = [v for d, p, k in points if d < today for v in (p, k) if v is not None]
+    return min(vals) if vals else None
+
+
+def _save(user, w, price, regular, cut, shop, url, low, currency, threshold, alerts, key=None):
+    kp = (key or {}).get("key")
+    a = _alert(w, price, regular, cut, low, threshold, kp)
+    today = time.strftime("%Y-%m-%d")
+    best = min((v for v in (price, kp) if v is not None), default=None)
+    prev = own_low(user.wish_history().get(w["id"], []), today)
+    if not a and best is not None and prev is not None and best < prev:
+        a = f"Il prezzo più basso da quando lo segui: {best:.2f} (prima {prev:.2f})"
+    user.wish_price_point(w["id"], price, kp, today)
+    new = bool(a) and (a != (w["alert"] or "") or _cheaper(price, w["price"]) or _cheaper(kp, w.get("key_price")))
+    extra = {"key_price": kp, "key_low": key.get("key_low"), "key_url": key.get("url")} if key else {}
     user.wish_update(w["id"], price=price, regular=regular, cut=cut, shop=shop, url=url, low=low, currency=currency,
-                     checked=time.time(), alert=a, **({"seen": 0} if new else {}))
+                     checked=time.time(), alert=a, **({"seen": 0} if new else {}), **extra)
     if new:
         alerts.append(w["title"])
 

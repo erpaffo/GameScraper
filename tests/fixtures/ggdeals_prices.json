@@ -1,0 +1,28 @@
+{
+  "success": true,
+  "data": {
+    "292030": {
+      "title": "The Witcher 3: Wild Hunt",
+      "url": "https://gg.deals/game/the-witcher-3-wild-hunt/",
+      "prices": {
+        "currentRetail": "29.99",
+        "currentKeyshops": "8.49",
+        "historicalRetail": "2.99",
+        "historicalKeyshops": "5.12",
+        "currency": "EUR"
+      }
+    },
+    "202970": {
+      "title": "Call of Duty: Black Ops II",
+      "url": "https://gg.deals/game/call-of-duty-black-ops-ii/",
+      "prices": {
+        "currentRetail": null,
+        "currentKeyshops": "13.85",
+        "historicalRetail": "19.79",
+        "historicalKeyshops": "9.10",
+        "currency": "EUR"
+      }
+    },
+    "999999": null
+  }
+}

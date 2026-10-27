@@ -36,7 +36,7 @@ jobs:
 
       - name: Dipendenze di sistema (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libegl1 libxkbcommon-x11-0 libxcb-cursor0 libnss3
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libxkbcommon-x11-0 libxcb-cursor0 libnss3 xvfb
 
       - name: Dipendenze Python
         shell: bash
@@ -47,12 +47,35 @@ jobs:
           if [ "$RUNNER_OS" = "Linux" ]; then pip install "pywebview[qt]"; fi
 
       - name: Test
+        env:
+          PYTHONUTF8: "1"
         run: |
           python tests/test_policy.py
           python tests/test_discover.py
+          python tests/test_frontend.py
+          python tests/test_pipeline.py
+          python tests/test_stores.py
+          python tests/test_launcher.py
+          python tests/test_switchmeta.py
+          python tests/test_wishlist.py
+          python tests/test_frontends.py
+          python tests/test_retroachievements.py
+          python tests/test_controllers.py
+          python tests/test_ports.py
+          python tests/test_version.py
 
       - name: Build
         run: pyinstaller packaging/gamescraper.spec --noconfirm --distpath dist --workpath build
+
+      - name: Prova di avvio (smoke test)
+        shell: bash
+        run: |
+          # Verifica che l'eseguibile compilato si avvii e risponda su GET /api/status (su Linux serve Xvfb per la GUI Qt).
+          case "$RUNNER_OS" in
+            Windows) python packaging/smoke_test.py dist/GameScraper/GameScraper.exe ;;
+            macOS)   python packaging/smoke_test.py dist/GameScraper.app ;;
+            Linux)   xvfb-run -a python packaging/smoke_test.py dist/GameScraper/GameScraper ;;
+          esac
 
       - name: Pacchetto
         id: pack

@@ -25,6 +25,7 @@ CREATE INDEX IF NOT EXISTS play_sessions_start ON play_sessions(start);
 CREATE TABLE IF NOT EXISTS wishlist(id TEXT PRIMARY KEY, title TEXT, steam_appid TEXT, itad_id TEXT, target REAL,
                                     added REAL, price REAL, regular REAL, cut INT, shop TEXT, url TEXT, low REAL,
                                     currency TEXT, checked REAL, alert TEXT, seen INT DEFAULT 0);
+CREATE TABLE IF NOT EXISTS wish_prices(id TEXT, day TEXT, price REAL, key_price REAL, PRIMARY KEY(id, day));
 CREATE TABLE IF NOT EXISTS game_profiles(key TEXT PRIMARY KEY, data TEXT);
 CREATE TABLE IF NOT EXISTS manual_games(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, exe TEXT, args TEXT,
                                         cwd TEXT, added REAL);
@@ -39,8 +40,17 @@ class UserData:
         cols = {r[1] for r in self.db.execute("PRAGMA table_info(user_games)")}
         if "status" not in cols:  # stato del gioco: backlog / playing / done / dropped
             self.db.execute("ALTER TABLE user_games ADD COLUMN status TEXT")
-            self.db.commit()
+        for col, typ in (("note", "TEXT"), ("my_rating", "INT")):  # nota personale e voto (1-5) dell'utente
+            if col not in cols:
+                self.db.execute(f"ALTER TABLE user_games ADD COLUMN {col} {typ}")
+        wcols = {r[1] for r in self.db.execute("PRAGMA table_info(wishlist)")}
+        # prezzo migliore sui negozi di key (GG.deals): attuale, minimo storico, pagina di confronto
+        for col, typ in (("key_price", "REAL"), ("key_low", "REAL"), ("key_url", "TEXT")):
+            if col not in wcols:
+                self.db.execute(f"ALTER TABLE wishlist ADD COLUMN {col} {typ}")
+        self.db.commit()
         self.lock = threading.Lock()
+        self.rev = 0  # cresce a ogni modifica: chi mostra i dati (app sul PC) sa quando ricaricarli
 
     def _q(self, sql, args=()) -> list[tuple]:
         """Lettura protetta dal lock: la connessione e' condivisa tra i thread del server."""
@@ -51,18 +61,27 @@ class UserData:
         with self.lock:
             self.db.execute(sql, args)
             self.db.commit()
+            self.rev += 1
 
     # ------------------------------------------------------------ giochi
     def games(self) -> dict[str, dict]:
-        cur = self._q("SELECT key, favorite, hidden, last_played, play_count, playtime, preferred, status "
-                              "FROM user_games")
+        cur = self._q("SELECT key, favorite, hidden, last_played, play_count, playtime, preferred, status, note, my_rating "
+                      "FROM user_games")
         return {r[0]: {"favorite": r[1], "hidden": r[2], "last_played": r[3], "play_count": r[4],
-                       "playtime": r[5], "preferred": r[6], "status": r[7]} for r in cur}
+                       "playtime": r[5], "preferred": r[6], "status": r[7], "note": r[8], "my_rating": r[9]} for r in cur}
 
     def set_flag(self, key: str, field: str, value):
-        assert field in ("favorite", "hidden", "preferred", "status", "last_played")
+        assert field in ("favorite", "hidden", "preferred", "status", "last_played", "note", "my_rating")
         self._exec(f"INSERT INTO user_games(key, {field}) VALUES(?, ?) "
                    f"ON CONFLICT(key) DO UPDATE SET {field}=excluded.{field}", (key, value))
+
+    def mark_started(self, key: str):
+        """Partita appena avviata (dal PC, dal telefono o da Moonlight): subito in «Giocati di recente» e «In corso»,
+        senza aspettare la fine della sessione (tempo e avvii si contano in record_play)."""
+        self._exec("INSERT INTO user_games(key, last_played, status) VALUES(?, ?, 'playing') "
+                   "ON CONFLICT(key) DO UPDATE SET last_played=excluded.last_played, "
+                   "status=CASE WHEN status IS NULL OR status='' OR status='backlog' THEN 'playing' ELSE status END",
+                   (key, time.time()))
 
     def record_play(self, key: str, seconds: float):
         now = time.time()
@@ -102,7 +121,7 @@ class UserData:
 
     # ------------------------------------------------------------ lista dei desideri
     WISH_COLS = ("id", "title", "steam_appid", "itad_id", "target", "added", "price", "regular", "cut", "shop", "url",
-                 "low", "currency", "checked", "alert", "seen")
+                 "low", "currency", "checked", "alert", "seen", "key_price", "key_low", "key_url")
 
     def wishlist(self) -> list[dict]:
         cur = self._q(f"SELECT {', '.join(self.WISH_COLS)} FROM wishlist ORDER BY title COLLATE NOCASE")
@@ -122,6 +141,25 @@ class UserData:
 
     def wish_delete(self, wid: str):
         self._exec("DELETE FROM wishlist WHERE id=?", (wid,))
+        self._exec("DELETE FROM wish_prices WHERE id=?", (wid,))
+
+    def wish_price_point(self, wid: str, price: float | None, key_price: float | None, day: str | None = None):
+        """Un punto al giorno dello storico (il prezzo piu' basso visto quel giorno)."""
+        if price is None and key_price is None:
+            return
+        self._exec("INSERT INTO wish_prices VALUES(?,?,?,?) ON CONFLICT(id, day) DO UPDATE SET "
+                   "price=CASE WHEN excluded.price IS NULL THEN price WHEN price IS NULL THEN excluded.price "
+                   "ELSE MIN(price, excluded.price) END, "
+                   "key_price=CASE WHEN excluded.key_price IS NULL THEN key_price WHEN key_price IS NULL THEN excluded.key_price "
+                   "ELSE MIN(key_price, excluded.key_price) END",
+                   (wid, day or time.strftime("%Y-%m-%d"), price, key_price))
+
+    def wish_history(self, days: int = 365) -> dict[str, list[tuple[str, float | None, float | None]]]:
+        since = time.strftime("%Y-%m-%d", time.localtime(time.time() - days * 86400))
+        out: dict[str, list] = {}
+        for wid, day, p, k in self._q("SELECT id, day, price, key_price FROM wish_prices WHERE day >= ? ORDER BY day", (since,)):
+            out.setdefault(wid, []).append((day, p, k))
+        return out
 
     # ------------------------------------------------------------ collezioni
     def collections(self) -> dict[str, dict]:

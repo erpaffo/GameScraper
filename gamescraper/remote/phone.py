@@ -37,8 +37,9 @@ ALLOWED = [
     ("POST", r"/api/game/\d+/flag"), ("GET", r"/api/game/\d+/shots"),
     ("GET", r"/api/running"), ("POST", r"/api/running/stop"), ("POST", r"/api/running/screenshot"),
     ("GET", r"/img/\d+/[a-z0-9_]+"), ("GET", r"/icons/(platform|store)/[^/]+"), ("GET", r"/coll-img/[^/]+/(icon|cover)"),
-    ("GET", r"/shots/\d+"), ("GET", r"/m/api/me"), ("POST", r"/m/api/logout"), ("WS", r"/m/ws"),
+    ("GET", r"/shots/\d+"), ("GET", r"/m/api/me"), ("POST", r"/m/api/logout"), ("WS", r"/m/ws"), ("WS", r"/m/mic"),
 ]
+PLAYER_COLORS = ["#4aa3ff", "#ff5f5f", "#3ddc84", "#f5c518"]  # giocatore 1..4 (come i LED dei controller)
 PUBLIC = [("GET", r"/m/?"), ("GET", r"/m/static/[\w.-]+"), ("GET", r"/m/manifest\.webmanifest"), ("POST", r"/m/api/pair"),
           ("GET", r"/m/api/hello")]
 _ALLOWED = [(m, re.compile(p + r"$")) for m, p in ALLOWED]
@@ -108,12 +109,15 @@ class PhoneHub:
         self.dsu = None
         self.dsu_error = ""
         self.lock = threading.Lock()
-        self.slots: dict[int, dict] = {}  # slot -> {"device", "pad", "motion", "name"}
+        self.slots: dict[int, dict] = {}  # slot -> {"cid", "device", "pad", "motion", "name", "rumble", "mouse"}
+        self.rev = 0  # cambia a ogni collegamento, scollegamento o scambio: i telefoni aggiornano la sala giocatori
+        self.mic_busy = False
 
     # ------------------------------------------------------------ impostazioni
     @property
     def conf(self) -> dict:
-        return {"enabled": False, "port": PORT, "devices": [], **(self.cfg.app.get("phone") or {})}
+        # mouse: il telefono puo' muovere il mouse del PC (touchpad / pistola ottica); spento finche' non lo attiva il PC
+        return {"enabled": False, "port": PORT, "devices": [], "mouse": False, "mic_device": "", **(self.cfg.app.get("phone") or {})}
 
     def _save(self, **kw):
         c = {**self.conf, **kw}
@@ -243,14 +247,21 @@ class PhoneHub:
         with self.lock:
             for n in range(4):
                 if n not in self.slots:
-                    self.slots[n] = {"device": device, "name": name, "pad": None, "motion": False, "kick": False,
-                                     "since": time.time()}
+                    self.slots[n] = {"cid": secrets.token_hex(4), "device": device, "name": name, "pad": None, "motion": False,
+                                     "kick": False, "since": time.time(), "rumble": None, "mouse": None}
+                    self.rev += 1
                     return n
         return None
+
+    def slot_of(self, cid: str) -> int | None:
+        """Slot attuale di un collegamento (cambia se i giocatori si scambiano il posto)."""
+        return next((n for n, c in list(self.slots.items()) if c["cid"] == cid), None)
 
     def close_slot(self, n: int):
         with self.lock:
             c = self.slots.pop(n, None)
+            if c:
+                self.rev += 1
         if not c:
             return
         if c.get("pad"):
@@ -258,25 +269,84 @@ class PhoneHub:
                 c["pad"].close()
             except Exception:
                 pass
-        if c.get("motion") and self.dsu:
+        if c.get("mouse"):
+            c["mouse"].release()
+        if self.dsu:
             self.dsu.disconnect(n)
+
+    def ensure_pad(self, n: int) -> str | None:
+        """Crea subito il controller virtuale: cosi' il numero del giocatore segue l'ordine di collegamento."""
+        c = self.slots.get(n)
+        if not c or c["pad"] is not None:
+            return None
+        from .vigem import VirtualPad, ViGEmError
+        try:
+            # vibrazioni del gioco -> telefono di questo slot (anche dopo uno scambio di posto)
+            c["pad"] = VirtualPad(on_rumble=lambda large, small, n=n: self._rumble(n, large, small))
+        except ViGEmError as e:
+            c["pad"] = False
+            return str(e)
+        return None
+
+    def _rumble(self, n: int, large: int, small: int):
+        c = self.slots.get(n)
+        if c and c.get("rumble"):
+            c["rumble"](large, small)
+
+    def player(self, n: int) -> int:
+        """Numero del giocatore come lo vedono giochi ed emulatori (indice XInput + 1), altrimenti slot + 1."""
+        c = self.slots.get(n)
+        pad = c and c.get("pad")
+        i = pad.user_index() if pad else None
+        return (i if i is not None else n) + 1
+
+    def players(self) -> list[dict]:
+        return [{"slot": n, "player": self.player(n), "name": c["name"], "color": PLAYER_COLORS[(self.player(n) - 1) % 4]}
+                for n, c in sorted(self.slots.items())]
+
+    def swap(self, a: int, b: int):
+        """Scambia di posto due telefoni (anche con un posto libero): il controller virtuale e lo slot DSU restano
+        al loro posto, cambia il telefono che li usa. Nessuno deve ricollegarsi."""
+        if a == b or not (0 <= a < 4 and 0 <= b < 4):
+            raise ValueError("Posti non validi")
+        with self.lock:
+            ca, cb = self.slots.get(a), self.slots.get(b)
+            if not ca and not cb:
+                raise ValueError("Nessun telefono in questi posti")
+            keep = {"pad", "motion"}  # restano allo slot
+            pa = {k: ca[k] for k in keep} if ca else None
+            pb = {k: cb[k] for k in keep} if cb else None
+            for src, dst, pads in ((ca, b, pb), (cb, a, pa)):
+                if src:
+                    src.update(pads or {"pad": None, "motion": False})
+                    self.slots[dst] = src
+                else:
+                    self.slots.pop(dst, None)
+                    if pads and pads["pad"]:  # posto lasciato libero: il controller virtuale si scollega
+                        try:
+                            pads["pad"].close()
+                        except Exception:
+                            pass
+            self.rev += 1
+        if self.dsu:
+            for n in (a, b):
+                if n not in self.slots:
+                    self.dsu.disconnect(n)
 
     def pad_input(self, n: int, m: dict) -> str | None:
         """Stato del controller dal telefono; ritorna un errore (una volta) se ViGEm non e' disponibile."""
         c = self.slots.get(n)
         if not c:
             return None
-        if c["pad"] is None:
-            from .vigem import VirtualPad, ViGEmError
-            try:
-                c["pad"] = VirtualPad()
-            except ViGEmError as e:
-                c["pad"] = False
-                return str(e)
+        err = self.ensure_pad(n) if c["pad"] is None else None
+        f = lambda k: max(-1.0, min(1.0, float(m.get(k) or 0)))  # noqa: E731
+        st = (int(m.get("b") or 0) & 0xFFFF, max(0.0, f("lt")), max(0.0, f("rt")), f("lx"), f("ly"), f("rx"), f("ry"))
         if c["pad"]:
-            f = lambda k: max(-1.0, min(1.0, float(m.get(k) or 0)))  # noqa: E731
-            c["pad"].update(int(m.get("b") or 0), max(0.0, f("lt")), max(0.0, f("rt")), f("lx"), f("ly"), f("rx"), f("ry"))
-        return None
+            c["pad"].update(*st)
+        if self.dsu:  # gli stessi tasti anche al server DSU (Wii Remote di Dolphin tutto su DSU)
+            from .dsu import pad_bytes
+            self.dsu.update_pad(n, pad_bytes(*st))
+        return err
 
     def motion(self, n: int, accel, gyro):
         c = self.slots.get(n)
@@ -285,14 +355,31 @@ class PhoneHub:
         c["motion"] = True
         self.dsu.update_motion(n, accel, gyro)
 
+    def mouse_input(self, n: int, m: dict) -> str | None:
+        """Touchpad / pistola ottica: posizione assoluta (0..1) e tasti. Solo se permesso dal PC."""
+        c = self.slots.get(n)
+        if not c:
+            return None
+        if not self.conf.get("mouse"):
+            return "Mouse dal telefono non permesso: attivalo sul PC in Impostazioni › Telefono e streaming"
+        if c["mouse"] is None:
+            from .mouse import Mouse
+            c["mouse"] = Mouse()
+        try:
+            c["mouse"].send(float(m.get("x", 0.5)), float(m.get("y", 0.5)), bool(m.get("l")), bool(m.get("r")))
+        except (TypeError, ValueError):
+            pass
+        return None
+
     def status(self) -> dict:
         from .vigem import available
         ok, err = available()
         return {"enabled": self.conf["enabled"], "running": self.running(), "error": self.error, "port": self.conf["port"],
                 "urls": self.urls(), "devices": self.devices(), "vigem": ok, "vigem_error": err,
-                "dsu": bool(self.dsu), "dsu_error": self.dsu_error,
-                "controllers": [{"slot": n, "name": c["name"], "motion": c["motion"], "pad": bool(c["pad"])}
-                                for n, c in sorted(self.slots.items())]}
+                "dsu": bool(self.dsu), "dsu_error": self.dsu_error, "mouse": bool(self.conf.get("mouse")),
+                "mic_device": self.conf.get("mic_device", ""), "mic_devices": _mic_devices(),
+                "controllers": [{**p, "motion": self.slots[p["slot"]]["motion"], "pad": bool(self.slots[p["slot"]]["pad"])}
+                                for p in self.players() if p["slot"] in self.slots]}
 
 
 def register(app, hub: PhoneHub, static_dir: Path):
@@ -357,32 +444,103 @@ def register(app, hub: PhoneHub, static_dir: Path):
             await ws.send_json({"t": "err", "msg": "Gia' 4 controller collegati"})
             await ws.close()
             return
-        await ws.send_json({"t": "ok", "slot": n, "player": n + 1, "dsu": bool(hub.dsu), "dsu_error": hub.dsu_error})
-        told = False
+        cid = hub.slots[n]["cid"]
+        err0 = await asyncio.to_thread(hub.ensure_pad, n)
+        from .mouse import screen_size
+        await ws.send_json({"t": "ok", "slot": n, "player": hub.player(n), "dsu": bool(hub.dsu), "dsu_error": hub.dsu_error,
+                            "screen": list(screen_size()), "mouse": bool(hub.conf.get("mouse"))})
+        told = set()
+        if err0:
+            told.add(err0)
+            await ws.send_json({"t": "err", "msg": err0})
+        # le vibrazioni arrivano da un thread del driver: passano alla coda di questo loop
+        loop, queue = asyncio.get_running_loop(), asyncio.Queue()
+        hub.slots[n]["rumble"] = lambda large, small: loop.call_soon_threadsafe(queue.put_nowait, (large, small))
+        recv, rumble = asyncio.ensure_future(ws.receive_text()), asyncio.ensure_future(queue.get())
+        seen_rev = -1
         try:
             while True:
-                if hub.slots.get(n, {}).get("kick"):
+                n = hub.slot_of(cid)
+                if n is None or hub.slots[n].get("kick"):
                     await ws.close(code=4001)
                     break
-                try:
-                    raw = await asyncio.wait_for(ws.receive_text(), timeout=2)
-                except asyncio.TimeoutError:
+                if seen_rev != hub.rev:  # sala giocatori: chi e' chi, con il colore
+                    seen_rev = hub.rev
+                    await ws.send_json({"t": "players", "me": hub.player(n), "slot": n, "list": hub.players()})
+                done, _ = await asyncio.wait({recv, rumble}, timeout=1, return_when=asyncio.FIRST_COMPLETED)
+                if rumble in done:
+                    large, small = rumble.result()
+                    await ws.send_json({"t": "rumble", "l": large, "s": small})
+                    rumble = asyncio.ensure_future(queue.get())
+                if recv not in done:
                     continue
+                raw = recv.result()
+                recv = asyncio.ensure_future(ws.receive_text())
                 m = json.loads(raw)
                 t = m.get("t")
+                err = None
                 if t == "pad":
                     err = hub.pad_input(n, m)
-                    if err and not told:
-                        told = True
-                        await ws.send_json({"t": "err", "msg": err})
                 elif t == "m" and isinstance(m.get("a"), list) and isinstance(m.get("g"), list):
                     hub.motion(n, m["a"][:3], m["g"][:3])
+                elif t == "mouse":
+                    err = hub.mouse_input(n, m)
+                elif t == "swap" and str(m.get("slot", "")).isdigit():
+                    try:
+                        hub.swap(n, int(m["slot"]))
+                    except ValueError as e:
+                        err = str(e)
                 elif t == "ping":
                     await ws.send_json({"t": "pong", "ts": m.get("ts")})
+                if err and err not in told:
+                    told.add(err)
+                    await ws.send_json({"t": "err", "msg": err})
         except (WebSocketDisconnect, RuntimeError, ValueError):
             pass
         finally:
-            hub.close_slot(n)
+            for f in (recv, rumble):
+                f.cancel()
+            n = hub.slot_of(cid)
+            if n is not None:
+                hub.close_slot(n)
+
+    @app.websocket("/m/mic")
+    async def m_mic(ws: WebSocket):
+        """Microfono del telefono (PCM 16 bit mono 16 kHz) -> uscita audio del PC scelta (cavo virtuale per SingStar)."""
+        import asyncio
+        await ws.accept()
+        if hub.mic_busy:
+            await ws.send_json({"t": "err", "msg": "Un altro telefono sta già usando il microfono"})
+            await ws.close()
+            return
+        from . import mic
+        names = await asyncio.to_thread(mic.devices)
+        dev = mic.pick(names, hub.conf.get("mic_device", ""))
+        if dev is None:
+            await ws.send_json({"t": "err", "msg": "Nessun cavo audio virtuale sul PC (es. VB-Cable): installalo e sceglilo "
+                                                   "in Impostazioni › Telefono e streaming"})
+            await ws.close()
+            return
+        try:
+            player = mic.Player(dev)
+        except OSError as e:
+            await ws.send_json({"t": "err", "msg": str(e)})
+            await ws.close()
+            return
+        hub.mic_busy = True
+        await ws.send_json({"t": "ok", "device": names[dev], "rate": mic.RATE})
+        try:
+            while True:
+                msg = await ws.receive()
+                if msg.get("type") == "websocket.disconnect":
+                    break
+                if msg.get("bytes"):
+                    player.play(msg["bytes"][:16000])
+        except (WebSocketDisconnect, RuntimeError):
+            pass
+        finally:
+            hub.mic_busy = False
+            player.close()
 
     # ------------------------------------------------------------ gestione dal PC
     def _local(request: Request):
@@ -405,6 +563,10 @@ def register(app, hub: PhoneHub, static_dir: Path):
         _local(request)
         if "port" in body and str(body["port"]).isdigit() and 1024 < int(body["port"]) < 65536:
             hub._save(port=int(body["port"]))
+        if "mouse" in body:
+            hub._save(mouse=bool(body["mouse"]))
+        if "mic_device" in body:
+            hub._save(mic_device=str(body["mic_device"] or "")[:64])
         if "enabled" in body:
             on = bool(body["enabled"])
             hub._save(enabled=on)
@@ -425,6 +587,36 @@ def register(app, hub: PhoneHub, static_dir: Path):
         _local(request)
         hub.revoke(did)
         return api_phone(request)
+
+    @app.post("/api/phone/swap")
+    def api_phone_swap(request: Request, body: dict = Body(...)):
+        _local(request)
+        try:
+            hub.swap(int(body.get("a")), int(body.get("b")))
+        except (TypeError, ValueError) as e:
+            raise HTTPException(400, str(e) or "Posti non validi")
+        return api_phone(request)
+
+    @app.post("/api/phone/emusetup")
+    def api_phone_emusetup(request: Request, body: dict = Body(...)):
+        """Configura PCSX2 (Buzz!, chitarra) o Dolphin (Wii Remote) per i telefoni; restore = rimette la copia."""
+        _local(request)
+        from . import emusetup
+        what = str(body.get("what") or "")
+        try:
+            if body.get("restore"):
+                return {"restored": emusetup.restore(what, hub.cfg.emulators)}
+            return emusetup.setup(what, hub.cfg.emulators, int(body.get("players") or 1), bool(body.get("wiimotes", True)))
+        except (RuntimeError, ValueError, OSError) as e:
+            raise HTTPException(400, str(e))
+
+
+def _mic_devices() -> list[str]:
+    try:
+        from .mic import devices
+        return devices()
+    except Exception:
+        return []
 
 
 def _qr_svg(text: str) -> str:

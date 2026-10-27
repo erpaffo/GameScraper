@@ -158,6 +158,19 @@ def cmd_relink(args):
         console.print("Anteprima: rilancia con --apply per eseguire.")
 
 
+def cmd_export_frontend(args):
+    """Libreria per ES-DE (gamelist.xml + downloaded_media) o Pegasus (metadata.pegasus.txt + media)."""
+    from . import frontends
+    cfg = C.load(args.config)
+    out = Path(args.out) if args.out else Path(cfg.output) / args.format
+    plats = [p.strip() for p in args.platform.split(",")] if args.platform else None
+    fn = frontends.export_esde if args.format == "esde" else frontends.export_pegasus
+    summary = fn(Path(cfg.cache), out, plats)
+    for pid, n in sorted(summary.items()):
+        console.print(f"  {pid}: {n} giochi")
+    console.print(f"Esportati {sum(summary.values())} giochi in {out}")
+
+
 def cmd_app(args):
     from .app.server import run
     cfg = C.load(args.config)
@@ -231,7 +244,7 @@ def cmd_bigpicture(args):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="gamescraper", description=f"GameScraper {__version__} - erede veloce di Skyscraper")
-    ap.add_argument("-c", "--config", help="file config.toml (default: ./config.toml)")
+    ap.add_argument("-c", "--config", help="file config.toml (default: GAMESCRAPER_CONFIG, poi la cartella dati dell'utente)")
     sub = ap.add_subparsers(dest="cmd")
 
     def common(sp):
@@ -250,6 +263,10 @@ def main(argv=None):
     sub.add_parser("library", help="ricostruisce la libreria del frontend (giochi unificati + collezioni)")
     rl = sub.add_parser("relink", help="riassocia i dati dei giochi rinominati/spostati (anteprima; --apply per eseguire)")
     rl.add_argument("--apply", action="store_true")
+    xf = sub.add_parser("export-frontend", help="esporta la libreria per ES-DE o Pegasus (metadati + media)")
+    xf.add_argument("--format", choices=("esde", "pegasus"), default="esde")
+    xf.add_argument("--out", help="cartella di destinazione (default: <output>/<formato>)")
+    xf.add_argument("-p", "--platform", help="solo queste console, separate da virgola")
     ap_app = sub.add_parser("app", help="avvia il frontend")
     ap_app.add_argument("--port", type=int, default=8765)
     ap_app.add_argument("--browser", action="store_true", help="apri nel browser invece che in una finestra")
@@ -279,6 +296,8 @@ def main(argv=None):
             cmd_library(args)
         elif cmd == "relink":
             cmd_relink(args)
+        elif cmd == "export-frontend":
+            cmd_export_frontend(args)
         elif cmd == "app":
             cmd_app(args)
         elif cmd == "play":

@@ -1,0 +1,30 @@
+[
+  {
+    "ID": 1,
+    "Name": "Mega Drive",
+    "IconURL": "https://static.retroachievements.org/assets/images/system/md.png",
+    "Active": true,
+    "IsGameSystem": true
+  },
+  {
+    "ID": 3,
+    "Name": "SNES/Super Famicom",
+    "IconURL": "https://static.retroachievements.org/assets/images/system/snes.png",
+    "Active": true,
+    "IsGameSystem": true
+  },
+  {
+    "ID": 5,
+    "Name": "Game Boy Advance",
+    "IconURL": "https://static.retroachievements.org/assets/images/system/gba.png",
+    "Active": true,
+    "IsGameSystem": true
+  },
+  {
+    "ID": 100,
+    "Name": "Hubs",
+    "IconURL": "https://static.retroachievements.org/assets/images/system/hubs.png",
+    "Active": true,
+    "IsGameSystem": false
+  }
+]

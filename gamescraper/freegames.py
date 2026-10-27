@@ -6,9 +6,11 @@ che la pagina carica da widget.allkeyshop.com con typeList=free. Ogni gioco e' u
 (img.game-cover, alt = titolo) e il tipo di offerta (span.free-game-type). Le diapositive
 "splide__slide--clone" sono copie del carosello e vengono scartate.
 
-Fonte aggiuntiva/di riserva: GamerPower (https://www.gamerpower.com/api-read), API pubblica dei giochi
-in regalo (Epic, Steam, GOG, Prime, console), con la data di fine dell'offerta.
-Il risultato resta in cache 3 ore.
+Fonti aggiuntive/di riserva:
+- LootScraper Atom feed (https://feed.phenx.de/lootscraper_amazon_game.xml), feed pubblico per Prime Gaming;
+- Steam Search (giochi a pagamento scontati del 100%);
+- GamerPower (https://www.gamerpower.com/api-read), API pubblica dei giochi in regalo con data di fine.
+Il risultato resta in cache 3 ore (12 ore per allkeyshop e Prime).
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ import httpx
 
 AKS_WIDGET = "https://widget.allkeyshop.com/lib/generate/widget"
 AKS_PAGE = "https://www.allkeyshop.com/blog/daily-game-deals/"
+PRIME_FEED = "https://feed.phenx.de/lootscraper_amazon_game.xml"
 GAMERPOWER = "https://www.gamerpower.com/api/giveaways"
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
                     "Chrome/130.0 Safari/537.36", "Referer": "https://www.allkeyshop.com/"}
@@ -75,6 +78,50 @@ def fetch_aks(client: httpx.Client) -> list[dict]:
     r = client.get(AKS_WIDGET, params=params)
     r.raise_for_status()
     return parse_aks(r.text)  # la pagina del blog NON contiene il riquadro (si carica dal widget): una sola richiesta
+
+
+_PR_ENTRY = re.compile(r"<entry>(.*?)</entry>", re.S)
+_PR_TITLE = re.compile(r"<title>\s*(?:Amazon Prime\s*\([^)]*\)\s*-\s*)?([^<]+?)\s*</title>", re.I)
+_PR_LINK = re.compile(r'<link[^>]+href="([^"]+)"')
+_PR_IMG = re.compile(r'<img[^>]+src="([^"]+)"')
+_PR_END = re.compile(r"Offer valid to:</b>\s*([0-9]{4}-[0-9]{2}-[0-9]{2}(?:\s+[0-9]{2}:[0-9]{2})?)", re.I)
+_PR_WORTH = re.compile(r"Recommended price[^:]*:</b>\s*([^<]+?)\s*<", re.I)
+
+
+def parse_prime(text: str) -> list[dict]:
+    """Feed Atom pubblico di LootScraper per i giochi PC inclusi in Amazon Prime Gaming."""
+    out, seen = [], set()
+    for entry in _PR_ENTRY.findall(text):
+        tm = _PR_TITLE.search(entry)
+        lm = _PR_LINK.search(entry)
+        if not tm or not lm:
+            continue
+        raw = html.unescape(tm.group(1)).strip()
+        title = clean_title(raw)
+        url = html.unescape(lm.group(1)).strip()
+        im = _PR_IMG.search(entry)
+        em = _PR_END.search(entry)
+        wm = _PR_WORTH.search(entry)
+        k = (title.lower(), url)
+        if not title or k in seen:
+            continue
+        seen.add(k)
+        item = {"title": title, "full_title": raw, "url": url,
+                "cover": html.unescape(im.group(1)) if im else None,
+                "kind": "Free with Prime", "console": "pc", "drm": "amazon", "source": "prime"}
+        if em:
+            item["end"] = em.group(1).strip()
+        if wm:
+            item["worth"] = html.unescape(wm.group(1)).strip()
+        out.append(item)
+    return out
+
+
+def fetch_prime(client: httpx.Client) -> list[dict]:
+    """Giochi PC inclusi in Prime Gaming tramite il feed Atom pubblico di LootScraper."""
+    r = client.get(PRIME_FEED, timeout=httpx.Timeout(15, connect=8))
+    r.raise_for_status()
+    return parse_prime(r.text)
 
 
 _GP_SUFFIX = re.compile(r"\s*\([^()]*\)\s*(?:giveaway|key)$|\s+(?:giveaway|key)$", re.I)
@@ -144,6 +191,37 @@ def get(cache, force: bool = False, log=print) -> dict:
                     aks["next"] = time.time() + AKS_RETRY
                     cache.kv_set("freegames_aks", aks)
                     items += aks["items"]
+        try:
+            from .matching import normalize
+            pr = cache.kv_get("freegames_prime") or {}
+            if pr.get("items") and time.time() < pr.get("next", 0):
+                prime_items = pr["items"]
+            else:
+                try:
+                    with httpx.Client(headers={"User-Agent": UA["User-Agent"]}, timeout=httpx.Timeout(15, connect=8),
+                                      follow_redirects=True) as pc:
+                        prime_items = fetch_prime(pc)
+                    cache.kv_set("freegames_prime", {"items": prime_items, "time": time.time(), "next": time.time() + AKS_TTL})
+                except Exception as e:
+                    errors.append(f"Prime: {type(e).__name__}: {e}"[:200])
+                    if pr.get("items"):
+                        pr["next"] = time.time() + AKS_RETRY
+                        cache.kv_set("freegames_prime", pr)
+                    prime_items = pr.get("items") or []
+            have_prime = {normalize(i["title"]) for i in items}
+            for g in prime_items:
+                n = normalize(g["title"])
+                old = next((i for i in items if normalize(i["title"]) == n), None)
+                if old:
+                    if g.get("end"):
+                        old.setdefault("end", g["end"])
+                    if g.get("worth"):
+                        old.setdefault("worth", g["worth"])
+                elif n and n not in have_prime:
+                    items.append(g)
+                    have_prime.add(n)
+        except Exception as e:
+            errors.append(f"Prime: {type(e).__name__}: {e}"[:200])
         try:
             items += fetch_steam(c)
         except Exception as e:

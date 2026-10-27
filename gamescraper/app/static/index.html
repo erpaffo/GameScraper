@@ -19,6 +19,7 @@
       <a class="nav-item" data-view="shop"><span class="ico">🛒</span><span class="lbl">Store</span><span class="cnt" id="cnt-shop"></span></a>
       <a class="nav-item" data-view="multi"><span class="ico">👥</span><span class="lbl">Multigiocatore locale</span><span class="cnt" id="cnt-multi"></span></a>
       <a class="nav-item" data-view="free"><span class="ico">🎁</span><span class="lbl">Giochi gratis</span><span class="cnt" id="cnt-free"></span></a>
+      <a class="nav-item" data-view="ports"><span class="ico">🕹</span><span class="lbl">Port PC</span><span class="cnt" id="cnt-ports"></span></a>
       <a class="nav-item" data-view="wishlist"><span class="ico">♡</span><span class="lbl">Lista desideri</span><span class="cnt" id="cnt-wish"></span></a>
       <a class="nav-item" data-view="shots"><span class="ico">📷</span><span class="lbl">Schermate</span><span class="cnt" id="cnt-shots"></span></a>
       <a class="nav-item" data-view="stats"><span class="ico">📊</span><span class="lbl">Statistiche</span></a>
@@ -105,6 +106,7 @@
         <label class="chk" title="Mostra una sola versione (la tua lingua/regione) per ogni gioco"><input type="checkbox" id="one-version" checked> Nascondi duplicati</label>
         <input id="zoom" type="range" min="120" max="280" step="10" value="170" title="Dimensione copertine">
         <button class="btn" id="scan-btn" title="Cerca nuovi giochi e console">⟳ Nuovi giochi</button>
+        <button class="btn" id="random-btn" title="Un gioco a caso tra quelli mostrati (filtri e ricerca compresi)">🎲</button>
         <button class="btn" id="bp-btn" title="Modalità a schermo intero per il controller">🎮 Big Picture</button>
         <button class="icon-btn big" id="settings-btn" title="Impostazioni">⚙</button>
       </div>
@@ -150,6 +152,7 @@
   <dialog id="settings">
     <form method="dialog" class="dlg-head">
       <div class="tabs" id="tabs">
+        <button type="button" class="tab" data-tab="health">🩺 Salute</button>
         <button type="button" class="tab" data-tab="scan">⟳ Nuovi giochi</button>
         <button type="button" class="tab" data-tab="src">🔌 Fonti</button>
         <button type="button" class="tab" data-tab="acc">🛒 Account</button>
@@ -157,6 +160,7 @@
         <button type="button" class="tab" data-tab="remote">📱 Telefono e streaming</button>
         <button type="button" class="tab" data-tab="look">🎨 Aspetto</button>
         <button type="button" class="tab" data-tab="lib">▦ Libreria</button>
+        <button type="button" class="tab" data-tab="about">ℹ Info</button>
       </div>
       <button class="icon-btn">✕</button>
     </form>
@@ -173,6 +177,59 @@
           <a href="#" data-open="https://moonlight-stream.org">Moonlight</a> (gratis per Android, iPhone, tablet, TV, PC, Mac) dove vuoi giocare.
           GameScraper pubblica in Moonlight la Big Picture e i tuoi giochi principali con le copertine.</p>
         <div id="sun-box"></div>
+        <h4>⚡ Ottimizza lo streaming</h4>
+        <div id="stream-opt"></div>
+        <details class="small stream-guide"><summary><b>Consigli per TV, box e telefono</b> (dove si perde più tempo)</summary>
+          <ul>
+            <li><b>Modalità Gioco della TV</b>: attivala (o «Low latency / ALLM»). Da sola toglie spesso 30–60 ms.</li>
+            <li><b>Cavo anche sulla TV o sul box</b>: se non si può, Wi-Fi a 5 GHz o 6 GHz vicino al router, mai 2,4 GHz.</li>
+            <li><b>Un box invece dell'app della TV</b>: Nvidia Shield, Apple TV 4K o Google TV Streamer decodificano molto più in fretta di una smart TV.</li>
+            <li><b>Moonlight</b>, nelle impostazioni: 60 fps (120 se la TV li regge), <i>Frame pacing</i> su «Lowest latency»
+              (o «Prefer lowest latency»), bitrate 20–40 Mbit/s in 1080p, HEVC solo se il dispositivo lo decodifica in hardware.</li>
+            <li><b>Controller via cavo USB</b> alla TV o al box quando possibile: il Bluetooth aggiunge qualche millisecondo.</li>
+            <li><b>Statistiche</b>: in Moonlight attiva l'overlay delle prestazioni. «Host processing» alto = PC; «Decoding» alto = TV/box; «Network» alto = rete.</li>
+          </ul>
+        </details>
+        <details class="small stream-guide" open><summary><b>Come giocare: TV, telefono, iPad</b></summary>
+          <p><b>📺 Sulla TV con un controller collegato alla TV</b> (il controller non va collegato al PC)</p>
+          <ol>
+            <li>Sul PC: Sunshine deve essere <b>avviato</b> (pulsante qui sopra; resta attivo anche dopo i riavvii).</li>
+            <li>Sulla TV installa <b>Moonlight</b>: Android TV / Google TV / Fire TV dallo store; Apple TV dall'App Store;
+              LG webOS e Samsung Tizen con le versioni della comunità (<i>Moonlight TV</i>). In alternativa un Chromecast con Google TV o una Fire TV Stick.</li>
+            <li>Abbina il controller in <b>Bluetooth alla TV</b> (impostazioni della TV › Telecomandi e accessori).</li>
+            <li>Apri Moonlight: il PC compare da solo (stessa rete). Sceglilo, scrivi il PIN che appare nell'<i>interfaccia web di Sunshine</i> (link qui sopra, scheda PIN).</li>
+            <li>Premi <b>📡 Pubblica in Moonlight</b> qui sopra, poi in Moonlight scegli <i>GameScraper Big Picture</i> o un gioco.
+              Moonlight manda i tasti del controller al PC, dove Sunshine crea un controller Xbox virtuale (ViGEmBus): per l'emulatore è come un controller vero.</li>
+          </ol>
+          <p><b>📱 Sul telefono o sull'iPad, con il gioco sullo schermo del telefono</b></p>
+          <ul>
+            <li>Installa <b>Moonlight</b> (App Store / Play Store) e abbina il PC come sopra.</li>
+            <li><b>Controller a schermo</b>: Moonlight ha i tasti virtuali sopra il video. Su iPhone/iPad: impostazioni di Moonlight ›
+              <i>On-Screen Controls</i> › <i>Full</i> (sempre visibili) o <i>Auto</i> (spariscono quando colleghi un controller).
+              Su Android: impostazioni › <i>Mostra i controlli a schermo</i>.</li>
+            <li><b>Controller vero</b>: abbinalo in Bluetooth al telefono/iPad (PS5, PS4, Xbox, Switch Pro, MFi): Moonlight lo usa da solo e nasconde i tasti a schermo.</li>
+          </ul>
+          <p><b>🎮 Il telefono come controller</b>, con il gioco sul monitor del PC o sulla TV collegata al PC: abbina il telefono nell'app qui sopra e nella scheda di un gioco
+            scegli <i>Gioca con il telefono come controller</i> (anche giroscopio e più giocatori).</p>
+          <p class="muted">Se Moonlight non trova il PC: Sunshine fermo (vedi sopra o Impostazioni › Salute), PC e TV su reti diverse,
+            oppure il firewall di Windows che blocca Sunshine sulle reti private.</p>
+        </details>
+      </section>
+
+      <!-- ---------------- info -->
+      <section data-pane="about">
+        <p>GameScraper <b id="about-ver"></b> <span class="muted small" id="about-data"></span></p>
+        <div id="about-update" class="muted"></div>
+        <button class="btn" id="about-check">↻ Controlla aggiornamenti</button>
+        <h4>Novità</h4>
+        <div id="about-log" class="changelog"></div>
+      </section>
+
+      <!-- ---------------- salute -->
+      <section data-pane="health">
+        <p class="muted">Cosa non va e come sistemarlo. Controlli sul PC, nessuna richiesta online.</p>
+        <div id="health-list"></div>
+        <button class="btn" id="health-reload">↻ Ricontrolla</button>
       </section>
 
       <!-- ---------------- scraping -->
@@ -181,6 +238,8 @@
           <button class="btn" id="setup-open" type="button" title="Cartella ROM, store PC e account delle fonti, passo per passo">🧭 Configurazione guidata</button>
           — le console vengono riconosciute dal nome della cartella.
           Lo scraping interroga solo i giochi mai cercati prima, quindi è veloce anche su librerie grandi.</p>
+        <div id="scan-extra"></div>
+        <div id="scan-renamed"></div>
         <div id="scan-table"></div>
         <div id="scan-unknown"></div>
         <div class="row">
@@ -249,6 +308,14 @@
           <tbody id="acc-table"></tbody></table>
         <div class="row end"><span class="muted small" id="acc-info"></span><button class="btn primary" id="acc-refresh">↻ Aggiorna store</button></div>
         <div id="acc-progress"></div>
+        <h4>🏆 RetroAchievements</h4>
+        <p class="muted small">Obiettivi e progresso dei giochi retro nella scheda di ogni gioco. La <i>Web API key</i> è nel tuo profilo su
+          <a href="#" data-open="https://retroachievements.org/settings">retroachievements.org › Impostazioni</a>.</p>
+        <div class="row wrap">
+          <label>Utente <input class="field" id="ra-user" autocomplete="off"></label>
+          <label>Web API key <input class="field" id="ra-key" type="password" autocomplete="new-password"></label>
+          <button class="btn" id="ra-save">Salva e prova</button>
+        </div>
       </section>
 
       <!-- ---------------- aspetto: temi e plugin -->
@@ -292,6 +359,20 @@
         <p class="muted small">Ricalcola giochi, versioni e collezioni dalla cache, senza scaricare nulla.</p>
         <pre id="build-log" class="log"></pre>
         <p class="muted" id="thumbs-info"></p>
+        <h4>Esporta per altri frontend</h4>
+        <p class="muted small">Metadati e immagini nel formato di <b>ES-DE</b> (EmulationStation) o <b>Pegasus</b>, per usare la libreria anche lì.</p>
+        <div class="row wrap">
+          <select class="field" id="xf-format"><option value="esde">ES-DE (gamelist.xml)</option><option value="pegasus">Pegasus (metadata.pegasus.txt)</option></select>
+          <input class="field grow" id="xf-out" placeholder="Cartella di destinazione (vuoto = cartella output)">
+          <button class="btn" id="xf-pick" type="button">📁</button>
+          <button class="btn" id="xf-go">Esporta</button>
+        </div>
+        <p class="muted small" id="xf-info"></p>
+        <h4>Copie di sicurezza dei tuoi dati</h4>
+        <p class="muted small">Preferiti, tempi di gioco, stati, collezioni personali e impostazioni (emulatori, cartelle).
+          Metadati e immagini non servono: si riscaricano. Una copia automatica ogni settimana, si tengono le ultime 10.</p>
+        <button class="btn" id="backup-now">💾 Crea una copia adesso</button>
+        <div id="backup-list"></div>
       </section>
     </div>
   </dialog>

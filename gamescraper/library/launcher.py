@@ -128,7 +128,7 @@ KNOWN_EXES = {
     "citra": ["citra-qt.exe", "citra*.exe"],
     "cemu": ["cemu.exe", "cemu"],
     "ryujinx": ["ryujinx.exe", "ryujinx"],
-    "eden": ["eden.exe", "eden"],
+    "eden": ["eden.exe", "eden*.appimage", "eden"],
     "xenia": ["xenia_canary.exe", "xenia.exe"],
     "xemu": ["xemu.exe", "xemu"],
     "flycast": ["flycast.exe", "flycast"],
@@ -234,6 +234,8 @@ def plan(cfg, platform: P.Platform, profile: dict | None = None) -> dict | None:
         extra = _split_args(prof.get("extra")) if prof.get("extra") else []
         if extra:  # argomenti aggiuntivi prima del file del gioco
             i = next((n for n, a in enumerate(args) if "{rom}" in a), len(args))
+            if i > 0 and args[i - 1] in ("-g", "--game", "-e", "-dvd_path"):
+                i -= 1
             args = [*args[:i], *extra, *args[i:]]
         return {"emulator": emu, "exe": exe, "core": core, "args": list(args), "profile": bool(prof)}
     return None
@@ -269,7 +271,11 @@ def resolve_target(platform: P.Platform, path: Path) -> Path:
     exts = {"." + e for e in platform.exts}
     cands = [f for f in files if f.suffix.lower() in exts]
     if platform.id == "switch":  # il gioco base, non update/DLC
-        base = [f for f in cands if not any(w in f.name.lower() for w in ("update", "upd", "dlc", "[v", "patch"))]
+        base = [f for f in cands if "000]" in f.name.upper() or "000 " in f.name.upper()] or [
+            f for f in cands
+            if not any(w in f.relative_to(path).as_posix().lower() for w in ("update", "upd", "dlc", "patch"))
+            and ("[v0]" in f.name.lower() or "[v" not in f.name.lower())
+        ]
         cands = base or cands
     if cands:
         return max(cands, key=lambda f: f.stat().st_size)
@@ -550,6 +556,10 @@ class Launcher:
             self.state.update(kw)
             st = dict(self.state)
         if kw.get("status") == "running" and prev != "running":
+            try:
+                self.user.mark_started(st["key"])
+            except Exception:  # i dati utente non devono impedire di giocare
+                pass
             self.on_event("game_started", st)
             self._start_capture()
             threading.Thread(target=self._watch_combo, daemon=True).start()

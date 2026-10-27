@@ -1,4 +1,4 @@
-"""Giochi Switch letti dal file (NSP/XCI) con il prod.keys dell'utente: titolo, publisher, versione e icona.
+"""Giochi Switch letti dal file (NSP/NSZ/XCI/XCZ) con il prod.keys dell'utente: titolo, publisher, versione e icona.
 
 Offline e senza quota: legge solo l'NCA di controllo dentro il pacchetto (vedi switchmeta.py). Sta in testa alla
 catena, quindi le altre fonti interrogano la rete solo per quello che resta (descrizione, anno, voti...).
@@ -13,6 +13,8 @@ from pathlib import Path
 from .. import switchmeta
 from ..scanner import Game
 from .base import Result, Source
+
+PACKAGE_EXTS = (".nsp", ".xci", ".nsz", ".xcz")
 
 
 class Nsp(Source):
@@ -43,8 +45,9 @@ class Nsp(Source):
     def _package(game: Game) -> Path | None:
         """Il pacchetto base: nelle cartelle con aggiornamenti e DLC quello con il titolo che finisce per 000."""
         p = game.path
-        files = [p] if not game.is_dir else [f for pat in ("*", "*/*") for f in p.glob(pat)
-                                             if f.is_file() and f.suffix.lower() in (".nsp", ".xci")]
+        files = ([p] if p.suffix.lower() in PACKAGE_EXTS else []) if not game.is_dir else [
+            f for pat in ("*", "*/*") for f in p.glob(pat) if f.is_file() and f.suffix.lower() in PACKAGE_EXTS
+        ]
         base = [f for f in files if "000]" in f.name.upper() or "000 " in f.name.upper()]
         return max(base or files, key=lambda f: f.stat().st_size, default=None)
 
@@ -55,9 +58,18 @@ class Nsp(Source):
         try:
             m = switchmeta.read_meta(pkg, list(self.cfg.languages), self.keys)
         except (switchmeta.SwitchError, OSError, ValueError, KeyError):
-            return None  # pacchetto non leggibile (es. NSZ o chiavi vecchie): decidono le altre fonti
+            return None  # pacchetto non leggibile (es. troncato o chiavi vecchie): decidono le altre fonti
         res = Result(fields={k: v for k, v in (("title", m["title"]), ("publisher", m["publisher"]),
                                                ("titleid", m["title_id"])) if v})
+        if game.is_dir:
+            try:
+                fc = switchmeta.folder_contents(game.path, self.keys)
+                if fc.get("update") is not None:
+                    res.fields["switch_update"] = fc.get("update_display") or str(fc["update"])
+                if fc.get("dlc"):
+                    res.fields["switch_dlc"] = fc["dlc"]
+            except Exception:
+                pass
         if m["icon"]:
             icon = Path(self.cfg.cache) / "switch" / f"{m['title_id']}.jpg"
             icon.parent.mkdir(parents=True, exist_ok=True)

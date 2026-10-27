@@ -8,7 +8,11 @@
 # riconosce id/alias ("snes", "psx", "Mega Drive") e i nomi dei set No-Intro/Redump
 # ("Myrient/No-Intro/Nintendo - Game Boy Advance", "Redump/Nintendo - GameCube - NKit RVZ [...]").
 roms = "D:/ROM"
-cache = "cache"      # dati + media scaricati (riutilizzati tra un'esecuzione e l'altra)
+# Altre cartelle ROM (altri dischi). Ognuna puo' contenere cartelle console oppure essere essa stessa una
+# console (es. "E:/Switch"). Se un disco e' scollegato viene saltato. Si aggiungono anche dall'app
+# (Impostazioni > Nuovi giochi > Altre cartelle ROM), che in quel caso sostituisce questo elenco.
+# extra_roms = ["E:/Switch", "F:/Retro"]
+cache = "cache"     # dati + media scaricati (riutilizzati tra un'esecuzione e l'altra)
 # Giochi Switch (NSP/XCI): titolo, publisher e icona si leggono dal file con il tuo prod.keys.
 # Se vuoto lo cerca da solo (Ryujinx, Eden, yuzu).
 # switch_keys = "C:/percorso/prod.keys"

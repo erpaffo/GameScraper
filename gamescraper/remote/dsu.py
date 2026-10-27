@@ -37,6 +37,22 @@ def _packet(server_id: int, msg_type: int, payload: bytes) -> bytes:
     return bytes(pkt)
 
 
+def pad_bytes(b: int = 0, lt: float = 0, rt: float = 0, lx: float = 0, ly: float = 0, rx: float = 0, ry: float = 0) -> bytes:
+    """Stato di un controller Xbox (bit XInput, assi -1..1 con Y positivo = su) nel formato DSU (DualShock):
+    A = Croce, B = Cerchio, X = Quadrato, Y = Triangolo, Back = Share, Start = Options, Guide = PS."""
+    from .vigem import BUTTONS as X
+    on = lambda k: bool(b & X[k])  # noqa: E731
+    bits = lambda *ks: sum(m for k, m in ks if (on(k) if isinstance(k, str) else k))  # noqa: E731
+    b1 = bits(("left", 0x80), ("down", 0x40), ("right", 0x20), ("up", 0x10), ("start", 0x08), ("rs", 0x04), ("ls", 0x02), ("back", 0x01))
+    b2 = bits(("y", 0x80), ("b", 0x40), ("a", 0x20), ("x", 0x10), ("rb", 0x08), ("lb", 0x04), (rt > 0.5, 0x02), (lt > 0.5, 0x01))
+    ax = lambda v: max(0, min(255, round(128 + max(-1.0, min(1.0, v)) * 127)))  # noqa: E731
+    an = lambda k: 255 if on(k) else 0  # noqa: E731
+    tr = lambda v: max(0, min(255, round(v * 255)))  # noqa: E731
+    return (bytes([b1, b2, 1 if on("guide") else 0, 0, ax(lx), ax(ly), ax(rx), ax(ry),
+                   an("left"), an("down"), an("right"), an("up"), an("y"), an("b"), an("a"), an("x"),
+                   an("rb"), an("lb"), tr(rt), tr(lt)]))
+
+
 class Slot:
     def __init__(self, n: int):
         self.n = n
@@ -44,8 +60,7 @@ class Slot:
         self.mac = bytes([0x02, 0x47, 0x53, 0x00, 0x00, n + 1])  # indirizzo finto ma stabile per slot
         self.accel = (0.0, 0.0, 0.0)
         self.gyro = (0.0, 0.0, 0.0)
-        self.buttons = 0
-        self.sticks = (128, 128, 128, 128)
+        self.pad = pad_bytes()  # tasti, levette e tasti analogici (20 byte)
         self.counter = 0
 
     def shared(self) -> bytes:
@@ -73,7 +88,18 @@ class DSUServer:
             s = self.slots[slot]
             s.connected = False
             s.accel = s.gyro = (0.0, 0.0, 0.0)
+            s.pad = pad_bytes()
         self._send_data(slot)
+
+    def update_pad(self, slot: int, pad: bytes):
+        """Tasti e levette (da pad_bytes): servono a Dolphin per un Wii Remote tutto sul dispositivo DSU."""
+        with self.lock:
+            s = self.slots[slot]
+            changed = s.pad != pad or not s.connected
+            s.connected = True
+            s.pad = pad
+        if changed:
+            self._send_data(slot)
 
     def update_motion(self, slot: int, accel: tuple[float, float, float], gyro: tuple[float, float, float]):
         """accel in g (x, y, z); gyro in gradi/s (pitch, yaw, roll)."""
@@ -92,11 +118,8 @@ class DSUServer:
     def _data_payload(self, s: Slot) -> bytes:
         s.counter = (s.counter + 1) & 0xFFFFFFFF
         ts = int(time.monotonic() * 1_000_000)
-        lx, ly, rx, ry = s.sticks
         return (s.shared() + struct.pack("<BI", 1 if s.connected else 0, s.counter)
-                + struct.pack("<BBBB", 0, 0, 0, 0)          # pulsanti, PS, touch (il movimento e' quello che conta)
-                + struct.pack("<BBBB", lx, ly, rx, ry)
-                + bytes(4) + bytes(4) + bytes(4)            # dpad, ABXY e dorsali analogici
+                + s.pad                                      # tasti, PS, touch, levette, tasti analogici
                 + bytes(12)                                  # due tocchi del touchpad (non usati)
                 + struct.pack("<Q", ts)
                 + struct.pack("<fff", *s.accel)

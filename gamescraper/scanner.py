@@ -292,13 +292,26 @@ def _ignored(d: Path) -> bool:
 
 
 def find_platform_dirs(cfg) -> list[tuple[P.Platform, Path]]:
-    """Trova le cartelle console sotto la radice ROM, anche annidate (fino a MAX_DEPTH livelli)."""
-    root: Path = cfg.roms
-    if not root.exists():
-        raise FileNotFoundError(f"Cartella ROM non trovata: {root} - sceglila con «📁 Cambia…» (o in config.toml, [paths] roms)")
-    overrides = {}
-    for k, v in cfg.platform_folders.items():
-        overrides[k] = v
+    """Trova le cartelle console sotto le cartelle ROM (principale + aggiuntive), anche annidate (fino a MAX_DEPTH livelli).
+    Una cartella aggiuntiva puo' essere essa stessa una console (es. D:/Switch). Quelle non raggiungibili (disco
+    scollegato) si saltano; errore solo se non se ne raggiunge nessuna."""
+    from .config import rom_roots
+    roots = [r for r in rom_roots(cfg) if r.exists()]
+    if not roots:
+        raise FileNotFoundError(f"Cartella ROM non trovata: {cfg.roms} - sceglila con «📁 Cambia…» (o in config.toml, [paths] roms)")
+    overrides = dict(cfg.platform_folders)
+    found = []
+    for root in roots:
+        if root != Path(cfg.roms):
+            p = P.PLATFORMS.get(overrides.get(str(root)) or "") or P.detect(root.name, overrides)
+            if p and not p.virtual:
+                found.append((p, root))
+                continue
+        found += _walk_root(root, overrides)
+    return found
+
+
+def _walk_root(root: Path, overrides: dict) -> list[tuple[P.Platform, Path]]:
     found = []
 
     def walk(d: Path, depth: int):

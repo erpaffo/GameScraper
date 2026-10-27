@@ -1,0 +1,6 @@
+[plugin]
+name = "Store Minerva (r-roms)"
+version = "1.0"
+author = "GameScraper"
+description = "Riempie lo «Store online» di ogni console con le cartelle di minerva-archive.org elencate su r-roms.github.io."
+api = 1

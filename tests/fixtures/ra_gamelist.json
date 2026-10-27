@@ -1,0 +1,49 @@
+[
+  {
+    "Title": "Advanced Busterhawk: Gley Lancer",
+    "ID": 3684,
+    "ConsoleID": 1,
+    "ConsoleName": "Mega Drive",
+    "ImageIcon": "/Images/020895.png",
+    "NumAchievements": 44,
+    "NumLeaderboards": 33,
+    "Points": 595,
+    "DateModified": "2022-11-20 03:44:12",
+    "ForumTopicID": 1936,
+    "Hashes": [
+      "8bd4a97783cda077c342173df0a9b51e",
+      "a13ab653a20fb383337fab1e52ddb0df"
+    ]
+  },
+  {
+    "Title": "Sonic the Hedgehog",
+    "ID": 1,
+    "ConsoleID": 1,
+    "ConsoleName": "Mega Drive",
+    "ImageIcon": "/Images/067895.png",
+    "NumAchievements": 23,
+    "NumLeaderboards": 15,
+    "Points": 255,
+    "DateModified": "2023-08-08 00:36:59",
+    "ForumTopicID": 112,
+    "Hashes": [
+      "1bc674be034e43c96b86487ac69d9293",
+      "f9394e97ef6b1f82330b8d1b57f31966"
+    ]
+  },
+  {
+    "Title": "~Hack~ Knuckles the Echidna in Sonic the Hedgehog",
+    "ID": 20246,
+    "ConsoleID": 1,
+    "ConsoleName": "Mega Drive",
+    "ImageIcon": "/Images/074560.png",
+    "NumAchievements": 20,
+    "NumLeaderboards": 5,
+    "Points": 200,
+    "DateModified": "2023-10-01 12:00:00",
+    "ForumTopicID": 18000,
+    "Hashes": [
+      "abcdef0123456789abcdef0123456789"
+    ]
+  }
+]

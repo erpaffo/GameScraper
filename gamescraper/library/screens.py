@@ -259,6 +259,16 @@ def emulator_dirs(emulator: str, exe: str | None) -> list[Path]:
         c += [base / "memstick" / "PSP" / "SCREENSHOT" if base else None, docs / "PPSSPP" / "PSP" / "SCREENSHOT"]
     elif e == "ryujinx":
         c += [_home("Pictures", "Ryujinx"), base / "portable" / "screenshots" if base else None]
+    elif e in ("eden", "yuzu", "suyu", "citron"):
+        # famiglia yuzu: <dati>/screenshots, cartella "user" accanto all'exe se portatile; percorso scelto in qt-config.ini
+        roots = [base / "user" if base else None, _env("APPDATA", e), _home(".local", "share", e)]
+        c += [r / "screenshots" if r else None for r in roots]
+        for r in roots:
+            ini = r / "config" / "qt-config.ini" if r else None
+            if ini and ini.is_file():
+                m = re.search(r"^Screenshots\\screenshot_path=(.+)$", ini.read_text(encoding="utf-8", errors="ignore"), re.M)
+                if m and m.group(1).strip():
+                    c.append(Path(m.group(1).strip()))
     elif e in ("azahar", "lime3ds", "citra"):
         name = {"azahar": "Azahar", "lime3ds": "Lime3DS", "citra": "Citra"}[e]
         c += [base / "user" / "screenshots" if base else None, _env("APPDATA", name, "screenshots")]

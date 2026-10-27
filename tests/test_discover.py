@@ -27,15 +27,52 @@ def test_allkeyshop_live_widget_e_blocco():
 
     def boom(*a, **k):
         raise freegames.httpx.ConnectTimeout("blocco")
-    saved = freegames.fetch_aks, freegames.fetch_steam, freegames.fetch_gamerpower
-    freegames.fetch_aks, freegames.fetch_steam, freegames.fetch_gamerpower = boom, lambda c: [], lambda c: []
+    saved = freegames.fetch_aks, freegames.fetch_prime, freegames.fetch_steam, freegames.fetch_gamerpower
+    freegames.fetch_aks, freegames.fetch_prime, freegames.fetch_steam, freegames.fetch_gamerpower = boom, lambda c: [], lambda c: [], lambda c: []
     try:
         kv = KV()
         r = freegames.get(kv, force=True)
         assert [i["title"] for i in r["items"]] == ["Hue"] and r["errors"], r  # elenco precedente mantenuto
         assert kv.d["freegames_aks"]["next"] > 0  # e non si riprova subito
     finally:
-        freegames.fetch_aks, freegames.fetch_steam, freegames.fetch_gamerpower = saved
+        freegames.fetch_aks, freegames.fetch_prime, freegames.fetch_steam, freegames.fetch_gamerpower = saved
+
+
+def test_prime_feed():
+    """Feed Atom di LootScraper per Prime Gaming + unione senza duplicati con allkeyshop."""
+    items = freegames.parse_prime((HERE / "fixtures" / "prime_feed.xml").read_text(encoding="utf-8"))
+    titles = [i["title"] for i in items]
+    assert titles == ["Vampire: The Masquerade: Swansong", "Time Travel: Escape Room Game", "Ad Infinitum"], titles
+    ad = items[2]
+    assert ad["kind"] == "Free with Prime" and ad["drm"] == "amazon" and ad["console"] == "pc", ad
+    assert ad["url"].startswith("https://luna.amazon.com/claims/"), ad["url"]
+    assert ad["cover"].startswith("https://m.media-amazon.com/images/"), ad["cover"]
+    assert ad["end"] == "2026-11-25 00:00" and ad["worth"] == "19.99 EUR", ad
+
+    class KV:
+        def __init__(self):
+            self.d = {}
+        def kv_get(self, k):
+            return self.d.get(k)
+        def kv_set(self, k, v):
+            self.d[k] = v
+
+    saved = freegames.fetch_aks, freegames.fetch_prime, freegames.fetch_steam, freegames.fetch_gamerpower
+    # allkeyshop restituisce gia' "Ad Infinitum" (senza data di fine), Prime restituisce i 3 giochi del fixture
+    freegames.fetch_aks = lambda c: [{"title": "Ad Infinitum", "full_title": "Ad Infinitum", "url": "https://luna.amazon.com/claims/x",
+                                      "cover": None, "kind": "Free with Prime", "console": "pc", "drm": "amazon", "source": "allkeyshop"}]
+    freegames.fetch_prime = lambda c: [dict(x) for x in items]
+    freegames.fetch_steam = lambda c: []
+    freegames.fetch_gamerpower = lambda c: []
+    try:
+        kv = KV()
+        r = freegames.get(kv, force=True)
+        got = {i["title"]: i for i in r["items"]}
+        assert len(r["items"]) == 3 and set(got) == set(titles), r["items"]  # nessun duplicato per Ad Infinitum
+        assert got["Ad Infinitum"]["source"] == "allkeyshop" and got["Ad Infinitum"]["end"] == "2026-11-25 00:00"
+        assert kv.d["freegames_prime"]["next"] > 0
+    finally:
+        freegames.fetch_aks, freegames.fetch_prime, freegames.fetch_steam, freegames.fetch_gamerpower = saved
 
 
 def test_allkeyshop():
@@ -155,6 +192,7 @@ def test_remote():
 if __name__ == "__main__":
     test_allkeyshop()
     test_allkeyshop_live_widget_e_blocco()
+    test_prime_feed()
     test_hltb()
     with tempfile.TemporaryDirectory() as tmp:
         test_status_and_wishlist(tmp)

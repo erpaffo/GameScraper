@@ -34,24 +34,39 @@ output = "output"
 """
 
 
+def _warn_ignored_copy(chosen: Path | None):
+    """Dai sorgenti, un config.toml nel progetto non e' piu' quello usato se esiste la cartella dei dati dell'utente."""
+    if FROZEN or chosen is None:
+        return
+    for c in (Path("config.toml"), Path(__file__).resolve().parent.parent / "config.toml"):
+        if c.exists() and c.resolve() != Path(chosen).resolve():
+            print(f"Nota: uso {chosen}. La copia in {c.resolve().parent} non viene piu' letta "
+                  f"(per usarla: GAMESCRAPER_CONFIG={c.resolve()}).", file=sys.stderr)
+            return
+
+
 def _default_config_path() -> Path | None:
-    """config.toml: cartella corrente, cartella del progetto (sviluppo), cartella dell'eseguibile
-    (versione portatile) e infine la cartella dei dati dell'utente, creata al primo avvio."""
-    cands = [Path("config.toml")]
+    """config.toml. Una sola cartella dati per exe e sorgenti, cosi' libreria, cache e preferiti non si dividono in due copie:
+    1. GAMESCRAPER_CONFIG (percorso esplicito, anche per provare un'altra libreria);
+    2. accanto all'eseguibile (versione portatile);
+    3. la cartella dei dati dell'utente (app_data_dir), creata al primo avvio dell'exe;
+    4. solo per chi sviluppa e non ha ancora quella cartella: config.toml nella cartella corrente o del progetto."""
+    env = os.environ.get("GAMESCRAPER_CONFIG")
+    if env:
+        return Path(env)
+    portable = Path(sys.executable).resolve().parent / "config.toml" if FROZEN else None
+    if portable and portable.exists():
+        return portable
+    shared = app_data_dir() / "config.toml"
+    if shared.exists():
+        return shared
     if FROZEN:
-        cands.append(Path(sys.executable).resolve().parent / "config.toml")
-    else:
-        cands.append(Path(__file__).resolve().parent.parent / "config.toml")
-    for c in cands:
+        shared.parent.mkdir(parents=True, exist_ok=True)
+        shared.write_text(DEFAULT_CONFIG, encoding="utf-8")
+        return shared
+    for c in (Path("config.toml"), Path(__file__).resolve().parent.parent / "config.toml"):
         if c.exists():
             return c
-    if FROZEN:
-        d = app_data_dir()
-        d.mkdir(parents=True, exist_ok=True)
-        p = d / "config.toml"
-        if not p.exists():
-            p.write_text(DEFAULT_CONFIG, encoding="utf-8")
-        return p
     return None
 
 
@@ -66,6 +81,8 @@ class Config:
     output: Path = Path("output")
     platform_folders: dict[str, str] = field(default_factory=dict)
     switch_keys: str = ""  # prod.keys per leggere i giochi Switch; vuoto = si cerca in Ryujinx/Eden/yuzu
+    # altre cartelle ROM (altri dischi): ognuna puo' contenere cartelle console o essere essa stessa una console
+    extra_roms: list[Path] = field(default_factory=list)
 
     sources: list[str] = field(default_factory=lambda: ["libretro", "launchbox", "tgdb", "arcadedb", "igdb", "screenscraper",
                                                        "rawg", "thegamesdb", "wikipedia"])
@@ -131,6 +148,8 @@ def apply_settings(cfg: Config):
     cfg.platform_folders.update(s.get("platform_folders", {}))
     if (s.get("paths") or {}).get("roms"):  # cartella ROM scelta dall'app
         cfg.roms = Path(os.path.expandvars(os.path.expanduser(s["paths"]["roms"])))
+    if "extra_roms" in (s.get("paths") or {}):  # cartelle aggiunte dall'app: sostituiscono quelle di config.toml
+        cfg.extra_roms = [Path(os.path.expandvars(os.path.expanduser(x))) for x in s["paths"]["extra_roms"] if x]
     from . import platforms as _P
     _P.register_custom(s.get("custom_platforms", []))
     for pid, v in s.get("stores", {}).items():
@@ -154,6 +173,15 @@ def apply_settings(cfg: Config):
         cfg.switch_keys = s["paths"]["switch_keys"]
     if "nsp" not in cfg.sources:  # titolo/publisher/icona letti dal file Switch: sempre per primi (offline)
         cfg.sources.insert(0, "nsp")
+
+
+def rom_roots(cfg: Config) -> list[Path]:
+    """Cartella ROM principale + cartelle aggiuntive, senza doppioni (anche quelle non raggiungibili)."""
+    out: list[Path] = []
+    for r in [cfg.roms, *getattr(cfg, "extra_roms", [])]:
+        if r and Path(r) not in out:
+            out.append(Path(r))
+    return out
 
 
 def set_setting(cfg: Config, key: str, value):
@@ -191,6 +219,7 @@ def load(path: str | os.PathLike | None) -> Config:
     cfg = Config()
     if path is None:
         path = _default_config_path()
+        _warn_ignored_copy(path)
     if path is None:
         apply_settings(cfg)
         return cfg
@@ -210,6 +239,7 @@ def load(path: str | os.PathLike | None) -> Config:
     cfg.output = p(paths.get("output", "output"))
     cfg.platform_folders = d.get("platform_folders", {})
     cfg.switch_keys = paths.get("switch_keys", "")
+    cfg.extra_roms = [p(x) for x in paths.get("extra_roms", [])]
 
     s = d.get("scrape", {})
     for k in ("sources", "fields", "media", "regions", "languages", "min_match", "max_hash_mb",

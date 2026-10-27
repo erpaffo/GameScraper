@@ -30,6 +30,10 @@ class ViGEmError(RuntimeError):
     pass
 
 
+# vibrazione chiesta dal gioco: (client, target, motore grande 0-255, motore piccolo 0-255, led, dati utente)
+NOTIFICATION = ctypes.CFUNCTYPE(None, c_void_p, c_void_p, ctypes.c_ubyte, ctypes.c_ubyte, ctypes.c_ubyte, c_void_p)
+
+
 _lib = None
 _client = None
 _lock = threading.Lock()
@@ -66,6 +70,11 @@ def _load():
     lib.vigem_target_remove.restype = c_uint
     lib.vigem_target_x360_update.argtypes = (c_void_p, c_void_p, XUSB_REPORT)
     lib.vigem_target_x360_update.restype = c_uint
+    lib.vigem_target_x360_register_notification.argtypes = (c_void_p, c_void_p, NOTIFICATION, c_void_p)
+    lib.vigem_target_x360_register_notification.restype = c_uint
+    lib.vigem_target_x360_unregister_notification.argtypes = (c_void_p,)
+    lib.vigem_target_x360_get_user_index.argtypes = (c_void_p, c_void_p, ctypes.POINTER(ctypes.c_ulong))
+    lib.vigem_target_x360_get_user_index.restype = c_uint
     _lib = lib
     return lib
 
@@ -101,9 +110,10 @@ def available() -> tuple[bool, str]:
 
 
 class VirtualPad:
-    """Un controller Xbox 360 virtuale; si scollega con close()."""
+    """Un controller Xbox 360 virtuale; si scollega con close().
+    on_rumble(grande, piccolo): chiamata (da un thread del driver) quando il gioco fa vibrare il controller, valori 0-255."""
 
-    def __init__(self):
+    def __init__(self, on_rumble=None):
         self.lib = _load()
         self.client = _get_client()
         self.target = self.lib.vigem_target_x360_alloc()
@@ -113,6 +123,23 @@ class VirtualPad:
             self.target = None
             raise ViGEmError(f"Impossibile creare il controller virtuale (codice {err:#x})")
         self.report = XUSB_REPORT()
+        self.on_rumble = on_rumble  # si puo' cambiare dopo (scambio dei giocatori)
+
+        def cb(_client, _target, large, small, _led, _user):
+            try:
+                if self.on_rumble:
+                    self.on_rumble(int(large), int(small))
+            except Exception:  # un errore qui non deve arrivare al driver
+                pass
+        self._notify = NOTIFICATION(cb)  # riferimento tenuto: se il GC lo libera, il driver chiamerebbe memoria libera
+        self.lib.vigem_target_x360_register_notification(self.client, self.target, self._notify, None)
+
+    def user_index(self) -> int | None:
+        """Numero XInput (0-3) assegnato da Windows: il «giocatore» visto da giochi ed emulatori."""
+        i = ctypes.c_ulong(0)
+        if self.target and self.lib.vigem_target_x360_get_user_index(self.client, self.target, ctypes.byref(i)) == VIGEM_ERROR_NONE:
+            return int(i.value)
+        return None
 
     @staticmethod
     def _axis(v: float) -> int:
@@ -133,6 +160,8 @@ class VirtualPad:
     def close(self):
         if self.target:
             try:
+                if self._notify:
+                    self.lib.vigem_target_x360_unregister_notification(self.target)
                 self.update()  # rilascia tutto prima di scollegare
                 self.lib.vigem_target_remove(self.client, self.target)
             finally:

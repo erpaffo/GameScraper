@@ -69,6 +69,7 @@ h2.sec { font-size: 17px; margin: 18px 0 8px; }
 .g-head img { width: 104px; aspect-ratio: 3/4; object-fit: cover; border-radius: 10px; background: var(--bg3); }
 .g-head h2 { margin: 2px 0 6px; font-size: 19px; }
 .g-btns { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.g-status { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .g-desc { color: #c3c7d4; font-size: 14px; margin-top: 14px; max-height: 9.5em; overflow: hidden; }
 
 /* controller */
@@ -108,12 +109,151 @@ h2.sec { font-size: 17px; margin: 18px 0 8px; }
 #pad-rotate { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: #0a0b10;
   font-size: 18px; z-index: 5; text-align: center; padding: 30px; }
 @media (orientation: portrait) { #pad-rotate { display: flex; } }
+/* layout PlayStation: croce in alto a sinistra, levette in basso e simmetriche (come il DualSense) */
+#pad.lay-ps #ls { left: 24vw; top: auto; bottom: 5vh; }
+#pad.lay-ps #rs { right: 24vw; bottom: 5vh; }
+#pad.lay-ps .dpad { left: 5vw; top: 19vh; bottom: auto; }
+#pad.lay-ps .mid { top: 24vh; }
+#pad.lay-ps .mid .small { font-size: 11px; width: 13vh; }
+#pad.lay-ps .fb { font-size: 22px; }
+#pad.lay-ps .fb.y { color: #3ddc97; border-color: #3ddc9766; } #pad.lay-ps .fb.b { color: #ff5f6d; border-color: #ff5f6d66; }
+#pad.lay-ps .fb.a { color: #7fb2ff; border-color: #7fb2ff66; } #pad.lay-ps .fb.x { color: #ff8ad8; border-color: #ff8ad866; }
+/* layout Switch (Pro Controller): disposizione come Xbox, lettere Nintendo, tasti chiari */
+#pad.lay-switch .fb { color: #e8eaf2; border-color: rgba(255,255,255,.25); }
+#pad.lay-switch .mid .small { font-size: 20px; }
+/* modifica della disposizione: i gruppi di tasti si trascinano */
+#pad.editing .pad-area > * { outline: 2px dashed rgba(255,255,255,.35); outline-offset: 3px; cursor: move; }
+#pad.editing .pad-area > .edit-sel { outline: 2px solid var(--accent); }
+#pad.editing .pad-bar { display: none; }
+#pad-edit { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); z-index: 4; display: flex; gap: 8px;
+  align-items: center; background: rgba(10,11,16,.92); border: 1px solid rgba(255,255,255,.12); border-radius: 12px;
+  padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+#pad-edit[hidden] { display: none; }
+#pad-edit input[type=range] { width: 110px; vertical-align: middle; }
+/* controller vero collegato al telefono: tasti a schermo nascosti, niente obbligo di orizzontale */
+#pad.hw .pad-area { visibility: hidden; }
+#pad.hw #pad-rotate { display: none; }
+#pad-hw { position: absolute; inset: 56px 16px 16px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; text-align: center; color: #dfe3f5; }
+#pad-hw[hidden] { display: none; }
+#pad-hw .hw-ico { font-size: 56px; }
+#pad-hw p { margin: 0; opacity: .75; max-width: 320px; }
 #pad-settings { position: absolute; inset: 6vh 10vw; background: var(--bg2); border-radius: 16px; padding: 14px 18px; z-index: 6;
   overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
 #pad-settings h3 { margin: 0; }
 #pad-settings label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 #pad-settings label.chk { flex-direction: row; align-items: center; gap: 8px; }
 #pad-settings input[type=checkbox] { width: auto; }
+/* layout GameCube: A grande verde al centro, B rosso piccolo, C-stick giallo */
+#pad.lay-gc .fb.a { width: 44%; height: 44%; left: 28%; top: 28%; bottom: auto; color: #3ddc84; border-color: #3ddc84; font-size: 24px; }
+#pad.lay-gc .fb.x { left: 0; top: 52%; width: 28%; height: 28%; color: #ff5f5f; border-color: #ff5f5f99; }
+#pad.lay-gc .fb.b { right: 0; top: 18%; border-radius: 40%; color: #d8dae6; border-color: #d8dae666; }
+#pad.lay-gc .fb.y { top: 0; left: 30%; border-radius: 40%; color: #d8dae6; border-color: #d8dae666; }
+#pad.lay-gc #rs { border-color: #f5c51888; } #pad.lay-gc #rs .knob { background: radial-gradient(circle at 35% 30%, #f5d74a, #a3820f); }
+#pad.lay-gc .shoulder.l1 { opacity: .35; }
+
+/* aspetti speciali: un pannello al posto dei tasti standard */
+.sp { display: none; inset: 0; }
+#pad.special .pad-area > :not(.sp) { display: none; }
+#pad.special .pad-area > .sp.on { display: block; }
+.sp > * { position: absolute; }
+.sp [data-btn], .sp .slider, .wh-center, .gun-r, #gun-click { display: flex; align-items: center; justify-content: center; text-align: center;
+  font-weight: 800; background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.12); border-radius: 16px; color: var(--text); }
+.wm-row { display: flex; gap: 4vw; justify-content: center; }
+.wm-row > [data-btn] { position: static; flex: 1; }
+#pad.portrait .pad-bar { top: calc(4px + var(--safe-t)); }
+@media (orientation: portrait) { #pad.portrait #pad-rotate { display: none; } }
+@media (orientation: landscape) { #pad.portrait #pad-rotate { display: flex; } }
+/* Buzz!: pulsante rosso grande e 4 colori, telefono in verticale */
+.bz-red { left: 50%; top: 9vh; width: 62vw; height: 62vw; max-height: 36vh; max-width: 36vh; transform: translateX(-50%);
+  border-radius: 50% !important; font-size: 30px; background: radial-gradient(circle at 40% 35%, #ff6b6b, #b40f1f) !important;
+  border: 6px solid #ffffff33 !important; box-shadow: 0 10px 40px #ff2a3a55, inset 0 -8px 20px #0005; }
+.bz { left: 8vw; right: 8vw; height: 10.5vh; font-size: 20px; color: #111 !important; border: 0 !important; }
+.bz.blue { top: 49vh; background: #3d8bff !important; } .bz.orange { top: 61vh; background: #ff9a2e !important; }
+.bz.green { top: 73vh; background: #34c26c !important; } .bz.yellow { top: 85vh; background: #f5d032 !important; }
+#pad.lay-buzz .bz-red.down { transform: translateX(-50%) scale(.94); filter: brightness(1.3); }
+.bz.down { filter: brightness(1.35); transform: scale(.97); }
+/* Wii Remote verticale */
+.wm-dpad { left: 50%; top: 9vh; width: 44vw; height: 44vw; max-height: 26vh; max-width: 26vh; transform: translateX(-50%); }
+.wm-a { left: 50%; top: 37vh; width: 22vw; height: 22vw; transform: translateX(-50%); border-radius: 50% !important; font-size: 26px; }
+#sp-wii .wm-a.down { transform: translateX(-50%) scale(.94); }
+.wm-mid { left: 10vw; right: 10vw; top: 52vh; height: 7vh; }
+.wm-home { border-radius: 50% !important; flex: 0 0 7vh !important; color: var(--accent) !important; }
+.wm-12 { left: 28vw; right: 28vw; top: 63vh; height: 9vh; flex-direction: column; gap: 2vh; height: 20vh; font-size: 20px; }
+.wm-b { left: 6vw; right: 6vw; bottom: 3vh; height: 12vh; font-size: 22px; border-radius: 24px !important; }
+/* Wii Remote in orizzontale */
+.ws-dpad { left: 6vw; top: 22vh; width: 40vh; height: 40vh; }
+.ws-mid { left: 36vw; right: 36vw; top: 20vh; height: 9vh; }
+.ws-ab { left: 38vw; right: 38vw; top: 60vh; height: 12vh; display: flex; gap: 3vw; }
+.ws-ab > [data-btn] { position: static; flex: 1; }
+.ws-12 { right: 5vw; top: 26vh; display: flex; gap: 4vw; }
+.ws-12 > [data-btn] { position: static; width: 22vh; height: 22vh; border-radius: 50%; font-size: 28px; }
+/* Wii Remote + Nunchuk */
+.nc-c { left: 6vw; top: 14vh; width: 14vw; height: 10vh; }
+.nc-stick { left: 4vw; top: 30vh; }
+.nc-z { left: 6vw; bottom: 4vh; width: 22vw; height: 16vh; font-size: 22px; }
+.sp .dpad { bottom: auto; }
+.nc-dpad { left: auto; right: 30vw; top: 14vh; width: 26vh; height: 26vh; }
+.nc-mid { left: 34vw; right: 34vw; top: 46vh; height: 8vh; }
+.nc-a { right: 8vw; top: 16vh; width: 20vh; height: 20vh; border-radius: 50% !important; font-size: 24px; }
+.nc-b { right: 4vw; bottom: 4vh; width: 24vw; height: 18vh; font-size: 22px; }
+.nc-12 { right: 32vw; bottom: 6vh; width: 20vw; height: 12vh; }
+/* volante */
+.pedal { top: 16vh; bottom: 4vh; width: 16vw; flex-direction: column; justify-content: flex-end !important; padding-bottom: 2vh;
+  background: linear-gradient(to top, rgba(255,255,255,.04), rgba(255,255,255,.12)) !important; }
+.pedal.brake { left: 3vw; } .pedal.gas { right: 3vw; }
+.pedal.down.gas { background: linear-gradient(to top, #1f7a45, #3ddc84) !important; }
+.pedal.down.brake { background: linear-gradient(to top, #7a1f2a, #ff5f5f) !important; }
+.wh-lb { left: 21vw; top: 16vh; width: 14vw; height: 14vh; } .wh-rb { right: 21vw; top: 16vh; width: 14vw; height: 14vh; }
+.wh-wheel { left: 50%; top: 18vh; width: 44vh; height: 44vh; transform: translateX(-50%); }
+.wh-rim { position: absolute; inset: 0; border-radius: 50%; border: 10px solid #4b5370; display: flex; align-items: center; justify-content: center;
+  font-size: 40px; color: var(--muted); transition: transform .05s linear; }
+.wh-center { left: 50%; top: 64vh; transform: translateX(-50%); padding: 6px 14px; font-size: 13px; }
+.wh-btns { left: 22vw; right: 22vw; bottom: 4vh; height: 11vh; }
+/* chitarra */
+.gt-frets { left: 3vw; top: 14vh; bottom: 4vh; width: 52vw; display: flex; gap: 1.5vw; }
+.gt-frets > div { position: static; flex: 1; border-radius: 14px !important; border: 0 !important; opacity: .75; }
+.gt-frets .g { background: #2fbf63 !important; } .gt-frets .r { background: #e8424f !important; } .gt-frets .y { background: #f2cf2e !important; }
+.gt-frets .b { background: #3d86f2 !important; } .gt-frets .o { background: #f28a2e !important; }
+.gt-frets > div.down { opacity: 1; box-shadow: 0 0 22px #fff8; }
+.gt-strum { left: 58vw; right: 15vw; top: 14vh; bottom: 18vh; display: flex; flex-direction: column; gap: 2vh; }
+.gt-strum > div { position: static; flex: 1; }
+.gt-whammy { right: 3vw; top: 14vh; bottom: 18vh; width: 10vw; flex-direction: column; font-size: 12px; }
+.gt-mid { left: 58vw; right: 3vw; bottom: 3vh; height: 11vh; }
+/* arcade */
+.ar-dpad { left: 6vw; top: 22vh; width: 46vh; height: 46vh; }
+.ar-btns { right: 4vw; top: 20vh; width: 48vw; height: 56vh; display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.5vh 2vw; }
+.ar-btns > div { position: static; border-radius: 50% !important; font-size: 15px; aspect-ratio: 1; max-height: 26vh; justify-self: center; width: 26vh; }
+.ar-btns > div:nth-child(-n+3) { color: #4aa3ff; } .ar-btns > div:nth-child(n+4) { color: #ff5f5f; }
+.ar-mid { left: 30vw; right: 30vw; top: 12vh; height: 8vh; }
+/* pistola ottica / touchpad */
+.gun-area { left: 3vw; top: 12vh; bottom: 4vh; right: 22vw; border: 2px dashed rgba(255,255,255,.2); border-radius: 14px; display: flex;
+  align-items: center; justify-content: center; color: var(--muted); font-size: 13px; text-align: center; padding: 20px; margin: auto; }
+.gun-area i { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border: 2px solid #ff5f5f; border-radius: 50%; display: none; }
+.gun-area i.on { display: block; }
+.gun-side { right: 3vw; top: 12vh; bottom: 4vh; width: 17vw; display: flex; flex-direction: column; gap: 1.6vh; }
+.gun-side > * { position: static !important; flex: 1; }
+.gun-side #gun-click { flex: 0 0 auto; font-size: 11px; padding: 6px; }
+.gun-r { flex-direction: column; }
+.gun-r.down { background: var(--accent) !important; }
+/* microfono */
+.mic-box { inset: 12vh 8vw 6vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3vh; text-align: center; }
+.mic-btn { width: 56vw; height: 56vw; max-width: 40vh; max-height: 40vh; border-radius: 50%; border: 6px solid #ffffff22; font-size: 22px; font-weight: 800;
+  background: radial-gradient(circle at 40% 35%, #6d7cff, #3326a8); color: #fff; }
+.mic-btn.on { background: radial-gradient(circle at 40% 35%, #ff6b6b, #b40f1f); }
+.mic-meter { width: 70vw; height: 12px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; }
+.mic-meter i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #3ddc84, #f5c518, #ff5f5f); }
+/* sala giocatori */
+#pad-players { font-size: 13px; }
+#pad-info b.pl { padding: 1px 7px; border-radius: 99px; color: #111; }
+#pad.portrait #pad-info { flex: 0 0 auto; max-width: 18vw; }
+.wm-b { gap: 8px; }
+#pad-lobby { position: absolute; inset: 8vh 10vw; background: var(--bg2); border-radius: 16px; padding: 14px 18px; z-index: 6;
+  display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+#pad-lobby h3 { margin: 0; }
+#lobby-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+#lobby-list button { border: 2px solid; border-radius: 12px; background: rgba(255,255,255,.04); padding: 12px; text-align: left; }
+#lobby-list button.me { background: rgba(255,255,255,.14); }
 #toast { position: fixed; left: 50%; bottom: calc(80px + var(--safe-b)); transform: translateX(-50%); z-index: 50;
   background: #2a2f42; padding: 10px 16px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.5); max-width: 90%; }
 #toast.err { background: #5a2430; }

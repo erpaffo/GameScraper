@@ -470,6 +470,14 @@ function gameScreen(id) {
           const i = this.i; this.d = null; await this.render(main); this.i = i; this.update();
         } });
       this.buttons.push({ label: d.user.favorite ? "★ Preferito" : "☆ Preferito", cls: d.user.favorite ? "on" : "", run: () => toggleFav(BP.lib.byId.get(id)) });
+      if (d.user.last_played) this.buttons.push({ label: "✖ Togli dai recenti", run: async () => {
+        try { await api(`/api/game/${id}/flag`, { body: { field: "last_played", value: null } }); } catch (e) { return toast(e.message, true); }
+        const g = BP.lib.byId.get(id);
+        if (g) g.grp.last = 0;
+        BP.details.delete(id);
+        toast("Tolto da «Continua a giocare»");
+        const i = this.i; this.d = null; await this.render(main); this.i = Math.min(i, this.buttons.length - 1); this.update();
+      } });
       if (d.versions.length > 1) this.buttons.push({ label: `Versioni (${d.versions.length})`, run: () => push(versionsScreen(d)) });
       if (d.shots) this.buttons.push({ label: `📷 Schermate (${d.shots})`, run: () => push(shotsScreen(d)) });
       this.buttons.push({ label: "Indietro", run: () => pop() });

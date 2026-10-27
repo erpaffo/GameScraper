@@ -12,7 +12,7 @@ Gli eseguibili sono nella pagina **Releases** del repository:
 | macOS 11+ (Apple Silicon) | `GameScraper-<versione>-macos-arm64.zip` | estrai e apri `GameScraper.app` |
 | Linux (64 bit) | `GameScraper-<versione>-linux-x64.tar.gz` | estrai e avvia `GameScraper/GameScraper` |
 
-Al primo avvio scegli la cartella delle ROM in **Impostazioni › Nuovi giochi › 📁 Cambia…**. Configurazione, cache e libreria stanno nella cartella dell'utente (`%LOCALAPPDATA%\GameScraper` su Windows, `~/Library/Application Support/GameScraper` su macOS, `~/.local/share/GameScraper` su Linux); per una versione **portatile** metti un `config.toml` accanto all'eseguibile. Nella stessa cartella c'è anche `gamescraper-cli` per i comandi da terminale (vedi [Comandi](#comandi)).
+Al primo avvio scegli la cartella delle ROM in **Impostazioni › Nuovi giochi › 📁 Cambia…**. Configurazione, cache e libreria stanno nella cartella dell'utente (`%LOCALAPPDATA%\GameScraper` su Windows, `~/Library/Application Support/GameScraper` su macOS, `~/.local/share/GameScraper` su Linux); per una versione **portatile** metti un `config.toml` accanto all'eseguibile. Exe e sorgenti usano la **stessa** cartella dati, così libreria, preferiti e impostazioni non si dividono in due copie; per usarne un'altra imposta `GAMESCRAPER_CONFIG=<percorso del config.toml>`. Altre cartelle ROM (altri dischi) si aggiungono in **Impostazioni › Nuovi giochi › Altre cartelle ROM**; le copie di sicurezza dei tuoi dati sono in **Impostazioni › Libreria**. Nella stessa cartella c'è anche `gamescraper-cli` per i comandi da terminale (vedi [Comandi](#comandi)).
 
 Gli eseguibili non sono firmati: su Windows SmartScreen chiede conferma ("Ulteriori informazioni › Esegui comunque"), su macOS la prima volta apri l'app con clic destro › Apri (oppure `xattr -cr GameScraper.app`).
 
@@ -29,7 +29,8 @@ pyinstaller packaging/gamescraper.spec --noconfirm     # risultato in dist/GameS
 
 ```powershell
 python -m pip install -r requirements.txt
-copy config.example.toml config.toml     # poi modifica roms = "..." e le credenziali
+copy config.example.toml config.toml     # solo la prima volta, se non hai ancora usato l'exe: poi modifica roms = "..." e le credenziali
+# se la cartella dati dell'utente esiste gia' (%LOCALAPPDATA%\GameScraper) si usa quella, come l'exe
 python -m gamescraper run                # tutte le console trovate
 python -m gamescraper run -p snes,psx    # solo alcune console
 ```

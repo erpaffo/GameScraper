@@ -38,7 +38,7 @@ STORE_SITES = {
 }
 STORE_BADGE = {"steam": ("S", "#1b2838"), "epic": ("E", "#2a2a2a"), "gog": ("G", "#6e2a9b"), "amazon": ("A", "#ff9900"),
                "battlenet": ("B", "#148eff"), "xbox": ("X", "#107c10"), "minecraft": ("M", "#5b8731"),
-               "manual": ("PC", "#3b4a63"), "online": ("🌐", "#2d5a8c")}
+               "manual": ("PC", "#3b4a63"), "ports": ("P", "#c0562b"), "online": ("🌐", "#2d5a8c")}
 
 PC_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
 <stop offset="0" stop-color="#5b8cff"/><stop offset="1" stop-color="#7c5cff"/></linearGradient></defs>

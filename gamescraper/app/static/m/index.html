@@ -65,6 +65,8 @@
     <div class="pad-bar">
       <button id="pad-exit">✕</button>
       <span id="pad-info">Collegamento…</span>
+      <button id="pad-players" title="Sala giocatori: chi è chi, scambio dei posti">👥</button>
+      <button id="pad-src" title="Controller a schermo o controller collegato al telefono">🎮 Auto</button>
       <button id="pad-gyro" title="Giroscopio">🌀 Spento</button>
       <button id="pad-shot" title="Schermata">📷</button>
       <button id="pad-set">⚙</button>
@@ -88,10 +90,109 @@
         <div class="fb a" data-btn="a">A</div>
       </div>
       <div class="stick" id="rs" data-stick="r"><div class="knob"></div></div>
+
+      <!-- aspetti speciali: sostituiscono i tasti qui sopra (stessi tasti Xbox inviati al PC) -->
+      <div class="sp" id="sp-buzz">
+        <div class="bz-red" data-btn="a">BUZZ!</div>
+        <div class="bz blue" data-btn="y">Blu</div>
+        <div class="bz orange" data-btn="x">Arancione</div>
+        <div class="bz green" data-btn="b">Verde</div>
+        <div class="bz yellow" data-btn="rb">Giallo</div>
+      </div>
+      <div class="sp" id="sp-wii">
+        <div class="dpad wm-dpad"><span class="du">▲</span><span class="dd">▼</span><span class="dl">◀</span><span class="dr">▶</span></div>
+        <div class="wm-a" data-btn="a">A</div>
+        <div class="wm-row wm-mid"><div data-btn="back">−</div><div data-btn="guide" class="wm-home">⌂</div><div data-btn="start">+</div></div>
+        <div class="wm-row wm-12"><div data-btn="x">1</div><div data-btn="y">2</div></div>
+        <div class="wm-b" data-btn="b">B <span class="small">(grilletto)</span></div>
+      </div>
+      <div class="sp" id="sp-wiis">
+        <div class="dpad ws-dpad"><span class="du">▲</span><span class="dd">▼</span><span class="dl">◀</span><span class="dr">▶</span></div>
+        <div class="wm-row ws-mid"><div data-btn="back">−</div><div data-btn="guide" class="wm-home">⌂</div><div data-btn="start">+</div></div>
+        <div class="ws-ab"><div data-btn="b">B</div><div data-btn="a">A</div></div>
+        <div class="ws-12"><div data-btn="x">1</div><div data-btn="y">2</div></div>
+      </div>
+      <div class="sp" id="sp-nunchuk">
+        <div class="nc-c" data-btn="lb">C</div>
+        <div class="stick nc-stick" data-stick="l"><div class="knob"></div></div>
+        <div class="nc-z" data-btn="lt">Z</div>
+        <div class="dpad nc-dpad"><span class="du">▲</span><span class="dd">▼</span><span class="dl">◀</span><span class="dr">▶</span></div>
+        <div class="wm-row nc-mid"><div data-btn="back">−</div><div data-btn="guide" class="wm-home">⌂</div><div data-btn="start">+</div></div>
+        <div class="nc-a" data-btn="a">A</div>
+        <div class="nc-b" data-btn="b">B</div>
+        <div class="wm-row nc-12"><div data-btn="x">1</div><div data-btn="y">2</div></div>
+      </div>
+      <div class="sp" id="sp-wheel">
+        <div class="slider pedal brake" data-axis="lt" data-min="0.3"><span>FRENO</span></div>
+        <div class="slider pedal gas" data-axis="rt" data-min="0.3"><span>GAS</span></div>
+        <div class="wh-lb" data-btn="lb">LB</div>
+        <div class="wh-rb" data-btn="rb">RB</div>
+        <div class="wh-wheel"><div class="wh-rim" id="wh-rim">⊕</div></div>
+        <button class="wh-center" id="wh-center" type="button">⟲ Centra</button>
+        <div class="wm-row wh-btns"><div data-btn="x">X</div><div data-btn="y">Y</div><div data-btn="b">B</div><div data-btn="a">A</div><div data-btn="start">☰</div></div>
+      </div>
+      <div class="sp" id="sp-guitar">
+        <div class="gt-frets"><div class="g" data-btn="a"></div><div class="r" data-btn="b"></div><div class="y" data-btn="y"></div>
+          <div class="b" data-btn="x"></div><div class="o" data-btn="lb"></div></div>
+        <div class="gt-strum"><div data-btn="up">▲ plettro</div><div data-btn="down">▼ plettro</div></div>
+        <div class="slider gt-whammy" data-axis="rx"><span>leva</span></div>
+        <div class="wm-row gt-mid"><div data-btn="back">Select</div><div data-btn="rb">⭐</div><div data-btn="start">Start</div></div>
+      </div>
+      <div class="sp" id="sp-arcade">
+        <div class="dpad ar-dpad"><span class="du">▲</span><span class="dd">▼</span><span class="dl">◀</span><span class="dr">▶</span></div>
+        <div class="ar-btns"><div data-btn="x">LP</div><div data-btn="y">MP</div><div data-btn="rb">HP</div>
+          <div data-btn="a">LK</div><div data-btn="b">MK</div><div data-btn="rt">HK</div></div>
+        <div class="wm-row ar-mid"><div data-btn="back">Select</div><div data-btn="start">Start</div><div data-btn="lb">LB</div><div data-btn="lt">LT</div></div>
+      </div>
+      <div class="sp" id="sp-gun">
+        <div class="gun-area" id="gun-area"><span id="gun-hint">Tocca dove vuoi mirare: il dito tiene premuto il tasto sinistro del mouse</span><i id="gun-dot"></i></div>
+        <div class="gun-side">
+          <div class="gun-r" id="gun-r">🖱 Destro<br><span class="small">ricarica</span></div>
+          <div data-btn="a">A</div><div data-btn="b">B</div><div data-btn="start">Start</div>
+          <button id="gun-click" type="button">👆 Clic al tocco: sì</button>
+        </div>
+      </div>
+      <div class="sp" id="sp-mic">
+        <div class="mic-box">
+          <button class="mic-btn" id="mic-btn" type="button">🎤<br>Inizia a cantare</button>
+          <div class="mic-meter"><i id="mic-level"></i></div>
+          <p id="mic-info" class="muted small">Il microfono del telefono diventa un microfono del PC (SingStar in PCSX2).</p>
+        </div>
+      </div>
     </div>
+    <div id="pad-edit" hidden>
+      <span id="pe-sel">Trascina un tasto per spostarlo</span>
+      <label>Dimensione <input type="range" id="pe-size" min="0.6" max="1.8" step="0.05" value="1" disabled></label>
+      <button class="btn" id="pe-reset" type="button">Ripristina</button>
+      <button class="btn primary" id="pe-done" type="button">Fatto</button>
+    </div>
+    <div id="pad-hw" hidden><div class="hw-ico">🎮</div><b id="pad-hw-name">Controller collegato</b>
+      <p>Lo uso come controller del PC: i tasti a schermo sono nascosti.</p>
+      <button class="btn" id="pad-hw-touch">Usa i tasti a schermo</button></div>
     <div id="pad-rotate">Ruota il telefono in orizzontale 🔄</div>
+    <div id="pad-lobby" hidden>
+      <h3>👥 Sala giocatori</h3>
+      <div id="lobby-list"></div>
+      <p class="muted small">Tocca un posto per spostarti lì (se è occupato vi scambiate). Nessuno deve ricollegarsi.</p>
+      <button class="btn primary" id="lobby-close" type="button">Fatto</button>
+    </div>
     <div id="pad-settings" hidden>
       <h3>Impostazioni del controller</h3>
+      <label>Aspetto del controller
+        <select id="ps-layout">
+          <optgroup label="Controller"><option value="xbox">Xbox</option><option value="ps">PlayStation (levette in basso)</option>
+            <option value="switch">Nintendo Switch / Classic Controller</option><option value="gc">GameCube</option>
+            <option value="arcade">Arcade a 6 tasti (picchiaduro)</option></optgroup>
+          <optgroup label="Wii"><option value="wii">Wii Remote (verticale)</option><option value="wiis">Wii Remote in orizzontale (come un NES)</option>
+            <option value="nunchuk">Wii Remote + Nunchuk</option></optgroup>
+          <optgroup label="Speciali"><option value="buzz">Buzz! (pulsante e 4 colori)</option><option value="wheel">Volante (inclina il telefono)</option>
+            <option value="guitar">Chitarra (Guitar Hero / Rock Band)</option><option value="gun">Pistola ottica / touchpad (mouse del PC)</option>
+            <option value="mic">Microfono (SingStar)</option></optgroup>
+        </select></label>
+      <label class="chk" id="ps-nlabel-row"><input type="checkbox" id="ps-nlabel"> Switch: invia le lettere (A Nintendo = A) invece delle posizioni Xbox</label>
+      <label class="chk"><input type="checkbox" id="ps-auto"> Aspetto automatico dal gioco in corso: PlayStation (PS1/PS2/PSP), Switch, GameCube, Wii Remote, Buzz!, Guitar Hero, SingStar</label>
+      <label class="chk"><input type="checkbox" id="ps-rumble"> Vibra quando il gioco fa vibrare il controller <span class="muted small">(non su iPhone/iPad)</span></label>
+      <button class="btn" id="ps-edit" type="button">✏️ Sposta e ridimensiona i tasti</button>
       <label>Giroscopio
         <select id="ps-gyro"><option value="off">Spento</option><option value="dsu">Movimento per gli emulatori (DSU)</option>
           <option value="aim">Mira (muove la levetta destra)</option></select></label>
