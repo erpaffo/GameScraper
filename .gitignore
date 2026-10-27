@@ -34,5 +34,10 @@ scrape.lock
 Thumbs.db
 desktop.ini
 
-docs/
+# note private (il manuale in docs/*.md invece e' nel repository)
+docs/obsidian/
+docs/TODO.md
+# manuale generato (sito MkDocs e PDF)
+site/
+docs/GameScraper-manuale.pdf
 release.*

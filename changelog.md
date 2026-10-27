@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.4 (2026-10-27)
+### Migliorato
+
+- Manuale completo in docs/ (13 capitoli: ogni funzione, come aggiungere store online e store PC, configurazione e comandi): sito su GitHub Pages e PDF con indice tra i file di ogni release
+### In corso
+
+- Prezzi delle key da allkeyshop (lista desideri) — `gamescraper/keyprices.py` `tests/test_keyprices.py` `tests/fixtures/aks_product.html` `tests/fixtures/aks_search.json` `tests/fixtures/aks_history.json`
+
 ## 0.5.3 (2026-10-27)
 ### Migliorato
 

@@ -1,0 +1,53 @@
+# Manuale di GameScraper: sito (MkDocs Material, GitHub Pages) e PDF (tools/docs_pdf.py, stesso ordine di "nav").
+site_name: GameScraper
+site_description: Manuale di GameScraper, la libreria di giochi per ROM e store PC
+repo_url: https://github.com/erpaffo/GameScraper
+docs_dir: docs
+exclude_docs: |
+  obsidian/
+  TODO.md
+
+theme:
+  name: material
+  language: it
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.highlight
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle: { icon: material/weather-night, name: Tema scuro }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle: { icon: material/weather-sunny, name: Tema chiaro }
+
+markdown_extensions:
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Introduzione: index.md
+  - Primi passi:
+      - Installazione e aggiornamenti: installazione.md
+      - La libreria: libreria.md
+  - Giochi:
+      - ROM e scraping dei dati: rom-e-scraping.md
+      - Giocare: giocare.md
+      - Giochi PC dagli store: store-pc.md
+  - Store:
+      - Aggiungere store online e store PC: store-online.md
+      - Giochi gratis, lista desideri, port PC: extra.md
+  - Altri modi di giocare:
+      - Telefono e streaming: telefono-streaming.md
+      - Big Picture: bigpicture.md
+  - Personalizzare:
+      - Temi e plugin: ESTENSIONI.md
+  - Manutenzione:
+      - Dati, copie di sicurezza e salute: manutenzione.md
+      - Riferimento (configurazione e comandi): riferimento.md

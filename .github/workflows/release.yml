@@ -161,6 +161,19 @@ jobs:
           # verrebbero estratti in cartelle e mancherebbero nella release
           skip-decompress: true
 
+      # manuale in PDF tra i file della release (stesso testo del sito, vedi docs.yml)
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Manuale PDF
+        run: |
+          pip install pyyaml
+          sudo apt-get update
+          sudo apt-get install -y pandoc texlive-xetex texlive-latex-recommended texlive-latex-extra \
+            texlive-fonts-recommended texlive-lang-italian fonts-dejavu-core
+          python tools/docs_pdf.py "release/GameScraper-${GITHUB_REF_NAME#v}-manuale.pdf"
+
       # testo della release: la sezione "## <versione>" di changelog.md (fino alla sezione seguente)
       - name: Novità della versione
         run: |

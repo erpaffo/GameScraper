@@ -2,6 +2,8 @@
 
 Scraper di metadati e media per collezioni di ROM, divise per console, con una libreria in stile Playnite (desktop e Big Picture per il controller). È il successore moderno e molto più veloce di [Skyscraper](https://github.com/Gemba/skyscraper) (C++/Qt5).
 
+**Manuale completo** (ogni funzione, come aggiungere gli store, configurazione e comandi): sul sito GitHub Pages del progetto, in PDF tra i file di ogni release, oppure in [`docs/`](docs/index.md).
+
 ## Download
 
 Gli eseguibili sono nella pagina **Releases** del repository:

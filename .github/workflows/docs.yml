@@ -1,0 +1,57 @@
+# Manuale: sito su GitHub Pages (MkDocs Material) con il PDF scaricabile, a ogni modifica di docs/.
+# Prima volta: Settings > Pages > Build and deployment > Source = "GitHub Actions".
+
+name: Documentazione
+
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**", "mkdocs.yml", "tools/docs_pdf.py", ".github/workflows/docs.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Strumenti (MkDocs, Pandoc, XeLaTeX)
+        run: |
+          pip install mkdocs-material
+          sudo apt-get update
+          sudo apt-get install -y pandoc texlive-xetex texlive-latex-recommended texlive-latex-extra \
+            texlive-fonts-recommended texlive-lang-italian fonts-dejavu-core
+
+      # il PDF va in docs/ prima del sito: cosi' MkDocs lo pubblica e il link nell'introduzione funziona
+      - name: PDF
+        run: python tools/docs_pdf.py docs/GameScraper-manuale.pdf
+
+      - name: Sito
+        run: mkdocs build --strict
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
