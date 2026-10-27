@@ -1447,7 +1447,7 @@ async function followPortJob(pv) {
 function keyPrice(w, money) {
   const full = w.regular || w.price;
   const cut = full ? Math.round((1 - w.key_price / full) * 100) : 0;
-  return `<span class="wl-key" title="Negozi di key (GG.deals)${w.key_low != null ? ` · minimo storico ${money(w.key_low, w.currency)}` : ""}">🔑 `
+  return `<span class="wl-key" title="Negozi di key${w.key_low != null ? ` · minimo storico ${money(w.key_low, w.currency)}` : ""}">🔑 `
     + `${cut > 0 ? `<span class="cut">-${cut}%</span>` : ""}<b>${money(w.key_price, w.currency)}</b></span>`;
 }
 
@@ -1472,7 +1472,8 @@ async function renderWishlist(pv) {
   pv.innerHTML = `<div class="page">
     <div class="page-head"><div><h2>♡ Lista desideri</h2>
       <p class="muted small">Prezzi degli store ufficiali${s.has_key ? " (IsThereAnyDeal: Steam, GOG, Epic, Humble e altri)" : " (Steam; aggiungi la chiave IsThereAnyDeal per confrontare tutti gli store)"}.
-        ${s.has_gg ? "Negozi di key: GG.deals (prezzo più basso, giochi PC con codice Steam)." : "Aggiungi la chiave GG.deals (⚙) per vedere anche il prezzo più basso dei negozi di key."}
+        Negozi di key: allkeyshop (una richiesta al minuto e ogni gioco una volta al giorno, per non farsi bloccare dal sito)${s.has_gg ? " e GG.deals" : ""}.
+        Clicca un gioco per vedere tutte le offerte e i minimi storici.
         Avviso quando lo sconto supera il ${s.threshold}%, quando il prezzo (anche nei negozi di key) scende sotto quello che indichi o tocca il minimo storico.</p></div>
       <div class="row"><button class="btn" id="wl-import">⬇ Importa da Steam</button><button class="btn" id="wl-check">↻ Controlla prezzi</button>
         <button class="btn" id="wl-settings">⚙</button></div></div>
@@ -1486,11 +1487,14 @@ async function renderWishlist(pv) {
       <button class="btn primary" id="wl-save">Salva</button></div>
     <div class="wl-add"><input class="field grow" id="wl-q" placeholder="Cerca un gioco da aggiungere…" autocomplete="off"><div id="wl-res"></div></div>
     ${d.checking ? `<p class="muted small">Controllo dei prezzi in corso…</p>` : ""}
-    <div class="wl-list">${d.items.map((w) => `<div class="wl-row${w.alert ? " has-alert" : ""}${w.alert && !w.seen ? " new" : ""}">
+    ${d.aks.blocked_until * 1000 > Date.now() ? `<p class="muted small">allkeyshop ha rifiutato le richieste: riprovo dalle ${new Date(d.aks.blocked_until * 1000).toLocaleTimeString("it", { hour: "2-digit", minute: "2-digit" })}.</p>`
+      : d.aks.queued ? `<p class="muted small">🔑 allkeyshop: ${d.aks.queued} giochi da controllare (al massimo ${Math.ceil(d.aks.wait / 60)} min)…</p>` : ""}
+    <div class="wl-list">${d.items.map((w) => `<div class="wl-row${w.alert ? " has-alert" : ""}${w.alert && !w.seen ? " new" : ""}" data-wid="${esc(w.id)}" title="Clicca per tutte le offerte">
       <div class="wl-img">${steamImg(w) ? `<img src="${steamImg(w)}" alt="" onerror="this.remove()">` : ""}</div>
       <div class="wl-t"><b>${esc(w.title)}</b>${w.owned ? ` <span class="tag">già in libreria</span>` : ""}
         <span class="muted small">${w.checked ? `${esc(w.shop || "")} · controllato ${new Date(w.checked * 1000).toLocaleDateString("it")}` : "prezzo non ancora controllato"}
-          ${w.low != null ? ` · minimo storico ${money(w.low, w.currency)}` : ""}</span>${priceSpark(w.history, money, w.currency)}</div>
+          ${w.low != null ? ` · minimo storico ${money(w.low, w.currency)}` : ""}
+          ${w.aks_status === "missing" ? " · 🔑 non trovato su allkeyshop" : !w.aks_status && !w.aks_checked ? " · 🔑 key: in coda" : ""}</span>${priceSpark(w.history, money, w.currency)}</div>
       <div class="wl-price">${w.cut ? `<span class="cut">-${w.cut}%</span><s class="muted">${money(w.regular, w.currency)}</s>` : ""}<b>${money(w.price, w.currency)}</b>
         ${w.key_price != null ? keyPrice(w, money) : ""}</div>
       <div class="wl-alert">${w.alert ? `🔔 ${esc(w.alert)}` : ""}</div>
@@ -1526,6 +1530,7 @@ async function renderWishlist(pv) {
     const o = t.closest("[data-open]");
     if (o) { e.preventDefault(); api("/api/open", { body: { url: o.dataset.open } }); return; }
     if (t.dataset.del) { await api(`/api/wishlist/item/${encodeURIComponent(t.dataset.del)}`, { method: "DELETE" }); renderWishlist(pv); pollWishBadge(); }
+    else if (t.closest(".wl-row") && !t.closest("button, input, label, a")) openWishPrices(t.closest(".wl-row").dataset.wid);
     else if (t.id === "wl-settings") pv.querySelector(".wl-settings").hidden = !pv.querySelector(".wl-settings").hidden;
     else if (t.id === "wl-save") {
       const body = { country: $("#wl-country").value, threshold: $("#wl-thr").value };
@@ -1551,6 +1556,62 @@ async function renderWishlist(pv) {
     try { await api(`/api/wishlist/item/${encodeURIComponent(t.dataset.target)}`, { body: { target: t.value } }); } catch (err) { return toast(err.message, true); }
     toast("Prezzo desiderato salvato");
   };
+}
+
+/** Dettaglio dei prezzi di un gioco della lista: Steam, key più economica, tutte le offerte e minimi storici (allkeyshop). */
+async function openWishPrices(wid) {
+  const dlg = $("#wl-dlg"), box = $("#wl-dlg-body");
+  const money = (v) => (v == null ? "—" : v.toLocaleString("it", { style: "currency", currency: "EUR" }));
+  const day = (s) => (s ? new Date(s).toLocaleDateString("it") : "");
+  let d;
+  try { d = await api(`/api/wishlist/prices/${encodeURIComponent(wid)}`); } catch (e) { return toast(e.message, true); }
+  const a = d.aks || {};
+  const steam = a.steam || (a.aks_steam != null ? { price: a.aks_steam } : null);
+  const keys = (a.offers || []).filter((o) => !o.official && !o.account);
+  const accounts = (a.offers || []).filter((o) => o.account);
+  const official = (a.offers || []).filter((o) => o.official);
+  const offerRow = (o) => `<tr><td>${esc(o.shop)}</td><td class="muted">${esc(o.region)}</td><td class="muted">${esc(o.edition)}</td>
+    <td>${o.coupon ? `<code>${esc(o.coupon)}</code>` : ""}</td>
+    <td class="num">${o.original > o.price ? `<s class="muted">${money(o.original)}</s> ` : ""}<b>${money(o.price)}</b></td></tr>`;
+  const table = (rows) => `<table class="wp-table"><thead><tr><th>Negozio</th><th>Regione</th><th>Edizione</th><th>Coupon</th><th class="num">Prezzo</th></tr></thead>
+    <tbody>${rows.map(offerRow).join("")}</tbody></table>`;
+  const status = d.blocked_until * 1000 > Date.now() ? `allkeyshop ha rifiutato le richieste: riprovo dalle ${new Date(d.blocked_until * 1000).toLocaleTimeString("it", { hour: "2-digit", minute: "2-digit" })}.`
+    : d.queue != null ? `🔑 In coda su allkeyshop${d.queue ? ` (${d.queue} giochi prima di questo)` : ""}: circa ${Math.max(1, Math.round(d.wait / 60))} min.`
+    : a.missing ? "Gioco non trovato su allkeyshop: incolla qui sotto l'indirizzo della sua pagina."
+    : a.error ? `Ultimo controllo non riuscito (${esc(a.error)}): riprovo domani.`
+    : d.checked ? `Prezzi di allkeyshop del ${new Date(d.checked * 1000).toLocaleString("it", { dateStyle: "short", timeStyle: "short" })}.` : "";
+  box.innerHTML = `<div class="row"><h3 class="grow">${esc(d.title)}</h3>
+      ${a.url ? `<button class="btn" data-open="${esc(a.url)}">allkeyshop ↗</button>` : ""}
+      ${steam?.url ? `<button class="btn" data-open="${esc(steam.url)}">Steam ↗</button>` : ""}
+      <button class="icon-btn" id="wp-close" title="Chiudi">✕</button></div>
+    <p class="muted small">${status}</p>
+    <div class="wp-cards">
+      <div class="wp-card"><span class="muted small">Steam</span>
+        <b>${steam ? money(steam.price) : "—"}</b>${steam?.cut ? ` <span class="cut">-${steam.cut}%</span> <s class="muted">${money(steam.regular)}</s>` : ""}
+        <span class="muted small">Minimo storico: ${money(a.steam_low)} ${a.steam_low_date ? `(${day(a.steam_low_date)})` : ""}</span></div>
+      <div class="wp-card key"><span class="muted small">Key più economica</span>
+        <b>${a.key ? money(a.key.price) : "—"}</b>
+        <span class="muted small">${a.key ? `${esc(a.key.shop)} · ${esc(a.key.region)}${a.key.coupon ? ` · coupon <code>${esc(a.key.coupon)}</code>` : ""}` : ""}</span>
+        <span class="muted small">Minimo storico: ${money(a.key_low)} ${a.key_low_date ? `(${day(a.key_low_date)})` : ""}</span></div>
+    </div>
+    ${keys.length ? `<h4>Key (${keys.length} offerte)</h4>${table(keys)}` : ""}
+    ${official.length ? `<h4>Store ufficiali</h4>${table(official)}` : ""}
+    ${accounts.length ? `<details><summary class="muted small">Offerte account, non key (${accounts.length})</summary>${table(accounts)}</details>` : ""}
+    <div class="row wp-foot"><input class="field grow" id="wp-url" placeholder="Gioco sbagliato o non trovato? Incolla l'indirizzo della pagina su allkeyshop" value="">
+      <button class="btn" id="wp-url-save">Usa</button><button class="btn" id="wp-refresh" title="Rimette il gioco in testa alla coda">↻ Aggiorna</button></div>`;
+  box.onclick = async (e) => {
+    const t = e.target, o = t.closest("[data-open]");
+    if (o) { api("/api/open", { body: { url: o.dataset.open } }); return; }
+    if (t.id === "wp-close") dlg.close();
+    else if (t.id === "wp-refresh" || t.id === "wp-url-save") {
+      const body = t.id === "wp-url-save" ? { url: $("#wp-url").value.trim() } : {};
+      try { await api(`/api/wishlist/prices/${encodeURIComponent(wid)}`, { body }); } catch (err) { return toast(err.message, true); }
+      openWishPrices(wid);
+    }
+  };
+  if (!dlg.open) dlg.showModal();
+  clearTimeout(openWishPrices.tmr);
+  if (d.queue != null) openWishPrices.tmr = setTimeout(() => dlg.open && openWishPrices(wid), 15000);  // in coda: si aggiorna da solo
 }
 
 /* ---- pagina: statistiche */

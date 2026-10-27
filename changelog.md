@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.4 (2026-10-27)
+## 0.6.0 (2026-10-27)
 ### Migliorato
 
 - Manuale completo in docs/ (13 capitoli: ogni funzione, come aggiungere store online e store PC, configurazione e comandi): sito su GitHub Pages e PDF con indice tra i file di ogni release
@@ -8,9 +8,10 @@
 ### Corretto
 
 - Messaggi d'errore degli store che spiegano il motivo: verifica anti-bot (Cloudflare) non superabile con richieste semplici, accesso negato, pagina non trovata, sito che limita le richieste
-### In corso
 
-- Prezzi delle key da allkeyshop (lista desideri) — `gamescraper/keyprices.py` `tests/test_keyprices.py` `tests/fixtures/aks_product.html` `tests/fixtures/aks_search.json` `tests/fixtures/aks_history.json`
+### Aggiunto
+
+- Lista desideri: prezzi delle key da allkeyshop. Quando aggiungi un gioco viene cercato su allkeyshop; cliccando un gioco della lista vedi prezzo e sconto su Steam con il minimo storico, la key più economica, tutte le altre offerte (negozio, regione, edizione, coupon; gli account a parte) e il minimo storico delle key. Per non farsi bloccare: una richiesta al minuto, ogni gioco una volta al giorno, storico una volta al mese e pausa di 6 ore se il sito rifiuta. Se il gioco trovato è sbagliato puoi incollare l'indirizzo giusto
 
 ## 0.5.3 (2026-10-27)
 ### Migliorato

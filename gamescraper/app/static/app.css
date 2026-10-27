@@ -445,6 +445,18 @@ body.foryou-mode #plugin-view { padding: 0; }
 .wl-price .wl-key b { font-size: 13px; color: #9be3b5; }
 .wl-alert { color: #ffcc4d; font-size: 12px; }
 .wl-target { display: flex; align-items: center; gap: 4px; font-size: 12px; } .wl-target input { width: 80px; }
+.wl-row[data-wid] { cursor: pointer; } .wl-row[data-wid]:hover { background: rgba(255,255,255,.06); }
+/* dettaglio prezzi (allkeyshop) */
+#wl-dlg .dlg-body { padding-top: 14px; }
+.wp-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 8px 0 4px; }
+.wp-card { display: flex; flex-direction: column; gap: 3px; background: rgba(255,255,255,.04); border-radius: 10px; padding: 10px 12px; }
+.wp-card b { font-size: 22px; } .wp-card.key b { color: #9be3b5; }
+.wp-card .cut { background: #2a8c5a; color: #fff; font-weight: 700; padding: 1px 6px; border-radius: 4px; font-size: 12px; width: fit-content; }
+.wp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.wp-table th { text-align: left; font-weight: 500; color: var(--muted, #8a93a6); padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.wp-table td { padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,.04); }
+.wp-table .num { text-align: right; white-space: nowrap; }
+.wp-foot { margin-top: 14px; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .tile-s { background: rgba(255,255,255,.04); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
 .tile-s b { font-size: 26px; line-height: 1.1; } .tile-s span { font-size: 13px; opacity: .75; } .tile-s small { opacity: .8; }

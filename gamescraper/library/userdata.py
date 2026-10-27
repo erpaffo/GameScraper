@@ -44,8 +44,10 @@ class UserData:
             if col not in cols:
                 self.db.execute(f"ALTER TABLE user_games ADD COLUMN {col} {typ}")
         wcols = {r[1] for r in self.db.execute("PRAGMA table_info(wishlist)")}
-        # prezzo migliore sui negozi di key (GG.deals): attuale, minimo storico, pagina di confronto
-        for col, typ in (("key_price", "REAL"), ("key_low", "REAL"), ("key_url", "TEXT")):
+        # prezzo migliore sui negozi di key (GG.deals o allkeyshop): attuale, minimo storico, pagina di confronto;
+        # aks = offerte e minimi storici di allkeyshop (JSON), aks_checked = ultimo controllo
+        for col, typ in (("key_price", "REAL"), ("key_low", "REAL"), ("key_url", "TEXT"), ("aks", "TEXT"),
+                         ("aks_checked", "REAL")):
             if col not in wcols:
                 self.db.execute(f"ALTER TABLE wishlist ADD COLUMN {col} {typ}")
         self.db.commit()
@@ -121,7 +123,7 @@ class UserData:
 
     # ------------------------------------------------------------ lista dei desideri
     WISH_COLS = ("id", "title", "steam_appid", "itad_id", "target", "added", "price", "regular", "cut", "shop", "url",
-                 "low", "currency", "checked", "alert", "seen", "key_price", "key_low", "key_url")
+                 "low", "currency", "checked", "alert", "seen", "key_price", "key_low", "key_url", "aks", "aks_checked")
 
     def wishlist(self) -> list[dict]:
         cur = self._q(f"SELECT {', '.join(self.WISH_COLS)} FROM wishlist ORDER BY title COLLATE NOCASE")
