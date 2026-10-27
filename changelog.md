@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2 (2026-10-27)
+### Aggiunto
+
+- Installer per ogni sistema accanto alle versioni portatili: Windows setup.exe (senza permessi di amministratore), macOS .dmg, Linux .deb
+- Aggiornamento dall'app: in Impostazioni › Info «⬇ Installa e riavvia» scarica la nuova versione adatta (installer o portatile), ne verifica il checksum, si chiude e si riapre aggiornata; dati e config.toml accanto all'exe restano
+
 ## 0.5.1 (2026-10-27)
 ### Corretto
 

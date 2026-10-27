@@ -2479,11 +2479,28 @@ async function checkUpdate(force = false, show = false) {
     : u.error && !u.latest ? `Impossibile controllare: ${u.error}`
     : u.latest ? `Hai l'ultima versione (${u.current}).` : "Nessuna release pubblica su GitHub (repository privato o senza release): controllo non disponibile.";
   if (show) {
-    $("#about-update").innerHTML = esc(txt) + (u.newer && u.url ? ` <a href="#" data-open="${esc(u.url)}">Scarica ↗</a>` : "");
+    $("#about-update").innerHTML = esc(txt) + (u.newer && u.url ? ` <a href="#" data-open="${esc(u.url)}">Scarica ↗</a>` : "")
+      + (u.newer && u.install_kind ? ` <button class="btn primary" id="about-install">⬇ Installa e riavvia</button>` : "");
+    if ($("#about-install")) $("#about-install").onclick = installUpdate;
   } else if (u.newer && store.get("updateSeen", "") !== u.latest) {
     store.set("updateSeen", u.latest); // un solo avviso per versione
     toast(`${txt} Impostazioni › Info`);
   }
+}
+
+/** Scarica e installa la nuova versione (dal server); alla fine l'app si chiude e si riapre aggiornata. */
+async function installUpdate() {
+  const box = $("#about-update");
+  let st;
+  try { st = await api("/api/update/install", { body: {} }); } catch (e) { return toast(e.message, true); }
+  while (st.status === "running") {
+    const pct = st.total ? ` ${Math.floor((100 * st.done) / st.total)}%` : "";
+    box.innerHTML = `${esc(st.phase)}${pct}<div class="loadbar-track"><i></i></div>`;
+    await new Promise((r) => setTimeout(r, 700));
+    try { st = await api("/api/update/install"); } catch { st = { status: "done", phase: "Riavvio con la nuova versione…" }; } // server gia' chiuso
+  }
+  box.textContent = st.phase;
+  if (st.status === "error") toast(st.phase, true);
 }
 
 /* ---- salute */

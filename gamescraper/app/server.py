@@ -1887,9 +1887,30 @@ def create_app(cfg) -> FastAPI:
         from ..cache import Cache
         c = Cache(cfg.cache)
         try:
-            return updates.check(c, force=bool(force))
+            return {**updates.check(c, force=bool(force)), "install_kind": updates.install_kind()}
         finally:
             c.close()
+
+    @app.post("/api/update/install")
+    def api_update_install():
+        """Scarica e installa la nuova versione in sottofondo; poi l'app si chiude e si riapre aggiornata."""
+        from .. import updates
+        from ..cache import Cache
+        if updates.STATE["status"] != "running":
+            def run():
+                c = Cache(cfg.cache)
+                try:  # 1,5 s perche' la pagina legga "riavvio" prima che il processo esca
+                    updates.install(c, quit=lambda: threading.Timer(1.5, os._exit, args=(0,)).start())
+                finally:
+                    c.close()
+            updates.STATE["status"] = "running"
+            threading.Thread(target=run, daemon=True).start()
+        return updates.STATE
+
+    @app.get("/api/update/install")
+    def api_update_install_state():
+        from .. import updates
+        return updates.STATE
 
     # ------------------------------------------------------------ salute: problemi da sistemare, in un posto solo
     @app.get("/api/health")

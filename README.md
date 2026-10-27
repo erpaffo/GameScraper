@@ -6,11 +6,13 @@ Scraper di metadati e media per collezioni di ROM, divise per console, con una l
 
 Gli eseguibili sono nella pagina **Releases** del repository:
 
-| Sistema | File | Avvio |
+| Sistema | Installer | Portatile |
 |---|---|---|
-| Windows 10/11 (64 bit) | `GameScraper-<versione>-windows-x64.zip` | estrai e apri `GameScraper.exe` |
-| macOS 11+ (Apple Silicon) | `GameScraper-<versione>-macos-arm64.zip` | estrai e apri `GameScraper.app` |
-| Linux (64 bit) | `GameScraper-<versione>-linux-x64.tar.gz` | estrai e avvia `GameScraper/GameScraper` |
+| Windows 10/11 (64 bit) | `GameScraper-<versione>-windows-x64-setup.exe` (senza permessi di amministratore) | `GameScraper-<versione>-windows-x64.zip`: estrai e apri `GameScraper.exe` |
+| macOS 11+ (Apple Silicon) | `GameScraper-<versione>-macos-arm64.dmg`: trascina l'app in Applicazioni | `GameScraper-<versione>-macos-arm64.zip`: estrai e apri `GameScraper.app` |
+| Linux (64 bit) | `gamescraper_<versione>_amd64.deb` (Debian, Ubuntu, Mint…): `sudo apt install ./gamescraper_*.deb` | `GameScraper-<versione>-linux-x64.tar.gz`: estrai e avvia `GameScraper/GameScraper` |
+
+**Aggiornamenti**: in **Impostazioni › Info**, quando esce una versione nuova compare **⬇ Installa e riavvia**: l'app scarica il file giusto per come è installata (installer o portatile), lo verifica, si chiude e si riapre aggiornata. I dati e un eventuale `config.toml` accanto all'exe restano. Con il `.deb` si apre l'installatore del sistema, che chiede la password.
 
 Al primo avvio scegli la cartella delle ROM in **Impostazioni › Nuovi giochi › 📁 Cambia…**. Configurazione, cache e libreria stanno nella cartella dell'utente (`%LOCALAPPDATA%\GameScraper` su Windows, `~/Library/Application Support/GameScraper` su macOS, `~/.local/share/GameScraper` su Linux); per una versione **portatile** metti un `config.toml` accanto all'eseguibile. Exe e sorgenti usano la **stessa** cartella dati, così libreria, preferiti e impostazioni non si dividono in due copie; per usarne un'altra imposta `GAMESCRAPER_CONFIG=<percorso del config.toml>`. Altre cartelle ROM (altri dischi) si aggiungono in **Impostazioni › Nuovi giochi › Altre cartelle ROM**; le copie di sicurezza dei tuoi dati sono in **Impostazioni › Libreria**. Nella stessa cartella c'è anche `gamescraper-cli` per i comandi da terminale (vedi [Comandi](#comandi)).
 

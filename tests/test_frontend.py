@@ -401,6 +401,61 @@ def test_updates():
         httpx.get = real
     print("ok  versione, changelog e controllo aggiornamenti")
 
+    # installazione dall'app (portatile Windows): scarica lo zip giusto, verifica il checksum, prepara lo script
+    import hashlib
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("GameScraper/GameScraper.exe", "nuovo")
+    data = buf.getvalue()
+    base = f"https://github.com/{updates.REPO}/releases/download/v99.0.0/"
+    assets = [{"name": "GameScraper-99.0.0-windows-x64-setup.exe", "browser_download_url": base + "setup.exe", "size": 1},
+              {"name": "GameScraper-99.0.0-windows-x64.zip", "browser_download_url": base + "w.zip", "size": len(data),
+               "digest": "sha256:" + hashlib.sha256(data).hexdigest()}]
+
+    class Stream:
+        def __init__(self, url):
+            self.url = url
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+        def raise_for_status(self):
+            pass
+        def iter_bytes(self, n):
+            yield data
+
+    launched, quits = [], []
+    saved = (httpx.get, httpx.stream, updates.install_kind, updates.app_dir, updates._detach)
+    httpx.get = lambda url, **k: httpx.Response(200, json={"tag_name": "v99.0.0", "assets": assets},
+                                                request=httpx.Request("GET", url))
+    httpx.stream = lambda method, url, **k: Stream(url)
+    updates._detach = launched.append
+    try:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+            c = Cache(Path(t))
+            updates.install_kind = lambda: None
+            updates.install(c, quit=lambda: quits.append(1))
+            assert updates.STATE["status"] == "error" and "sorgenti" in updates.STATE["phase"], updates.STATE
+            updates.install_kind, updates.app_dir = (lambda: "win"), (lambda: Path(t) / "app")
+            (Path(t) / "app").mkdir()
+            updates.install(c, quit=lambda: quits.append(1))
+            assert updates.STATE["status"] == "done" and quits == [1], updates.STATE
+            script = Path(launched[-1][-1])
+            body = script.read_text(encoding="utf-8")
+            assert str(Path(t) / "app") in body and "/MIR" not in body and "/PURGE" not in body, body
+            new = script.parent / "new" / "GameScraper" / "GameScraper.exe"
+            assert new.read_text() == "nuovo", "lo zip va estratto prima di sostituire l'app"
+            assets[1]["digest"] = "sha256:0"  # file manomesso: niente installazione
+            launched.clear()
+            updates.install(c, quit=lambda: quits.append(1))
+            assert updates.STATE["status"] == "error" and "checksum" in updates.STATE["phase"] and not launched
+            c.close()
+    finally:
+        httpx.get, httpx.stream, updates.install_kind, updates.app_dir, updates._detach = saved
+    print("ok  aggiornamento dall'app: download verificato, script di sostituzione, niente dati cancellati")
+
 
 def test_wishlist_keyshops():
     """Lista desideri: prezzo ufficiale (Steam) + prezzo dei negozi di key (GG.deals); la soglia vale anche per le key.
