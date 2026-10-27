@@ -2729,6 +2729,34 @@ class LocalGuard:
 WINDOW_FOCUS = {"fn": None}  # impostata quando l'app gira in una finestra nativa
 
 
+def window_titlebar(hwnd: int, color: str) -> dict:
+    """Barra del titolo e bordo di una finestra Windows del colore dato ('#rgb' o '#rrggbb').
+    Windows 11: colore esatto. Windows 10 (2004+): solo barra scura o chiara, secondo la luminosita'."""
+    import ctypes
+    h = str(color).strip().lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))  # ValueError se il colore non e' esadecimale
+    dark = r * 299 + g * 587 + b * 114 < 128_000
+    dwm, user32 = ctypes.windll.dwmapi, ctypes.windll.user32
+
+    def put(attr: int, value: int) -> bool:
+        v = ctypes.c_int(value)
+        return dwm.DwmSetWindowAttribute(ctypes.c_void_p(hwnd), attr, ctypes.byref(v), 4) == 0
+
+    out = {"dark": put(20, dark) or put(19, dark)}  # DWMWA_USE_IMMERSIVE_DARK_MODE (19 sulle build prima della 2004)
+    rgb = r | g << 8 | b << 16  # COLORREF: 0x00BBGGRR
+    out["color"] = put(35, rgb)  # DWMWA_CAPTION_COLOR, solo Windows 11
+    if out["color"]:
+        put(34, rgb)  # DWMWA_BORDER_COLOR
+        put(36, 0xFFFFFF if dark else 0x000000)  # DWMWA_TEXT_COLOR
+    # Windows 10 ridisegna la barra solo quando la finestra cambia stato attivo: la si "riattiva"
+    active = user32.GetForegroundWindow() == hwnd
+    user32.SendMessageW(ctypes.c_void_p(hwnd), 0x0086, not active, 0)  # WM_NCACTIVATE
+    user32.SendMessageW(ctypes.c_void_p(hwnd), 0x0086, active, 0)
+    return out
+
+
 def _focus_running_window(port: int) -> bool:
     import json as _json
     import urllib.request
@@ -2831,6 +2859,15 @@ def run(cfg, port: int = 8765, browser: bool = False, bigpicture: bool = False):
                         return {"ok": True, **_json.loads(r.read())}
                 except Exception as e:
                     return {"ok": False, "error": str(getattr(e, "read", lambda: b"")().decode() or e)}
+
+            def set_titlebar(self, color):
+                """Barra del titolo della finestra del colore del tema (chiamata dal frontend)."""
+                if sys.platform != "win32":
+                    return None
+                try:
+                    return window_titlebar(webview.windows[0].native.Handle.ToInt64(), color)
+                except Exception as e:  # colore non valido o finestra non pronta: resta quella di sistema
+                    return {"error": str(e)}
 
             def focus_window(self):
                 """Riporta in primo piano la finestra dell'app quando il gioco si chiude."""

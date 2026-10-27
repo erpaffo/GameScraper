@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.3 (2026-10-27)
+### Migliorato
+
+- Barra del titolo e bordo della finestra seguono il tema: colore esatto su Windows 11, barra scura o chiara su Windows 10
+
 ## 0.5.2 (2026-10-27)
 ### Aggiunto
 

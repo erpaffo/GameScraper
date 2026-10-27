@@ -273,11 +273,18 @@ async function loadExtensions() {
   document.querySelectorAll("link[data-ext]").forEach((l) => l.remove());
   const theme = ext.themes.find((t) => t.id === ext.active_theme);
   const css = theme && (mode === "bigpicture" ? theme.bigpicture : theme.desktop);
+  // barra del titolo e bordo della finestra nativa dello stesso colore dello sfondo del tema
+  function titlebarColor() {
+    const bg = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
+    const send = () => window.pywebview?.api?.set_titlebar?.(bg);
+    if (window.pywebview?.api) send(); else window.addEventListener("pywebviewready", send, { once: true });
+  }
   if (css) {
     const l = document.createElement("link");
     l.rel = "stylesheet"; l.href = css; l.dataset.ext = "theme";
+    l.onload = titlebarColor;
     document.head.appendChild(l);
-  }
+  } else titlebarColor();
   document.documentElement.dataset.theme = ext.active_theme || "default";
   GS.plugins = ext.plugins;
   for (const p of ext.plugins.filter((x) => x.enabled)) {
