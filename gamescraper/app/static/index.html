@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GameScraper</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M8 0l8 8-8 8-8-8z%22 fill=%22%235b8cff%22/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/app.css?v={{v}}">
 </head>
 <body>
 <div id="app">
@@ -313,6 +313,26 @@
           <tbody id="acc-table"></tbody></table>
         <div class="row end"><span class="muted small" id="acc-info"></span><button class="btn primary" id="acc-refresh">↻ Aggiorna store</button></div>
         <div id="acc-progress"></div>
+        <h4>🔄 Aggiornamento degli store</h4>
+        <p class="muted small">Gli elenchi letti restano salvati nella cache: all'avvio i giochi degli store
+          ci sono <b>già</b> e l'app può rileggere i siti in sottofondo. Più store vengono letti in parallelo
+          (uno per sito, così nessun server riceve richieste doppie).</p>
+        <div class="row wrap">
+          <select class="field" id="srf-mode">
+            <option value="startup">All'avvio dell'app</option>
+            <option value="daily">Ogni giorno alle</option>
+            <option value="manual">Solo manualmente</option>
+          </select>
+          <input type="time" class="field" id="srf-time" value="03:00">
+          <label class="small" title="Quanti siti diversi leggere contemporaneamente">in parallelo
+            <input class="field" type="number" id="srf-workers" min="1" max="8" style="width:70px"></label>
+          <span class="muted small grow" id="srf-info"></span>
+          <button class="btn" id="srf-save" type="button">Salva</button>
+          <button class="btn primary" id="srf-run" type="button" title="Aggiunge alla coda tutti gli store non ancora letti">⟳ Aggiorna tutti</button>
+          <button class="btn" id="srf-stop" type="button" hidden>■ Interrompi</button>
+        </div>
+        <div id="srf-progress"></div>
+        <pre class="log" id="srf-log"></pre>
         <h4>Altri store PC (non ufficiali)</h4>
         <p class="muted small">Elenchi di giochi PC che non sono store ufficiali, in due categorie: <b>📦 Repack</b> (giochi molto
           compressi, pensati per chi ha una connessione lenta: il download è più corto ma l'installazione richiede tempo)
@@ -504,9 +524,9 @@
     </div>
   </div>
 </div>
-<script src="/static/core.js"></script>
+<script src="/static/core.js?v={{v}}"></script>
 <script src="/static/reco.js"></script>
 <script src="/static/setup.js"></script>
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v={{v}}"></script>
 </body>
 </html>

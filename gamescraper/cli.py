@@ -172,8 +172,11 @@ def cmd_export_frontend(args):
 
 
 def cmd_app(args):
+    from . import applog
     from .app.server import run
     cfg = C.load(args.config)
+    # log su file: --log (predefinito <cache>/logs/diagnostica.log) oppure GAMESCRAPER_LOG=<percorso>
+    applog.start(getattr(args, "log", None) or os.environ.get("GAMESCRAPER_LOG"), cfg.cache)
     run(cfg, port=args.port, browser=args.browser, bigpicture=args.bigpicture)
 
 
@@ -187,9 +190,9 @@ def _local_server(cfg):
 
     import uvicorn
 
-    from .app.server import create_app
+    from .app.server import LocalGuard, create_app
     free = port if _port_free(port) else next(q for q in range(port + 1, port + 50) if _port_free(q))
-    srv = uvicorn.Server(uvicorn.Config(create_app(cfg), host="127.0.0.1", port=free, log_level="warning"))
+    srv = uvicorn.Server(uvicorn.Config(LocalGuard(create_app(cfg), free), host="127.0.0.1", port=free, log_level="warning"))
     threading.Thread(target=srv.run, daemon=True).start()
     while not srv.started:
         time.sleep(0.05)
@@ -271,6 +274,8 @@ def main(argv=None):
     ap_app.add_argument("--port", type=int, default=8765)
     ap_app.add_argument("--browser", action="store_true", help="apri nel browser invece che in una finestra")
     ap_app.add_argument("--bigpicture", action="store_true", help="avvia in modalita' Big Picture (schermo intero, controller)")
+    ap_app.add_argument("--log", nargs="?", const="1", default=None,
+                        help="scrive i log su file (predefinito <cache>/logs/diagnostica.log; puoi indicare un percorso)")
     sub.add_parser("platforms")
     pl = sub.add_parser("play", help="avvia un gioco e attende che finisca (usato da Sunshine/Moonlight)")
     pl.add_argument("--key", required=True, help="chiave del gioco (es. snes/...)")

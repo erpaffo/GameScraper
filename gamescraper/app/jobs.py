@@ -308,6 +308,287 @@ class PcStoreJob(StoreJob):
 
 
 @dataclass
+class StoreRefreshJob:
+    """Coda di aggiornamento degli store: fino a `workers` in parallelo, gli altri aspettano.
+
+    Ogni click su ⟳ (o su «Aggiorna tutti») aggiunge elenchi alla coda: si avviano subito i primi
+    `workers` che non puntano allo stesso sito, gli altri restano in attesa e partono appena un
+    posto si libera. Gli elenchi letti restano in cache.db, quindi la libreria si ricostruisce da lì
+    anche senza rete e l'aggiornamento può girare in sottofondo.
+    """
+
+    status: str = "idle"  # idle | running | done | error
+    phase: str = ""
+    log: list[str] = field(default_factory=list)
+    targets: list[dict] = field(default_factory=list)  # una riga per store: in coda, in corso o finito
+    workers: int = 4
+    games: int = 0
+    started: float = 0
+    finished: float = 0
+    stop: bool = False
+    only: list[str] | None = None  # id/url degli elenchi scelti: None = tutti
+    queue: list[str] = field(default_factory=list)  # id in attesa di partire
+    active: int = 0
+    rebuilding: bool = False
+    managing: bool = False
+    lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    cache_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    idle_evt: threading.Event = field(default_factory=threading.Event, repr=False)
+
+    def say(self, msg):
+        from .. import applog
+        text = _plain(msg)
+        self.log.append(text)
+        del self.log[:-300]
+        applog.write("store", text)
+
+    # ---------------------------------------------------------------- stato per l'interfaccia
+    def _row(self, tid: str) -> dict | None:
+        for t in self.targets:
+            if t["id"] == tid:
+                return t
+        return None
+
+    def state(self) -> dict:
+        from .. import applog
+        now = time.time()
+        with self.lock:
+            rows = []
+            for t in self.targets:
+                elapsed = (t.get("finished") or now) - (t.get("started") or now)
+                page, pages = t.get("page") or 0, t.get("pages") or 0
+                rate = (elapsed / page) if page and elapsed > 0 else None  # secondi per pagina
+                eta = (pages - page) * rate if rate and pages > page else None
+                rows.append({**t, "elapsed": round(elapsed, 1),
+                             "rate": round(rate, 2) if rate else None,
+                             "eta": round(eta) if eta else None,
+                             "position": (self.queue.index(t["id"]) + 1) if t["id"] in self.queue else None})
+            done = sum(1 for t in self.targets if t["status"] in ("done", "error", "skip"))
+            queued = sum(1 for t in self.targets if t["status"] == "pending")
+            running = sum(1 for t in self.targets if t["status"] == "running")
+            phase = self.phase
+            if self.stop and self.status == "running":
+                phase = ("Interruzione: aggiornamento della libreria…" if self.rebuilding
+                         else "Interruzione in corso…")
+            return {"status": self.status, "phase": phase, "log": self.log[-40:], "targets": rows,
+                    "done": done, "total": len(self.targets), "games": self.games,
+                    "parallel": self.workers, "queued": queued, "running": running,
+                    # durante la ricostruzione finale non c'è più niente da interrompere
+                    "stoppable": self.status == "running" and not self.rebuilding,
+                    "log_file": str(applog.current()) if applog.enabled() else None,
+                    "started": self.started, "finished": self.finished, "stopping": self.stop,
+                    "tasks": [{"name": t["label"], "total": 1,
+                               "done": 1 if t["status"] in ("done", "error", "skip") else 0}
+                              for t in self.targets]}
+
+    # ---------------------------------------------------------------- coda
+    def add(self, cfg, items: list[dict], after_build=None) -> int:
+        """Mette in coda gli store indicati (quelli già in attesa o in corso vengono saltati)."""
+        from ..storerefresh import settings as schedule
+        added = 0
+        with self.lock:
+            self.workers = schedule(cfg)["workers"]
+            busy = {t["id"] for t in self.targets if t["status"] in ("pending", "running")}
+            for it in items:
+                if it["id"] in busy:
+                    continue
+                row = dict(it, status="pending", games=0, seen=0, pages=0, page=0, type=None, error=None,
+                           log=[], started=None, finished=None)
+                self.targets = [t for t in self.targets if t["id"] != it["id"]] + [row]
+                self.queue.append(it["id"])
+                busy.add(it["id"])
+                added += 1
+            if added:
+                self.status = "running"
+                self.stop = False
+                self.started = self.started or time.time()
+                self.finished = 0
+                self.idle_evt.clear()
+                self.phase = f"{len(self.queue)} in coda · {self.workers} in parallelo"
+                self.say(self.phase)
+            manage = added > 0 and not self.managing
+            if manage:
+                self.managing = True
+        if manage:
+            threading.Thread(target=self._manage, args=(cfg, after_build), daemon=True).start()
+        return added
+
+    def run(self, cfg, after_build):
+        """Aggiorna subito tutti gli store (o quelli in `only`) e attende la fine."""
+        from ..storerefresh import targets as collect
+        plan = collect(cfg)
+        if self.only:
+            wanted = {str(x) for x in self.only}
+            plan = [t for t in plan if t["id"] in wanted or t["url"] in wanted]
+        if not plan:
+            self.status, self.phase = "done", "Nessuno store configurato"
+            self.finished = time.time()
+            self.idle_evt.set()
+            return
+        if self.add(cfg, plan, after_build):
+            self.idle_evt.wait()
+
+    def stop_now(self):
+        """Interrompe: la lettura in corso finisce la pagina, la coda viene scartata."""
+        from .. import applog
+        with self.lock:
+            self.stop = True
+            for tid in list(self.queue):
+                row = self._row(tid)
+                if row is not None:
+                    row["status"], row["finished"] = "skip", time.time()
+            self.queue.clear()
+        applog.write("piano", "interruzione richiesta")
+
+    # ---------------------------------------------------------------- esecuzione
+    def _pick(self) -> dict | None:
+        """Prossima riga da avviare (lock già preso): mai due elenchi dello stesso sito insieme."""
+        from ..storerefresh import host as SR_host
+        if self.stop:
+            return None
+        busy_hosts = {SR_host(t["url"]) for t in self.targets if t["status"] == "running"}
+        for tid in list(self.queue):
+            row = self._row(tid)
+            if row is None:
+                self.queue.remove(tid)
+                continue
+            if SR_host(row["url"]) in busy_hosts:
+                continue
+            self.queue.remove(tid)
+            row["status"], row["started"] = "running", time.time()
+            return row
+        return None
+
+    def _ensure(self, cfg, after_build):
+        with self.lock:
+            while self.active < self.workers:
+                row = self._pick()
+                if row is None:
+                    break
+                self.active += 1
+                threading.Thread(target=self._worker, args=(cfg, after_build, row), daemon=True).start()
+
+    def _manage(self, cfg, after_build):
+        """Tiene i worker al limite e, a coda vuota, ricostruisce la libreria una volta sola."""
+        try:
+            while True:
+                self._ensure(cfg, after_build)
+                with self.lock:
+                    if self.stop and self.queue:  # interruzione: la coda non parte più
+                        for tid in list(self.queue):
+                            row = self._row(tid)
+                            if row is not None:
+                                row["status"], row["finished"] = "skip", time.time()
+                        self.queue.clear()
+                    if self.active or self.queue:
+                        work = True
+                    elif self.status == "running":
+                        self.rebuilding = True
+                        work = False
+                    else:  # niente da fare e niente in corso: si esce
+                        self.managing = False
+                        return
+                if not work:
+                    self._finish(cfg, after_build)
+                    with self.lock:
+                        if self.active or self.queue:  # sono arrivati nuovi store mentre si costruiva
+                            self.status = "running"
+                            continue
+                        self.managing = False
+                        return
+                time.sleep(0.25)
+        except Exception as e:  # pragma: no cover - difesa
+            with self.lock:
+                self.managing = False
+                self.status, self.phase = "error", f"Errore: {type(e).__name__}: {e}"
+            self.say(self.phase)
+            self.idle_evt.set()
+
+    def _worker(self, cfg, after_build, row):
+        try:
+            self._run_one(cfg, row)
+        finally:
+            with self.lock:
+                self.active -= 1
+
+    def _run_one(self, cfg, t: dict):
+        from .. import catalog, platforms as P
+        from ..net import make_client
+        lock = self.lock
+
+        def log_of(msg):
+            text = _plain(msg)
+            with lock:
+                t["log"].append(text)
+                del t["log"][:-40]
+            from .. import applog
+            applog.write("store", f"{t['label']}: {text}")
+
+        def progress_of(page, pages, games=0):
+            with lock:
+                t["page"], t["pages"] = page, pages
+                t["seen"] = (t.get("seen") or 0) + int(games or 0)
+
+        if self.stop:
+            with lock:
+                t["status"], t["finished"] = "skip", time.time()
+            return
+        # la connessione si apre una alla volta e nel thread che la usa: sqlite non le condivide
+        # fra thread e due PRAGMA journal_mode=WAL simultanee darebbero «database is locked»
+        with self.cache_lock:
+            cache = Cache(cfg.cache)
+        try:
+            async def go():
+                async with make_client() as client:
+                    return await catalog.fetch(cfg, cache, client, P.PLATFORMS[t["platform"]], t["url"],
+                                               log=log_of, progress=progress_of, should_stop=lambda: self.stop)
+            entries = asyncio.run(go())
+            if self.stop:  # interrotto a metà elenco: le pagine lette restano salvate
+                with lock:
+                    t.update(status="skip", finished=time.time())
+                    t["log"].append("interrotto: salvate le pagine già lette")
+                self.say(f"{t['label']}: interrotto alla pagina {t['page']}/{t['pages']}")
+                return
+            try:
+                info = catalog.cached_info(cache, t["platform"], t["url"])
+                pages, kind = max(info["total_pages"] or 0, t["pages"] or 0) or 1, info["type"]
+            except Exception:
+                pages, kind = t["pages"] or 1, None
+            with lock:
+                t.update(status="done", games=len(entries), pages=pages, type=kind, finished=time.time())
+                self.games += len(entries)
+            self.say(f"{t['label']}: {len(entries):,} giochi ({t['page']} pagine)")
+        except Exception as e:  # un sito giù non ferma gli altri
+            with lock:
+                t.update(status="error", error=f"{type(e).__name__}: {e}", finished=time.time())
+                t["log"].append(f"{type(e).__name__}: {e}")
+            self.say(f"{t['label']}: {type(e).__name__}: {e}")
+        finally:
+            cache.close()
+
+    def _finish(self, cfg, after_build):
+        from ..library.build import build
+        try:
+            self.phase = "Aggiornamento della libreria"
+            if after_build is not None:
+                after_build(build(cfg, log=self.say))
+            with self.lock:
+                ok = sum(1 for t in self.targets if t["status"] == "done")
+                errors = sum(1 for t in self.targets if t["status"] == "error")
+                extra = f", {errors} non leggibili" if errors else ""
+                self.phase = (f"Interrotto: {self.games:,} giochi da {ok} store{extra}" if self.stop
+                              else f"Completato: {self.games:,} giochi da {ok} store{extra}")
+                self.status, self.rebuilding = "done", False
+                self.finished = time.time()
+                self.idle_evt.set()
+        except Exception as e:
+            with self.lock:
+                self.status, self.phase, self.rebuilding = "error", f"Errore: {type(e).__name__}: {e}", False
+                self.idle_evt.set()
+            self.say(self.phase)
+
+
+@dataclass
 class HltbJob(StoreJob):
     """Durate dei giochi da HowLongToBeat, poi ricostruzione della libreria."""
     only_missing: bool = True

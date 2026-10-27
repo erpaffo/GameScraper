@@ -460,3 +460,59 @@ così i test non avviano il server: `tests/test_linklist.py` (12 test) e `tests/
 
 > L'estensione è **generica**: non contiene né importa elenchi di siti. L'indirizzo lo scegli tu e vale
 > l'avvertenza di sempre (scaricare solo ciò che si ha il diritto di scaricare).
+
+---
+
+## 13. Persistenza e aggiornamento automatico degli store
+
+**I giochi degli store sono già persistiti**: ogni elenco letto finisce in `cache.db` (chiavi
+`catalog:<pid>:<sha1>` per `filelist`, `catalog:type_X:<url>` per gli altri formati) e `build()` ricostruisce
+la libreria **da lì**, senza rete. All'avvio quindi i giochi degli store ci sono subito e l'aggiornamento
+può girare in sottofondo. Non è stato aggiunto un secondo archivio: si usa quello che c'era (`cache.db` +
+`library.db`), così non si duplicano dati.
+
+### Quando aggiornare
+
+Impostazione in `settings.json` → `app.store_schedule`:
+
+```json
+{"mode": "startup", "time": "03:00", "workers": 4}
+```
+
+| `mode` | Comportamento |
+|---|---|
+| `startup` (predefinito) | una volta poco dopo l'avvio dell'app (20 s, e salta se la libreria si sta ricostruendo) |
+| `daily` | una volta al giorno all'ora `time`, con l'app aperta; `app.store_schedule_last` evita doppioni |
+| `manual` | solo dal pulsante |
+
+`workers` (1–8, default 4) è quanti **siti diversi** leggere contemporaneamente.
+
+### Parallelismo
+
+`gamescraper/storerefresh.py`:
+
+- `targets(cfg)` — tutti gli elenchi: store PC (`cfg.pc_stores`, con `kind` repack/direct) e cataloghi delle
+  console (`cfg.catalogs`), ciascuno con `id`, `platform`, `url`, `label`, `group`.
+- `groups(items, workers)` — raggruppa **per host**: gli elenchi dello stesso sito finiscono sempre nello
+  stesso blocco (in sequenza), i blocchi sono bilanciati per numero di elenchi. Numero di worker =
+  min(`workers`, siti distinti).
+- Il job (`StoreRefreshJob` in `app/jobs.py`) dà a ogni worker la **propria** connessione `Cache` e il
+  proprio client HTTP, con `asyncio.run` per blocco: nessuna condivisione di connessioni fra thread.
+- Alla fine una sola `build()` + `lib.load()`.
+
+Endpoints:
+
+| Endpoint | Uso |
+|---|---|
+| `GET /api/store-refresh` | impostazione, ultimo avvio, elenchi configurati, stato del job |
+| `POST /api/store-refresh` | salva `{mode, time, workers}` |
+| `POST /api/store-refresh/run` | avvio manuale (400 se non ci sono store, 409 se già in corso) |
+| `POST /api/store-refresh/stop` | interrompe: le voci non ancora lette restano `skip` |
+
+Il job espone `targets[]` con `status` (`pending`/`running`/`done`/`error`/`skip`), `games`, `pages`,
+`type`, `error`, oltre a `done`/`total`/`games` complessivi: l'interfaccia mostra una riga per store.
+Un sito che fallisce non ferma gli altri e non cancella la cache precedente (il `fetch` scrive solo a
+lettura riuscita), quindi i giochi già noti restano nella libreria.
+
+Test: `tests/test_storerefresh.py` (10 test) — impostazioni e correzioni, elenchi PC+console, raggruppamento
+per host, job con `fetch` finto su **tre thread distinti**, errore isolato, interruzione, API.

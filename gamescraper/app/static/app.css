@@ -594,3 +594,12 @@ kbd { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18);
 .top-row .badge { position: static; white-space: nowrap; }
 .top-s { font-size: 20px; font-weight: 700; text-align: right; color: var(--accent, #5b8cff); }
 @media (max-width: 640px) { .top-row { grid-template-columns: 30px 36px 1fr 40px; } .top-row .badge { display: none; } }
+
+/* aggiornamento di tutti gli store: elenco per sito */
+.srf-list { margin: 8px 0 0; max-height: 320px; overflow: auto; }
+.srf-row { display: flex; gap: 8px; align-items: baseline; padding: 3px 2px; border-bottom: 1px solid rgba(255,255,255,.04); }
+.srf-ico { width: 1.2em; text-align: center; opacity: .8; }
+.srf-row .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srf-meta { white-space: nowrap; }
+.srf-last { margin: -2px 0 5px 22px; opacity: .75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srf-rowlog { margin: 0 0 6px 22px; max-height: 140px; overflow: auto; font-size: 11px; }

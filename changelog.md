@@ -1,18 +1,48 @@
 # Changelog
 
-Le novità più recenti in alto. L'ultima release è la **0.2.2** (`release\GameScraper-0.2.2-windows-x64.zip`).
-
-
 ## 0.5.0 (2026-10-27)
 ### Migliorato
 
 - Anteprima di un indirizzo store con «Prova»: formato, giochi e pagine totali prima di aggiungerlo
 - Avvio molto più rapido: i tuoi giochi compaiono in circa un secondo (prima 10-15) con il tema scelto e una barra di caricamento; i giochi del catalogo degli store arrivano subito dopo in sottofondo. Anche l'apertura della scheda di un gioco è più veloce
+- **Aggiornamento degli store a coda**: clicchi ⟳ su più store e ognuno entra in coda; restano attivi al massimo
+  N elenchi (impostazione «in parallelo», 1–8) e mai due dello stesso sito insieme, gli altri partono appena si
+  libera un posto. A coda vuota la libreria si ricostruisce una volta sola.
+- **Elenco di tutti gli store sempre visibile** (Impostazioni › Store › Aggiornamento degli store): per ogni riga
+  stato, posizione in coda, pagina corrente, secondi per pagina, tempo rimanente e ultima riga di log; **📄** apre il
+  log completo di quello store, **⟳** lo accoda da solo.
+- **«■ Interrompi»** ferma la lettura a fine pagina (anche a metà di un elenco da centinaia di pagine), svuota la coda
+  e **sparisce** appena non c'è più nulla da fermare (per esempio durante la ricostruzione della libreria).
+- Gli elenchi letti restano salvati: all'avvio i giochi degli store sono già in libreria e l'aggiornamento può girare
+  in sottofondo senza bloccare l'interfaccia.
+- I file dell'interfaccia hanno la versione nell'indirizzo (`?v=…`): dopo un aggiornamento il browser non riusa più una
+  copia vecchia di `app.js` (era la causa di pulsanti con comportamenti strani).
 
 ### Aggiunto
 
 - **🏆 Migliori giochi**: Top 100 di ogni console (pulsante «🏆 Top 100» nella pagina della console) e classifica globale Top 100 / Top 1000 nella barra laterale, fra giochi posseduti e scaricabili dagli store. Entrano solo i giochi con voti affidabili (almeno 2 fonti, voto della critica o 50 voti); il punteggio unisce critica (Metacritic/IGDB) e giocatori. «↻ Aggiorna voti online» chiede a IGDB e RAWG i voti dei candidati (i migliori della console su IGDB + i già ben votati), ora usati anche nelle schede dei giochi da scaricare. Nella globale lo stesso gioco su più console conta una volta (prima la versione posseduta).
 - Estensione «Link -> Store»: legge una pagina che raccoglie altri siti, raggruppa i link per intestazione (h2/h3) e li aggiunge come store di una console o come store PC (repack / download diretto)
+- **Aggiornamento automatico degli store** (console e PC): all'avvio dell'app, ogni giorno all'ora scelta oppure solo
+  manualmente, con il pulsante «⟳ Aggiorna tutti» e più store in parallelo.
+- **Log su file** con `--log` (o `GAMESCRAPER_LOG`): ora, decisioni del pianificatore, apertura di ogni elenco, **ogni
+  pagina letta** ed errori completi — serve a capire perché un sito è lento o non risponde. Il percorso del file è
+  indicato nelle impostazioni degli store.
+
+### Corretto
+
+- Sicurezza: il server dell'app risponde solo a se' stesso (blocca richieste e WebSocket da altri siti e il DNS rebinding) e le icone scaricate dai siti sono servite in sandbox, cosi' uno script in un SVG non puo' usare l'app
+- settings.json non si svuota piu' se il file e' bloccato (OneDrive, antivirus) o rotto; scritture da piu' thread senza perdite
+- Due clic rapidi (o PC e telefono insieme) non avviano piu' due volte la stessa ricerca o installazione
+- Scheda del gioco: la riga «Fonti» compare di nuovo (era sovrascritta dai link di download degli store online)
+- Eseguibili: incluso beautifulsoup4, senza il quale gli store type_a/type_b e «Link → Store» non funzionavano
+- **Aggiungere un altro store mentre una lettura è in corso lo accoda** invece di rispondere «già in corso»: usano la
+  stessa coda il pulsante ⟳, «Leggi gli elenchi» degli store PC, la pagina store delle console e il plugin Link → Store.
+- L'interruzione e l'accodamento non si bloccano più a vicenda: dopo «Interrompi» il job si chiude davvero (prima poteva
+  restare «in corso»), e più letture in parallelo non si scontrano sulle stesse connessioni al database.
+
+### Rimosso
+
+- nxbrew_giochi.md (elenco di prova non usato dal programma)
 
 ## 0.4.0 (2026-10-27)
 ### Aggiunto

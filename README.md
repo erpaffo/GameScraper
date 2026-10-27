@@ -182,6 +182,43 @@ La sezione **PC** della barra laterale raccoglie i giochi di Steam, Epic Games, 
 - **Lo stesso gioco su più store**, per esempio Steam ed Epic, è una scheda sola con più versioni; la principale è quella installata.
 - **Tempo di gioco**: viene registrato anche per i giochi avviati tramite un launcher, riconoscendo il processo del gioco nella sua cartella. Steam fornisce anche il suo tempo totale.
 
+### Store online (console e PC non ufficiali) e aggiornamento
+
+Gli elenchi degli store online — cataloghi delle console e store PC **📦 Repack** / **⬇ Download diretto** — restano
+salvati nella cache dell'app. All'avvio i giochi ci sono **subito** (la libreria si ricostruisce dai dati salvati) e
+l'aggiornamento può girare in sottofondo senza bloccare l'interfaccia.
+
+In **Impostazioni › 🛒 Store › Aggiornamento degli store** si sceglie quando rileggere gli elenchi:
+
+| Modalità | Comportamento |
+|---|---|
+| **All'avvio dell'app** (predefinita) | rilegge tutti gli elenchi poco dopo l'avvio |
+| **Ogni giorno alle** | una volta al giorno all'ora scelta, con l'app aperta |
+| **Solo manualmente** | mai in automatico: si usa **⟳ Aggiorna adesso** |
+
+- **Più store in parallelo**: fino al numero indicato (4 per default, 1–8). Cliccando **⟳** su più store,
+  ognuno va **in coda**: partono subito i primi N (mai due elenchi dello stesso sito insieme), gli altri
+  aspettano il loro posto. «⟳ Aggiorna tutti» accoda quelli non ancora letti.
+- **Elenco sempre visibile** con stato per store (`·` mai letto, ⏳ in corso, ✓ fatto, ✕ errore, ⏭ saltato),
+  posizione in coda, pagina corrente, secondi per pagina e stima del tempo rimanente. **📄** apre il log
+  di quel singolo store; la riga in corso mostra l'ultima riga di log.
+- **■ Interrompi** ferma la lettura (a fine pagina) e svuota la coda; **sparisce** quando non c'è più nulla
+  da interrompere (per esempio durante la ricostruzione finale della libreria).
+- Un sito irraggiungibile non blocca gli altri: la voce resta con l'errore e gli elenchi già salvati restano validi.
+
+### Log su file (per capire cosa succede)
+
+```bat
+python -m gamescraper app --log                   :: <cache>\logs\diagnostica.log
+python -m gamescraper app --log C:\temp\gs.log    :: percorso a scelta
+set GAMESCRAPER_LOG=1 && python -m gamescraper app
+```
+
+Il file contiene, con ora e categoria: le decisioni del pianificatore (`piano`: modalità, orario, avvio
+rimandato e perché), l'apertura/chiusura di ogni elenco e **ogni pagina letta** (`store`:
+`… pagina 51/147 — 50 giochi`), gli errori con tipo e messaggio. Si tronca a 8 MB (`…​.log.old`).
+Il percorso attivo è mostrato anche in Impostazioni › Store accanto agli elenchi.
+
 ## Big Picture (controller)
 
 Pulsante **🎮 Big Picture** in alto, oppure `python -m gamescraper app --bigpicture` per avviare direttamente a schermo intero, ad esempio su un PC collegato alla TV.

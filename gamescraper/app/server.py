@@ -20,14 +20,13 @@ import sys
 import re
 import threading
 import time
-import zipfile
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .. import config as C
@@ -35,6 +34,7 @@ from .. import platforms as P
 from .. import backup as BK
 from .. import ports as PT
 from .. import relink as RL
+from .. import storerefresh as SR
 from ..library import launcher as L
 from . import extensions as X
 from .icons import CREDIT
@@ -155,7 +155,18 @@ def create_app(cfg) -> FastAPI:
     state = {"building": False, "build_log": [], "build_stats": None, "thumbs_total": 0, "thumbs_done": 0}
     job: dict = {"current": J.ScrapeJob(), "stores": J.StoreJob(), "storemeta": J.StoreMetaJob(),
                  "hltb": J.HltbJob(), "collart": J.CollArtJob(), "netmeta": J.NetMetaJob(),
-                 "pcstores": J.PcStoreJob(), "top": J.TopGamesJob()}
+                 "pcstores": J.PcStoreJob(), "top": J.TopGamesJob(), "store_refresh": J.StoreRefreshJob()}
+    start_lock = threading.Lock()
+
+    def _claim(name: str, j) -> bool:
+        """Mette j al posto del job `name` se quello non gira; False se gira gia'. Controllo e cambio sono
+        sotto lock e j risulta subito "running": due clic rapidi (o PC e telefono) non avviano due job."""
+        with start_lock:
+            if job[name].status == "running":
+                return False
+            j.status = "running"
+            job[name] = j
+            return True
 
     # ------------------------------------------------------------ vista unita (gruppi + utente)
     def view(only=None) -> dict:
@@ -298,7 +309,7 @@ def create_app(cfg) -> FastAPI:
                 "shots": len(shots.list([m["key"] for m in lib.groups[g["grp"]]])),
                 "hltb": json.loads(g["hltb"]) if g.get("hltb") else None,
                 "size": g.get("size"), "magnet": (g.get("launch") or {}).get("magnet") if g.get("store") == "online" else None,
-                "sources": ((g.get("launch") or {}).get("sources") or []) if g.get("store") == "online" else [],
+                "download_sources": ((g.get("launch") or {}).get("sources") or []) if g.get("store") == "online" else [],
                 "kind": (g.get("launch") or {}).get("kind") if g.get("store") == "online" else None,
                 "file_name": g.get("canonical") if g.get("store") == "online" else None,
                 "page_url": g.get("page") if g.get("store") == "online" else None,
@@ -856,10 +867,9 @@ def create_app(cfg) -> FastAPI:
         return api_accounts()
 
     def _start_store_job(only=None):
-        if job["stores"].status == "running":
-            raise HTTPException(409, "Aggiornamento degli store gia' in corso")
         j = J.StoreJob(only=only)
-        job["stores"] = j
+        if not _claim("stores", j):
+            raise HTTPException(409, "Aggiornamento degli store gia' in corso")
 
         def after(stats):
             lib.load()
@@ -1020,12 +1030,11 @@ def create_app(cfg) -> FastAPI:
 
     @app.post("/api/stores/metadata")
     def api_storemeta_start(body: dict = Body(default={})):
-        if job["storemeta"].status == "running":
-            raise HTTPException(409, "Ricerca dei metadati degli store gia' in corso")
         if job["stores"].status == "running":
             raise HTTPException(409, "Attendi la fine dell'aggiornamento degli store")
         j = J.StoreMetaJob(only_missing=bool(body.get("missing")))
-        job["storemeta"] = j
+        if not _claim("storemeta", j):
+            raise HTTPException(409, "Ricerca dei metadati degli store gia' in corso")
 
         def after(stats):
             lib.load()
@@ -1208,7 +1217,6 @@ def create_app(cfg) -> FastAPI:
     threading.Thread(target=_scheduler, daemon=True).start()
 
     # ------------------------------------------------------------ store online per console, console personalizzate
-    cat_job: dict = {"status": "idle", "log": []}
 
     @app.get("/api/catalogs/{pid}")
     def api_catalog_get(pid: str):
@@ -1226,7 +1234,7 @@ def create_app(cfg) -> FastAPI:
             cov = coverage(c)
         finally:
             c.close()
-        return {"platform": pid, "pages": pages, "job": cat_job, "meta": job["netmeta"].state(),
+        return {"platform": pid, "pages": pages, "job": job["store_refresh"].state(), "meta": job["netmeta"].state(),
                 "meta_coverage": cov}
 
     @app.post("/api/catalogs/{pid}/netmeta")
@@ -1234,11 +1242,10 @@ def create_app(cfg) -> FastAPI:
         """Copertine e descrizioni: GameTDB offline (subito) + lettura delle pagine dei siti."""
         if pid not in P.PLATFORMS:
             raise HTTPException(404, "Console sconosciuta")
-        if job["netmeta"].status == "running":
-            return job["netmeta"].state()
         limit = int(body.get("limit") or 0)  # 0 = tutte le voci (circa 2 richieste al secondo)
-        job["netmeta"] = J.NetMetaJob(limit=max(0, min(limit, 50000)),
-                                     search_ziperto=bool(body.get("ziperto", True)))
+        if not _claim("netmeta", J.NetMetaJob(limit=max(0, min(limit, 50000)),
+                                              search_ziperto=bool(body.get("ziperto", True)))):
+            return job["netmeta"].state()
         threading.Thread(target=lambda: job["netmeta"].run(cfg, lambda stats: lib.load()),
                          daemon=True).start()
         return job["netmeta"].state()
@@ -1262,7 +1269,7 @@ def create_app(cfg) -> FastAPI:
                              "type": info["type"], "time": info["time"]})
         finally:
             c.close()
-        return {"stores": rows, "job": job["pcstores"].state()}
+        return {"stores": rows, "job": job["store_refresh"].state()}
 
     @app.post("/api/pc-stores")
     def api_pc_stores_set(body: dict = Body(...)):
@@ -1278,10 +1285,7 @@ def create_app(cfg) -> FastAPI:
             cleaned.append({"url": url, "kind": kind if kind in ("repack", "direct") else "direct"})
         C.set_setting(cfg, "pc_stores", cleaned)
         if body.get("refresh") and cleaned:
-            if job["pcstores"].status != "running":
-                job["pcstores"] = J.PcStoreJob()
-                threading.Thread(target=lambda: job["pcstores"].run(cfg, lambda stats: lib.load()),
-                                 daemon=True).start()
+            _start_store_refresh(manual=True, only=[f"windows:{it['url']}" for it in cleaned])
         elif not cleaned:
             threading.Thread(target=lambda: (build(cfg, log=lambda m: None), lib.load()), daemon=True).start()
         return api_pc_stores()
@@ -1312,13 +1316,97 @@ def create_app(cfg) -> FastAPI:
 
     @app.post("/api/pc-stores/refresh")
     def api_pc_stores_refresh():
-        if job["pcstores"].status == "running":
-            return job["pcstores"].state()
+        """Anche «Leggi gli elenchi» passa dalla coda unica: se qualcosa sta girando, si accoda."""
         if not cfg.pc_stores:
             raise HTTPException(400, "Nessuno store PC aggiunto")
-        job["pcstores"] = J.PcStoreJob()
-        threading.Thread(target=lambda: job["pcstores"].run(cfg, lambda stats: lib.load()), daemon=True).start()
-        return job["pcstores"].state()
+        _start_store_refresh(manual=True, only=[f"windows:{it['url']}" for it in cfg.pc_stores])
+        return api_pc_stores()
+
+    # ------------------------------------------------------------ aggiornamento di tutti gli store
+    # Gli elenchi letti restano in cache.db: la libreria si ricostruisce da li', quindi all'avvio i
+    # giochi degli store ci sono gia' e questo aggiornamento gira in sottofondo (in parallelo).
+
+    def _start_store_refresh(manual: bool = False, only: list[str] | None = None) -> int:
+        """Mette in coda gli store scelti (o tutti): la coda rispetta il limite «in parallelo»."""
+        from .. import applog
+        available = SR.targets(cfg)
+        if only:
+            wanted = {str(x) for x in only}
+            available = [t for t in available if t["id"] in wanted or t["url"] in wanted]
+            if not available:
+                applog.write("piano", f"in coda rifiutato: nessuno store tra {only}")
+                raise HTTPException(404, "Nessuno di questi store è configurato")
+        elif not available:
+            applog.write("piano", "in coda rifiutato: nessuno store configurato")
+            if manual:
+                raise HTTPException(400, "Nessuno store configurato")
+            return 0
+        added = job["store_refresh"].add(cfg, available, lambda stats: lib.load())
+        applog.write("piano", f"in coda: {added} store" + (f" (scelti: {', '.join(map(str, only))})" if only
+                                                           else " (tutti)"))
+        return added
+
+    @app.get("/api/store-refresh")
+    def api_store_refresh():
+        rows = SR.targets(cfg)
+        return {"schedule": SR.settings(cfg), "last": cfg.app.get("store_schedule_last"),
+                "stores": len(rows), "list": rows, "job": job["store_refresh"].state()}
+
+    @app.post("/api/store-refresh")
+    def api_store_refresh_set(body: dict = Body(...)):
+        """Salva quando aggiornare gli store: all'avvio, ogni giorno a un'ora scelta, o solo a mano."""
+        C.save_settings(cfg, app={"store_schedule": {"mode": str(body.get("mode") or "startup"),
+                                                     "time": str(body.get("time") or "03:00"),
+                                                     "workers": body.get("workers") or SR.DEFAULT_WORKERS}})
+        return api_store_refresh()
+
+    @app.post("/api/store-refresh/run")
+    def api_store_refresh_run(body: dict = Body(default={})):
+        """Avvio manuale: di tutti gli elenchi oppure solo di quelli indicati (`ids` o `urls`)."""
+        ids = [str(x) for x in (body.get("ids") or []) + (body.get("urls") or [])]
+        _start_store_refresh(manual=True, only=ids or None)
+        return api_store_refresh()
+
+    @app.post("/api/store-refresh/stop")
+    def api_store_refresh_stop():
+        from .. import applog
+        job["store_refresh"].stop = True  # le pagine in corso finiscono, poi si ferma subito
+        applog.write("piano", "interruzione richiesta")
+        return job["store_refresh"].state()
+
+    def _store_scheduler():
+        """Aggiornamento automatico degli store: all'avvio oppure ogni giorno all'ora scelta."""
+        import datetime as _dt
+
+        from .. import applog
+        started = False
+        time.sleep(15)  # lascia finire l'avvio dell'app (libreria, plugin)
+        while True:
+            try:
+                sch = SR.settings(cfg)
+                if sch["mode"] != "manual":
+                    applog.write("piano", f"controllo: modalita'={sch['mode']} ora={sch['time']} "
+                                          f"ultimo={cfg.app.get('store_schedule_last')} building={state['building']}")
+                if sch["mode"] == "startup" and not started:
+                    if _start_store_refresh():
+                        started = True
+                        C.save_settings(cfg, app={"store_schedule_last": _dt.datetime.now().isoformat(timespec="minutes")})
+                elif sch["mode"] == "daily":
+                    now = _dt.datetime.now()
+                    today = now.strftime("%Y-%m-%d")
+                    if not str(cfg.app.get("store_schedule_last") or "").startswith(today):
+                        hh, mm = (int(x) for x in sch["time"].split(":")[:2])
+                        if now.hour * 60 + now.minute >= hh * 60 + mm and _start_store_refresh():
+                            C.save_settings(cfg, app={"store_schedule_last": now.isoformat(timespec="minutes")})
+                else:
+                    started = True  # modalita' manuale: niente da fare
+            except Exception as e:
+                print(f"Pianificazione store: {e}")
+                from .. import applog
+                applog.write("piano", f"errore: {type(e).__name__}: {e}")
+            time.sleep(60)
+
+    threading.Thread(target=_store_scheduler, daemon=True).start()
 
     @app.post("/api/catalogs/{pid}")
     def api_catalog_set(pid: str, body: dict = Body(...)):
@@ -1344,40 +1432,11 @@ def create_app(cfg) -> FastAPI:
         return api_catalog_get(pid)
 
     def _start_catalog_job(pid: str):
-        if cat_job["status"] == "running":
-            raise HTTPException(409, "Lettura degli store online gia' in corso")
-
-        def run():
-            import asyncio as _a
-
-            from .. import catalog
-            from ..cache import Cache
-            from ..net import make_client
-            cat_job.update(status="running", log=[], platform=pid)
-            say = lambda m: cat_job["log"].append(str(m))  # noqa: E731
-            c = Cache(cfg.cache)
-            try:
-                async def go():
-                    async with make_client() as client:
-                        for u in cfg.catalogs.get(pid, []):
-                            try:
-                                await catalog.fetch(cfg, c, client, P.PLATFORMS[pid], u, log=say)
-                            except Exception as e:
-                                say(f"{u}: {e}")
-                _a.run(go())
-                c.close()
-                c = None
-                say("Aggiornamento della libreria…")
-                build(cfg, log=say)
-                lib.load()
-                cat_job["status"] = "done"
-            except Exception as e:
-                say(f"Errore: {type(e).__name__}: {e}")
-                cat_job["status"] = "error"
-            finally:
-                if c:
-                    c.close()
-        threading.Thread(target=run, daemon=True).start()
+        """Anche la lettura di una console passa dalla coda unica degli store (niente più «già in corso»)."""
+        urls = [f"{pid}:{u}" for u in (cfg.catalogs.get(pid) or [])]
+        if not urls:
+            raise HTTPException(400, "Nessuno store online configurato per questa console")
+        _start_store_refresh(manual=True, only=urls)
 
     @app.post("/api/catalogs/{pid}/refresh")
     def api_catalog_refresh(pid: str):
@@ -2166,8 +2225,9 @@ def create_app(cfg) -> FastAPI:
     def _icon_response(p):
         if not p:
             raise HTTPException(404)
+        # sandbox: un SVG scaricato da un sito puo' contenere script, che qui girerebbero con l'accesso alle API
         return FileResponse(p, media_type=ICON_TYPES.get(p.suffix, "image/png"),
-                            headers={"Cache-Control": "public, max-age=86400"})
+                            headers={"Cache-Control": "public, max-age=86400", "Content-Security-Policy": "sandbox"})
 
     @app.get("/icons/platform/{pid}")
     def icon_platform(pid: str):
@@ -2186,10 +2246,9 @@ def create_app(cfg) -> FastAPI:
     # ------------------------------------------------------------ HowLongToBeat
     @app.post("/api/hltb")
     def api_hltb_start(body: dict = Body(default={})):
-        if job["hltb"].status == "running":
-            raise HTTPException(409, "Ricerca delle durate gia' in corso")
         j = J.HltbJob(only_missing=body.get("mode", "missing") != "all")
-        job["hltb"] = j
+        if not _claim("hltb", j):
+            raise HTTPException(409, "Ricerca delle durate gia' in corso")
 
         def after(stats):
             lib.load()
@@ -2227,11 +2286,10 @@ def create_app(cfg) -> FastAPI:
 
     @app.post("/api/top/fetch")
     def api_top_fetch(body: dict = Body(default={})):
-        if job["top"].status == "running":
-            raise HTTPException(409, "Ricerca dei voti gia' in corso")
         pid = body.get("pid") or "all"
         j = J.TopGamesJob(pids=[] if pid == "all" else [pid])
-        job["top"] = j
+        if not _claim("top", j):
+            raise HTTPException(409, "Ricerca dei voti gia' in corso")
 
         def after(stats):
             lib.load()
@@ -2333,7 +2391,8 @@ def create_app(cfg) -> FastAPI:
         v = view()
         cols = [(slug, c["name"]) for slug, c in v["colls"].items() if c["groups"]]
         j = J.CollArtJob(collections=cols, only_missing=only_missing)
-        job["collart"] = j
+        if not _claim("collart", j):
+            raise HTTPException(409, "Ricerca delle immagini delle collezioni gia' in corso")
 
         def after(_stats):
             art_state["rev"] += 1
@@ -2558,257 +2617,8 @@ def create_app(cfg) -> FastAPI:
         return FileResponse(Path(cfg.cache) / rel, headers={"Cache-Control": "public, max-age=604800"})
 
     # ------------------------------------------------------------ port PC (ricompilazioni e decomp, catalogo di Quiver)
-    port_job: dict = {"status": "idle", "log": [], "slug": "", "done": 0, "total": 0}
-    port_links: dict = {"key": None, "by_slug": {}, "by_grp": {}}
-
-    def _port_links() -> dict:
-        """Port <-> ROM della libreria, ricalcolato solo quando cambiano la libreria o il catalogo."""
-        from ..cache import Cache
-        c = Cache(cfg.cache)
-        try:
-            cat = c.kv_get("ports:catalog") or {}
-        finally:
-            c.close()
-        key = (lib.built_at, cat.get("time"), len(lib.games))
-        if port_links["key"] != key:
-            idx = PT.rom_index(lib.games)
-            by_slug, by_grp = {}, defaultdict(list)
-            for e in cat.get("items") or []:
-                roms = PT.roms_for(e, idx)
-                if roms:
-                    by_slug[e["slug"]] = roms
-                    for g in {r["grp"]: r for r in roms}.values():
-                        by_grp[g["grp"]].append({"slug": e["slug"], "name": e["name"]})
-            port_links.update(key=key, by_slug=by_slug, by_grp=dict(by_grp), catalog=cat)
-        return port_links
-
-    def _port_or_404(slug: str) -> dict:
-        m = PT.all_installed(cfg).get(slug)
-        if not m:
-            raise HTTPException(404, "Port non installato")
-        return m
-
-    def _port_game_id(slug: str):
-        g = lib.by_key.get(f"windows/ports:{slug}")
-        return g["id"] if g else None
-
-    def _refresh_ports_store():
-        try:
-            _start_store_job(["ports"])
-        except HTTPException:  # store gia' in aggiornamento: il port compare al prossimo aggiornamento
-            port_job["log"].append("Aggiorna gli store (Impostazioni › Account) per vederlo nella libreria")
-
-    def _run_port_job(slug: str, fn):
-        def progress(done, total):
-            port_job.update(done=done, total=total)
-
-        def say(m):
-            port_job["log"].append(str(m))
-        try:
-            fn(progress, say)
-            port_job["status"] = "done"
-            _refresh_ports_store()
-        except Exception as e:
-            say(f"Errore: {type(e).__name__}: {e}")
-            port_job["status"] = "error"
-
-    def _start_port_job(slug: str, fn):
-        if port_job["status"] == "running":
-            raise HTTPException(409, "C'e' gia' un'installazione in corso")
-        port_job.update(status="running", log=[], slug=slug, done=0, total=0)
-        threading.Thread(target=_run_port_job, args=(slug, fn), daemon=True).start()
-        return port_job
-
-    @app.get("/api/ports")
-    def api_ports(force: int = 0):
-        from ..cache import Cache
-        c = Cache(cfg.cache)
-        try:
-            cat = PT.catalog(c, force=bool(force))
-            inst = PT.all_installed(cfg)
-            tok = PT._token(cfg)
-            upd = {s: PT.update_info(c, m, tok, bool(force)) for s, m in inst.items()}  # rete al massimo ogni 12 ore per repository
-        finally:
-            c.close()
-        links = _port_links()
-
-        def card(e: dict, m: dict | None) -> dict:
-            art = e.get("libraryArt") or e.get("art") or {}
-            sf = (e.get("launcher") or {}).get("setupFiles") or []
-            return {"slug": e["slug"], "name": e.get("name") or e["slug"], "project": e.get("projectName") or "",
-                    "description": e.get("description") or "",
-                    "consoles": e.get("consoles") or [], "developer": (e.get("developer") or {}).get("name", "")
-                    if isinstance(e.get("developer"), dict) else e.get("developer") or "",
-                    "cover": art.get("capsule") or e.get("artwork") or "", "hero": art.get("hero") or "",
-                    "version": e.get("lastReleaseVersion") or "", "tags": e.get("tags") or [],
-                    "recommended": e.get("recommended") or 0, "broken": e.get("reportBroken") or 0,
-                    "issues": e.get("reportIssues") or 0, "setup": sf, "mods": bool((e.get("launcher") or {}).get("mods")),
-                    "roms": [{"id": g["id"], "title": g["title"], "platform": g["platform"], "file": (g.get("files") or [""])[0]}
-                             for g in links["by_slug"].get(e["slug"], [])],
-                    "installed": {"version": m.get("version") or "", "exe": m.get("exe") or "", "folder": m["folder"],
-                                  "manual": bool(m.get("manual")), "skip": m.get("skip"), "game_id": _port_game_id(e["slug"]),
-                                  "repository": m.get("repository") or "", **upd.get(e["slug"], {})} if m else None}
-        items = [card(e, inst.get(e["slug"])) for e in cat.get("items") or []]
-        known = {e["slug"] for e in cat.get("items") or []}
-        items += [card({**m, "slug": s}, m) for s, m in inst.items() if s not in known]  # aggiunti a mano
-        names = {p.id: p.name for p in P.PLATFORMS.values()}
-        consoles = {cid: names.get(PT.platform_of(cid) or "", {"pc": "PC (DOS e vecchi giochi)", "mobile": "Mobile", "cdi": "Philips CD-i", "ps5": "PlayStation 5"}.get(cid, cid))
-                    for i in items for cid in i["consoles"]}
-        return {"items": items, "time": cat.get("time"), "error": cat.get("error"), "stale": cat.get("stale", False),
-                "consoles": consoles, "dir": str(PT.ports_dir(cfg)), "token": bool(PT._token(cfg))}
-
-    @app.get("/api/ports/job")
-    def api_ports_job():
-        return port_job
-
-    @app.post("/api/ports/install")
-    def api_ports_install(body: dict = Body(...)):
-        slug = str(body.get("slug") or "")
-        from ..cache import Cache
-
-        def run(progress, say):
-            c = Cache(cfg.cache)
-            try:
-                PT.install(cfg, c, slug, progress, say)
-            finally:
-                c.close()
-        return _start_port_job(slug, run)
-
-    @app.post("/api/ports/manual")
-    def api_ports_manual(body: dict = Body(...)):
-        """Port non in catalogo: da una cartella gia' scaricata o da un repository GitHub (utente/progetto)."""
-        name, console = (body.get("name") or "").strip(), (body.get("console") or "").strip()
-        consoles = [console] if console else []
-        if body.get("folder"):
-            try:
-                m = PT.add_folder(cfg, body["folder"].strip().strip('"'), name, consoles)
-            except ValueError as e:
-                raise HTTPException(400, str(e))
-            _refresh_ports_store()
-            return m
-        repo = (body.get("repo") or "").strip()
-        return _start_port_job(repo, lambda progress, say: PT.add_repo(cfg, repo, name, consoles, progress, say))
-
-    @app.get("/api/ports/{slug}")
-    def api_port(slug: str):
-        """Dettaglio di un port installato: eseguibili, ROM richieste (con la ROM della libreria che va bene)."""
-        m = _port_or_404(slug)
-        e = next((x for x in _port_links().get("catalog", {}).get("items") or [] if x["slug"] == slug), {})
-        return {**m, "candidates": PT.exe_candidates(Path(m["folder"]), m.get("preferred")),
-                "setup": [{"id": sf.get("id"), "label": sf.get("label") or sf.get("id"),
-                           "destination": sf.get("destination"),
-                           "present": (Path(m["folder"]) / sf.get("destination", "")).is_file(),
-                           "accepted": [a.get("label") or "" for a in sf.get("accepted") or []]}
-                          for sf in (e.get("launcher") or {}).get("setupFiles") or []],
-                "user_files": len(PT.user_files(Path(m["folder"]), m)),
-                "mods": bool(m.get("mods")), "installed_mods": m.get("installed_mods") or {}}
-
-    @app.post("/api/ports/{slug}/update")
-    def api_port_update(slug: str):
-        m = _port_or_404(slug)
-        if m.get("manual"):
-            if not m.get("repository"):
-                raise HTTPException(400, "Questo port non e' legato a un repository")
-            return _start_port_job(slug, lambda progress, say: PT.add_repo(cfg, m["repository"], m.get("name", ""),
-                                                                          m.get("consoles"), progress, say))
-        return api_ports_install({"slug": slug})
-
-    @app.post("/api/ports/{slug}/exe")
-    def api_port_exe(slug: str, body: dict = Body(...)):
-        m = _port_or_404(slug)
-        if body.get("exe") not in PT.exe_candidates(Path(m["folder"]), m.get("preferred")):
-            raise HTTPException(400, "Eseguibile non valido")
-        PT.set_manifest(cfg, slug, exe=body["exe"])
-        _refresh_ports_store()
-        return {"ok": True}
-
-    @app.post("/api/ports/{slug}/skip")
-    def api_port_skip(slug: str, body: dict = Body(...)):
-        _port_or_404(slug)
-        PT.set_manifest(cfg, slug, skip=body.get("version") or None)
-        return {"ok": True}
-
-    @app.post("/api/ports/{slug}/uninstall")
-    def api_port_uninstall(slug: str):
-        _port_or_404(slug)
-        if launcher.running().get("status") in ("starting", "running") and launcher.running().get("key") == f"windows/ports:{slug}":
-            raise HTTPException(409, "Chiudi il gioco prima di disinstallarlo")
-        try:
-            PT.uninstall(cfg, slug)
-        except RuntimeError as e:
-            raise HTTPException(409, str(e))
-        _refresh_ports_store()
-        return {"ok": True}
-
-    @app.post("/api/ports/{slug}/rom")
-    def api_port_rom(slug: str, body: dict = Body(...)):
-        """Prima configurazione: copia nella cartella del port la ROM della libreria con l'hash richiesto."""
-        m = _port_or_404(slug)
-        links = _port_links()
-        e = next((x for x in links.get("catalog", {}).get("items") or [] if x["slug"] == slug), {})
-        sf = next((x for x in (e.get("launcher") or {}).get("setupFiles") or [] if x.get("id") == body.get("id")), None)
-        if not sf:
-            raise HTTPException(404, "File richiesto sconosciuto")
-        paths = [Path(f) for g in links["by_slug"].get(slug, []) for f in g.get("files") or []]
-        if not paths:
-            raise HTTPException(404, "Nella libreria non c'e' la ROM di questo gioco")
-        hit = PT.find_rom(sf, paths)
-        if not hit:
-            want = ", ".join(a.get("label") for a in sf.get("accepted") or [] if a.get("label")) or "quella indicata dal port"
-            raise HTTPException(400, f"Le ROM della libreria non sono la versione richiesta ({want}): l'hash non corrisponde")
-        try:
-            dst = PT.setup_rom(Path(m["folder"]), sf, *hit)
-        except ValueError as e:
-            raise HTTPException(400, str(e))
-        return {"path": str(dst), "from": str(hit[0]) + (f" › {hit[1]}" if hit[1] else "")}
-
-    @app.get("/api/ports/{slug}/mods")
-    def api_port_mods(slug: str):
-        from ..cache import Cache
-        m = _port_or_404(slug)
-        c = Cache(cfg.cache)
-        try:
-            items = PT.mod_list(c, m.get("mods") or {})
-        finally:
-            c.close()
-        links = [{"provider": s.get("provider"), "url": s.get("sourceUrl")} for s in (m.get("mods") or {}).get("sources") or []]
-        return {"items": items, "links": links, "installed": m.get("installed_mods") or {}}
-
-    @app.post("/api/ports/{slug}/mods")
-    def api_port_mod_add(slug: str, body: dict = Body(...)):
-        from ..cache import Cache
-        m = _port_or_404(slug)
-        c = Cache(cfg.cache)
-        try:
-            mod = next((x for x in PT.mod_list(c, m.get("mods") or {}) if x["id"] == body.get("id")), None)
-        finally:
-            c.close()
-        if not mod:
-            raise HTTPException(404, "Mod non trovata")
-        try:
-            return PT.install_mod(cfg, slug, mod).get("installed_mods")
-        except (ValueError, OSError, zipfile.BadZipFile) as e:
-            raise HTTPException(400, f"Mod non installata: {e}")
-
-    @app.delete("/api/ports/{slug}/mods/{mod_id:path}")
-    def api_port_mod_del(slug: str, mod_id: str):
-        _port_or_404(slug)
-        return PT.remove_mod(cfg, slug, mod_id).get("installed_mods")
-
-    @app.post("/api/ports-settings")
-    def api_ports_settings(body: dict = Body(...)):
-        vals = {}
-        if "dir" in body:
-            d = (body.get("dir") or "").strip().strip('"')
-            if d and not Path(d).is_absolute():
-                raise HTTPException(400, "Indica un percorso completo (es. D:\\Ports)")
-            vals["ports_dir"] = d or None
-        if "token" in body:
-            vals["github_token"] = (body.get("token") or "").strip() or None
-        C.save_settings(cfg, app=vals)
-        if "ports_dir" in vals:
-            _refresh_ports_store()
-        return {"dir": str(PT.ports_dir(cfg)), "token": bool(PT._token(cfg))}
+    from . import ports_api
+    _port_links = ports_api.register(app, cfg, lib, launcher, _start_store_job)
 
     # ------------------------------------------------------------ statistiche
     @app.get("/api/stats")
@@ -2838,11 +2648,17 @@ def create_app(cfg) -> FastAPI:
 
     @app.get("/")
     def index():
-        return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
+        # la versione nell'indirizzo dei file statici evita che il browser usi una copia vecchia
+        # di app.js/core.js dopo un aggiornamento (era il motivo di pulsanti con comportamenti strani)
+        from .. import __version__
+        html = (STATIC / "index.html").read_text(encoding="utf-8").replace("{{v}}", str(__version__))
+        return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
     @app.get("/bigpicture")
     def bigpicture():
-        return FileResponse(STATIC / "bigpicture.html", headers={"Cache-Control": "no-cache"})
+        from .. import __version__
+        html = (STATIC / "bigpicture.html").read_text(encoding="utf-8").replace("{{v}}", str(__version__))
+        return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
     return app
@@ -2861,6 +2677,32 @@ def _port_free(port: int) -> bool:
             return True
         except OSError:
             return False
+
+
+class LocalGuard:
+    """Middleware ASGI del server desktop: risponde solo a richieste fatte all'app stessa.
+
+    - Host diverso da 127.0.0.1/localhost -> 403 (DNS rebinding: un sito che punta il suo dominio a 127.0.0.1
+      leggerebbe libreria, account e codice di abbinamento del telefono);
+    - POST/PUT/DELETE e WebSocket con un Origin di un altro sito -> 403 (CSRF: un sito che avvia giochi,
+      disinstalla port o usa il controller/mouse del telefono). Senza Origin (curl, gamescraper-cli) si passa.
+    """
+
+    def __init__(self, app, port: int):
+        self.app = app
+        self.hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
+        self.origins = {f"http://{h}" for h in self.hosts}
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] in ("http", "websocket"):
+            h = dict(scope["headers"])
+            origin = h.get(b"origin", b"").decode("latin-1")
+            unsafe = scope["type"] == "websocket" or scope.get("method") not in ("GET", "HEAD", "OPTIONS")
+            if h.get(b"host", b"").decode("latin-1") not in self.hosts or (unsafe and origin and origin not in self.origins):
+                if scope["type"] == "websocket":
+                    return await send({"type": "websocket.close", "code": 4403})
+                return await Response("Richiesta non consentita", status_code=403)(scope, receive, send)
+        return await self.app(scope, receive, send)
 
 
 WINDOW_FOCUS = {"fn": None}  # impostata quando l'app gira in una finestra nativa
@@ -2904,7 +2746,7 @@ def run(cfg, port: int = 8765, browser: bool = False, bigpicture: bool = False):
             raise SystemExit(f"Porta {port} occupata da un altro programma: scegline un'altra con --port")
         print(f"Porta {port} occupata da un altro programma: uso la {free}")
         port = free
-    app = create_app(cfg)
+    app = LocalGuard(create_app(cfg), port)  # il server del telefono usa l'app senza guardia, dietro PhoneGate
     url = f"http://127.0.0.1:{port}/"
     start_url = url + ("bigpicture" if bigpicture else "")
     if browser:

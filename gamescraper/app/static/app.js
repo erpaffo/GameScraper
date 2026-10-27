@@ -725,7 +725,7 @@ async function openDetail(id) {
   const shots = ["screenshot", "title", "wheel", "fanart", "marquee", "header"].filter((k) => d.media[k]);
   const pc = !!d.store;
   const online = d.store === "online";
-  const dlSources = online ? (d.sources || []).filter((s) => s && s.url) : [];
+  const dlSources = online ? (d.download_sources || []).filter((s) => s && s.url) : [];
   // giochi gia' scaricati che compaiono negli elenchi degli store online: link per riscaricarli
   const storePages = !online ? (d.store_pages || []).filter((s) => s && s.url) : [];
   // una fonte sola: pulsante unico; due o piu' (es. NXBrew e Ziperto): un pulsante per sito
@@ -2160,14 +2160,125 @@ async function pollPcStores() {
   const d = await api("/api/pc-stores").catch(() => null);
   if (!d) return;
   PCST.rows = d.stores || [];
-  renderPcStores(d.job);
-  if (d.job && d.job.status === "running") { PCST.timer = setTimeout(pollPcStores, 1500); return; }
-  if (d.job && d.job.status === "done") { await reload(true); toast("Store PC aggiornati"); }
-  else if (d.job && d.job.status === "error") toast("Lettura non riuscita: vedi il registro", true);
+  renderPcStores(d.job);   // la tabella si ridisegna; l'avanzamento lo segue il blocco «Aggiornamento degli store»
+  if (d.job && d.job.status === "running") PCST.timer = setTimeout(pollPcStores, 3000);
+}
+
+/* ---- impostazioni › aggiornamento degli store (PC + console), in parallelo */
+const SRF_ICON = { idle: "·", pending: "·", running: "⏳", done: "✓", error: "✕", skip: "⏭" };
+const srfOpen = new Set(); // store con il log aperto (sopravvive ai aggiornamenti periodici)
+let srfTimer = 0;
+let srfLast = null;        // ultima risposta di /api/store-refresh (per ridisegnare senza rileggere)
+
+function srfDur(sec) {
+  if (!sec || sec < 1) return "—";
+  if (sec < 90) return `${Math.round(sec)} s`;
+  if (sec < 5400) return `${Math.round(sec / 60)} min`;
+  return `${Math.floor(sec / 3600)} h ${String(Math.round((sec % 3600) / 60)).padStart(2, "0")}`;
+}
+
+/** Riga di dettaglio di uno store: pagina, ritmo e tempo che manca. */
+function srfMeta(t) {
+  if (t.status === "error") return esc(t.error || "errore");
+  if (t.status === "idle") return t.kind === "repack" ? "📦 Repack" : t.kind === "direct" ? "⬇ Diretto" : "";
+  if (t.status === "pending") return t.position ? `in coda · posizione ${t.position}` : "in coda";
+  const gameCount = t.status === "running" ? (t.seen || 0) : (t.games || 0);
+  const bits = [];
+  if (t.pages > 1) bits.push(`pagina ${t.page || 0}/${t.pages}`);
+  if (gameCount) bits.push(`${gameCount.toLocaleString("it")} giochi`);
+  if (t.rate) bits.push(`${t.rate.toLocaleString("it", { maximumFractionDigits: 2 })} s/pagina`);
+  if (t.status === "running") {
+    if (t.eta) bits.push(`≈ ${srfDur(t.eta)} alla fine`);
+    bits.push(`da ${srfDur(t.elapsed)}`);
+  } else if (t.status === "done") bits.push(srfDur(t.elapsed));
+  return esc(bits.join(" · "));
+}
+
+function renderStoreRefreshJob(js, list) {
+  const running = js.status === "running";
+  // «Aggiorna tutti» resta sempre disponibile: aggiunge alla coda gli store non ancora in coda/in corso
+  $("#srf-run").hidden = false;
+  const stop = $("#srf-stop");
+  // sparisce appena non c'è più nulla da interrompere (fine lettura, ricostruzione della libreria)
+  stop.hidden = !js.stoppable;
+  stop.disabled = !!js.stopping;
+  stop.textContent = js.stopping ? "■ Interruzione…" : "■ Interrompi";
+  $("#srf-log").textContent = (js.log || []).slice(-12).join("\n");
+  // a riposo si mostrano comunque tutti gli store configurati; durante un aggiornamento lo stato
+  // del singolo store si sovrappone alla lista, così le altre righe restano visibili
+  const live = new Map((js.targets || []).map((t) => [t.id || t.url, t]));
+  const base = (list && list.length) ? list : (js.targets || []);
+  const targets = base.map((t) => live.get(t.id || t.url) || { ...t, status: "idle", log: [] });
+  for (const t of (js.targets || [])) {
+    if (!targets.some((x) => (x.id || x.url) === (t.id || t.url))) targets.push(t);
+  }
+  if (js.status === "idle" && !targets.length) { $("#srf-progress").innerHTML = ""; return; }
+  const done = js.done || 0, total = js.total || 0;
+  const pct = total ? Math.round((100 * done) / total) : 0;
+  const rows = targets.map((t) => {
+    const id = t.id || t.url;
+    const open = srfOpen.has(id);
+    const log = (t.log || []).slice(-12).join("\n");
+    const lastLog = t.status === "running" && (t.log || []).length ? t.log[t.log.length - 1] : "";
+    const busy = t.status === "pending" || t.status === "running";
+    return `<div class="srf-row">
+      <span class="srf-ico">${SRF_ICON[t.status] || "·"}</span>
+      <span class="grow">${esc(t.label)}</span>
+      <span class="muted small srf-meta">${srfMeta(t)}</span>
+      <button class="icon-btn" data-srf-run="${esc(id)}" title="Aggiungi alla coda: aggiorna solo questo store"${busy ? " disabled" : ""}>⟳</button>
+      <button class="icon-btn" data-srf-log="${esc(id)}" title="Log di questo store">📄</button></div>
+      ${lastLog ? `<div class="srf-last muted small">${esc(lastLog.slice(0, 150))}</div>` : ""}
+      ${open && log ? `<pre class="log srf-rowlog">${esc(log)}</pre>` : ""}`;
+  }).join("");
+  // il riquadro si ridisegna ogni 1,5 s: si conserva la posizione di scorrimento
+  const scrolled = $("#srf-progress .srf-list")?.scrollTop || 0;
+  const bar = js.status === "idle" ? "" : `<div class="bar"><span>${esc(js.phase || "")}</span>
+      <div class="track"><div class="fill" style="width:${pct}%"></div></div>
+      <span class="n">${done} / ${total} · ${(js.games || 0).toLocaleString("it")} giochi`
+    + `${js.queued ? ` · ${js.queued} in coda` : ""}${js.running ? ` · ${js.running} in corso` : ""}</span></div>`;
+  $("#srf-progress").innerHTML = `${bar}<div class="srf-list">${rows}</div>`;
+  const list2 = $("#srf-progress .srf-list");
+  if (list2 && scrolled) list2.scrollTop = scrolled;
+}
+
+function renderStoreRefresh(d) {
+  srfLast = d;
+  const sch = d.schedule || {};
+  $("#srf-mode").value = sch.mode || "startup";
+  $("#srf-time").value = sch.time || "03:00";
+  $("#srf-time").disabled = sch.mode !== "daily";
+  $("#srf-workers").value = sch.workers || 4;
+  const last = d.last ? String(d.last).replace("T", " ") : "";
+  $("#srf-info").textContent = `${(d.stores || 0).toLocaleString("it")} elenchi configurati`
+    + (last ? ` · ultimo: ${last}` : "")
+    + (d.job?.log_file ? ` · log su file: ${d.job.log_file}` : "");
+  renderStoreRefreshJob(d.job || { status: "idle" }, d.list);
+}
+
+async function loadStoreRefresh() {
+  let d;
+  try { d = await api("/api/store-refresh"); } catch (e) { return toast(e.message, true); }
+  renderStoreRefresh(d);
+  if (d.job && d.job.status === "running") pollStoreRefresh();
+}
+
+async function pollStoreRefresh() {
+  clearTimeout(srfTimer);
+  const d = await api("/api/store-refresh").catch(() => null);
+  if (!d) return;
+  renderStoreRefresh(d);
+  if (d.job && d.job.status === "running") { srfTimer = setTimeout(pollStoreRefresh, 1500); return; }
+  if (d.job && d.job.status === "done") {
+    await reload(true);
+    if ((d.job.phase || "").startsWith("Interrotto")) toast(d.job.phase);
+    else toast(`Store aggiornati: ${(d.job.games || 0).toLocaleString("it")} giochi`);
+  }
+  else if (d.job && d.job.status === "error") toast("Aggiornamento non riuscito: vedi il registro", true);
 }
 
 /* ---- impostazioni › account degli store */
 async function loadAccounts() {
+  loadStoreRefresh(); // blocco «Aggiornamento degli store»: indipendente dagli account
   api("/api/ra").then((r) => { $("#ra-user").value = r.username; $("#ra-key").placeholder = r.has_key ? "già salvata (lascia vuoto per non cambiarla)" : ""; }).catch(() => {});
   let d;
   try { d = await api("/api/accounts"); } catch (e) { return toast(e.message, true); }
@@ -2709,7 +2820,40 @@ function bind() {
     const ex = r.samples.length ? ` Esempi: ${r.samples.slice(0, 3).join(" · ")}` : "";
     out.textContent = `${r.games ? "✅" : "⚠️"} Formato ${r.kind}: ${r.games.toLocaleString("it")} giochi in questa pagina, ${many}.${ex}`;
   };
-  $("#pcst-refresh").onclick = async () => {    try { await api("/api/pc-stores/refresh", { body: {} }); } catch (e) { return toast(e.message, true); }
+  // aggiornamento di tutti gli store: modalità (avvio / orario / manuale), parallelismo, avvio a mano
+  $("#srf-mode").onchange = () => { $("#srf-time").disabled = $("#srf-mode").value !== "daily"; };
+  $("#srf-save").onclick = async () => {
+    const body = { mode: $("#srf-mode").value, time: $("#srf-time").value, workers: Number($("#srf-workers").value) || 4 };
+    try { renderStoreRefresh(await api("/api/store-refresh", { body })); } catch (e) { return toast(e.message, true); }
+    toast("Quando aggiornare gli store: salvato");
+  };
+  $("#srf-run").onclick = async () => {
+    try { await api("/api/store-refresh/run", { body: {} }); } catch (e) { return toast(e.message, true); }
+    pollStoreRefresh();
+  };
+  $("#srf-stop").onclick = async () => {
+    try { await api("/api/store-refresh/stop", { body: {} }); } catch (e) { return toast(e.message, true); }
+    pollStoreRefresh();
+  };
+  // log e aggiornamento del singolo store (row della lista)
+  $("#srf-progress").addEventListener("click", async (e) => {
+    const logBtn = e.target.closest("[data-srf-log]");
+    if (logBtn) {
+      if (!srfLast) return;
+      const id = logBtn.dataset.srfLog;
+      if (srfOpen.has(id)) srfOpen.delete(id); else srfOpen.add(id);
+      renderStoreRefreshJob(srfLast.job || { status: "idle" }, srfLast.list);
+      return;
+    }
+    const runBtn = e.target.closest("[data-srf-run]");
+    if (!runBtn) return;
+    try { await api("/api/store-refresh/run", { body: { ids: [runBtn.dataset.srfRun] } }); }
+    catch (err) { return toast(err.message, true); }
+    pollStoreRefresh();
+  });
+  $("#pcst-refresh").onclick = async () => {
+    try { await api("/api/pc-stores/refresh", { body: {} }); } catch (e) { return toast(e.message, true); }
+    pollStoreRefresh(); // la coda unica mostra l'avanzamento nel blocco «Aggiornamento degli store»
     pollPcStores();
   };
   $("#pcst-filter").addEventListener("click", (e) => {

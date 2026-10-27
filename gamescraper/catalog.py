@@ -498,8 +498,17 @@ async def _get_page(cfg, cache, client, pid: str, url: str, log=print) -> str:
     return r.text
 
 
-async def fetch(cfg, cache, client, platform, url: str, log=print, options: dict | None = None) -> list[CatalogItem]:
-    """Scarica e legge le pagine di un catalogo; il risultato resta in cache (kv) fino al refresh."""
+async def fetch(cfg, cache, client, platform, url: str, log=print, options: dict | None = None,
+                progress=None, should_stop=None) -> list[CatalogItem]:
+    """Scarica e legge le pagine di un catalogo; il risultato resta in cache (kv) fino al refresh.
+
+    `progress(page, pages, games)` viene chiamato dopo ogni pagina letta (con i giochi di quella pagina):
+    serve all'interfaccia per mostrare a che pagina è arrivato un elenco lungo e quanto manca.
+    `should_stop()` viene interrogato fra una pagina e l'altra: un elenco da centinaia di pagine si
+    interrompe subito invece di aspettare la fine.
+    """
+    tick = progress or (lambda *a: None)
+    stopped = should_stop or (lambda: False)
     chosen = configured_type(cfg, platform.id, options)
     kind = chosen or "filelist"
     if kind not in PARSERS:
@@ -521,6 +530,7 @@ async def fetch(cfg, cache, client, platform, url: str, log=print, options: dict
             cache.kv_set(catalog_key(platform.id, url), {"url": url, "pid": platform.id, "time": time.time(),
                                                         "entries": entries})
             _prune(cache, platform.id, url, {"filelist": 1})
+            tick(1, 1, len(entries))
             log(f"{platform.name}: {len(entries):,} giochi letti da {url}")
             return entries
 
@@ -531,6 +541,7 @@ async def fetch(cfg, cache, client, platform, url: str, log=print, options: dict
         cache.kv_set(cache_key(kind, url), {"url": url, "index_url": url, "pid": platform.id,
                                             "time": time.time(), "entries": entries})
         _prune(cache, platform.id, url, {kind: 1})
+        tick(1, 1, len(entries))
         log(f"{platform.name}: {len(entries):,} giochi da {url}")
         return entries
 
@@ -539,10 +550,14 @@ async def fetch(cfg, cache, client, platform, url: str, log=print, options: dict
     page_parser = parse_type_c_page if kind == "type_c" else parse_type_a_page
     cache.kv_set(cache_key(kind, url, 1), {"url": url, "index_url": url, "pid": platform.id, "page": 1,
                                            "total_pages": total, "time": time.time(), "entries": entries})
+    tick(1, total, len(entries))
     log(f"{platform.name}: pagina 1/{total} — {len(entries):,} giochi")
     seen = {e["name"] for e in entries}
     page, cur_html, cur_url = 1, first, url
     while True:
+        if stopped():  # interruzione richiesta: si tiene quello che è già stato salvato pagina per pagina
+            log(f"{platform.name}: lettura interrotta alla pagina {page}/{total}")
+            break
         if kind == "type_c" and total <= 1:
             purl = next_page_url(cur_html, cur_url)  # paginatore senza numeri: si segue «next»
             if not purl:
@@ -564,6 +579,7 @@ async def fetch(cfg, cache, client, platform, url: str, log=print, options: dict
                                                 "page": page, "total_pages": total, "time": time.time(),
                                                 "entries": fresh})
         entries.extend(fresh)
+        tick(page, total, len(fresh))
         log(f"{platform.name}: pagina {page}/{total} — {len(fresh):,} giochi")
     _prune(cache, platform.id, url, {kind: total})  # via le pagine di un elenco piu' lungo
     log(f"{platform.name}: {len(entries):,} giochi letti da {url}")
