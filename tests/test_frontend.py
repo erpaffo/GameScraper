@@ -356,7 +356,7 @@ def test_extra_rom_roots():
     from gamescraper.app import jobs as J
     from gamescraper.scanner import find_platform_dirs
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
-        tmp = Path(t)
+        tmp = Path(t).resolve()  # macOS: /var -> /private/var, e config.load risolve i percorsi
         (tmp / "Roms" / "snes").mkdir(parents=True)
         (tmp / "Roms" / "snes" / "Mario.sfc").write_bytes(b"x" * 64)
         (tmp / "Altro disco" / "Switch" / "Celeste").mkdir(parents=True)
@@ -646,7 +646,7 @@ def test_single_data_dir():
     """exe e sorgenti usano la stessa cartella dati: GAMESCRAPER_CONFIG > accanto all'exe > cartella dati dell'utente."""
     import os
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
-        tmp = Path(t)
+        tmp = Path(t).resolve()  # macOS: /var/folders e' un link a /private/var/folders, e config.load risolve i percorsi
         shared, other = tmp / "dati", tmp / "progetto"
         shared.mkdir()
         other.mkdir()
