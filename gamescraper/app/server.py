@@ -56,10 +56,14 @@ THUMB_WIDTHS = (200, 300, 450, 700, 1280)
 class Library:
     """Istantanea in memoria di library.db + dati utente."""
 
-    # colonne pesanti servite solo dalla scheda del gioco (details): fuori dalla memoria, ~300 MB su 160.000 giochi.
-    # Della descrizione resta il primo carattere: basta a _missing() per sapere se c'e'.
-    DETAIL_SQL = {"description": "substr(description, 1, 1) AS description", "store_pages": "NULL AS store_pages",
-                  "origin": "NULL AS origin", "ratings": "NULL AS ratings"}
+    # colonne servite solo per un gioco alla volta (game()/details()): fuori dalla memoria, ~550 MB su 160.000 giochi
+    # (launch da solo ~230: le fonti di download del catalogo). Della descrizione resta il primo carattere: basta a
+    # _missing() per sapere se c'e'.
+    DETAIL_SQL = {"description": "substr(description, 1, 1) AS description",
+                  **{c: f"NULL AS {c}" for c in ("store_pages", "origin", "ratings", "launch", "install_uri", "page",
+                                                  "install_dir", "canonical", "crc", "video_url")}}
+    # valori ripetuti in migliaia di giochi: una sola copia di ogni stringa invece di una per gioco
+    SHARED = ("platform", "store", "region", "developer", "publisher", "release_date", "players")
 
     def __init__(self, cfg):
         self.cfg = cfg
@@ -82,11 +86,15 @@ class Library:
         db.row_factory = sqlite3.Row
         cols = ", ".join(self.DETAIL_SQL.get(c, c) for c in (r[1] for r in db.execute("PRAGMA table_info(games)")))
         games = [dict(r) for r in db.execute(f"SELECT {cols} FROM games" + ("" if online else " WHERE store IS NOT 'online'"))]
+        pool: dict[str, str] = {}
+        share = pool.setdefault
         for g in games:
-            g["genres"] = json.loads(g["genres"] or "[]")
+            for k in self.SHARED:
+                if g[k].__class__ is str:
+                    g[k] = share(g[k], g[k])
+            g["genres"] = [share(x, x) for x in json.loads(g["genres"] or "[]")]
             g["files"] = json.loads(g["files"] or "[]")
-            g["media"] = json.loads(g["media"] or "{}")
-            g["launch"] = json.loads(g.get("launch") or "{}")
+            g["media"] = {share(k, k): v for k, v in json.loads(g["media"] or "{}").items()}
         auto: dict[str, dict] = {}
         for slug, name in db.execute("SELECT slug, name FROM collections"):
             auto[slug] = {"name": name, "keys": set()}
@@ -121,7 +129,13 @@ class Library:
             row = None
         finally:
             db.close()
-        return dict(zip(self.DETAIL_SQL, row)) if row else dict.fromkeys(self.DETAIL_SQL)
+        out = dict(zip(self.DETAIL_SQL, row)) if row else dict.fromkeys(self.DETAIL_SQL)
+        out["launch"] = json.loads(out["launch"] or "{}")
+        return out
+
+    def game(self, gid: int) -> dict:
+        """Il gioco con tutte le colonne (una lettura da library.db): per le azioni su un singolo gioco."""
+        return {**self.get(gid), **self.details(gid)}
 
 
 def _players(v, platform: str = "") -> int:
@@ -261,6 +275,9 @@ def create_app(cfg) -> FastAPI:
             for grp, members in lib.groups.items():
                 if members[0].get("store") != "online":  # i giochi solo online non contano come posseduti
                     plats[members[0]["platform"]] += 1
+            for p, urls in cfg.catalogs.items():
+                if urls:
+                    plats[p] += 0  # console con uno store online ma senza giochi posseduti
             # JSONResponse diretto: jsonable_encoder di FastAPI su ~150.000 righe costa secondi
             return JSONResponse({
                 "built_at": lib.built_at, "user_rev": user.rev,
@@ -296,7 +313,7 @@ def create_app(cfg) -> FastAPI:
 
     @app.get("/api/game/{gid}")
     def api_game(gid: int):
-        g = {**lib.get(gid), **lib.details(gid)}
+        g = lib.game(gid)
         v = view([g["grp"]])
         grp = v["groups"][g["grp"]]
         p = P.PLATFORMS.get(g["platform"])
@@ -378,7 +395,7 @@ def create_app(cfg) -> FastAPI:
 
     @app.post("/api/game/{gid}/install")
     def api_install(gid: int):
-        g = lib.get(gid)
+        g = lib.game(gid)
         if not g.get("install_uri"):
             raise HTTPException(400, "Questo gioco non ha un collegamento per l'installazione")
         try:
@@ -389,7 +406,7 @@ def create_app(cfg) -> FastAPI:
 
     @app.post("/api/game/{gid}/torrent")
     def api_torrent(gid: int):
-        g = lib.get(gid)
+        g = lib.game(gid)
         mag = (g.get("launch") or {}).get("magnet")
         if not mag:
             raise HTTPException(400, "Nessun link magnet per questo gioco")
@@ -401,7 +418,7 @@ def create_app(cfg) -> FastAPI:
 
     @app.post("/api/game/{gid}/store-page")
     def api_store_page(gid: int):
-        g = lib.get(gid)
+        g = lib.game(gid)
         if not g.get("page"):
             raise HTTPException(400, "Nessuna pagina dello store")
         try:
@@ -412,13 +429,13 @@ def create_app(cfg) -> FastAPI:
 
     @app.post("/api/game/{gid}/play")
     def api_play(gid: int):
-        g = lib.get(gid)
+        g = lib.game(gid)
         if g.get("store"):
             if not g.get("installed"):
                 raise HTTPException(409, "Il gioco non e' installato: usa «Installa»")
             try:
                 launcher.launch_pc(g["key"], g["title"], g["launch"], g.get("install_dir") or "",
-                                   STORE_NAMES.get(g["store"], g["store"]))
+                                   STORE_NAMES.get(g["store"], g["store"]), g["store"])
             except L.LaunchError as e:
                 raise HTTPException(409, str(e))
             return {"ok": True}
@@ -432,13 +449,38 @@ def create_app(cfg) -> FastAPI:
             raise HTTPException(409, str(e))
         return {"ok": True}
 
+    @app.post("/api/game/{gid}/shortcut")
+    def api_shortcut(gid: int):
+        """Collegamento sul desktop che avvia il gioco con GameScraper (tempo di gioco, script, ecc.)."""
+        from ..library import shortcut as SC
+        from ..remote.sunshine import launcher_cmd
+        g = lib.game(gid)  # serve "launch" (icona dell'exe), che non sta in memoria
+        if g.get("store") == "online":
+            raise HTTPException(400, "Il gioco non e' installato")
+        launch = g.get("launch") or {}
+        icon = launch.get("target") if g.get("store") and launch.get("type") != "uri" else None
+        if not icon or not Path(icon).is_file():  # icona dalla copertina
+            rel = lib.by_id[gid]["media"].get("cover") or lib.by_id[gid]["media"].get("header")
+            src = Path(cfg.cache) / rel if rel and not rel.startswith("url:") else None
+            icon = src and SC.make_icon(src, C.settings_path(cfg).parent / "shortcuts" / f"{gid}.ico")
+        base, wd = launcher_cmd(cfg)
+        try:
+            lnk = SC.create(g["title"], base, wd, g["key"], str(icon) if icon else None)
+        except (RuntimeError, OSError, subprocess.SubprocessError) as e:
+            raise HTTPException(500, str(e))
+        return {"ok": True, "path": str(lnk)}
+
     # ------------------------------------------------------------ profilo di avvio del gioco
     @app.get("/api/game/{gid}/profile")
     def api_profile(gid: int):
         g = lib.get(gid)
         p = P.PLATFORMS.get(g["platform"])
-        if not p or g.get("store"):
-            raise HTTPException(400, "I profili di avvio valgono per i giochi delle console")
+        if g.get("store") == "online":
+            raise HTTPException(400, "Il gioco non e' installato")
+        if g.get("store"):  # giochi PC: solo gli script prima/dopo
+            return {"profile": user.profile(g["key"]) or {}, "pc": True, "platform": STORE_NAMES.get(g["store"], "PC")}
+        if not p:
+            raise HTTPException(400, "Console sconosciuta")
         base = L.plan(cfg, p)
         try:
             cur = L.plan(cfg, p, user.profile(g["key"]))
@@ -460,7 +502,8 @@ def create_app(cfg) -> FastAPI:
     @app.post("/api/game/{gid}/profile")
     def api_profile_save(gid: int, body: dict = Body(...)):
         g = lib.get(gid)
-        data = {k: str(body.get(k) or "").strip() for k in ("emulator", "core", "exe", "args", "extra")}
+        fields = L.SCRIPT_KEYS if g.get("store") else ("emulator", "core", "exe", "args", "extra", *L.SCRIPT_KEYS)
+        data = {k: str(body.get(k) or "").strip() for k in fields}
         data = {k: v for k, v in data.items() if v}
         if data.get("emulator") and data["emulator"] not in L.EMULATOR_NAMES:
             raise HTTPException(400, "Emulatore sconosciuto")
@@ -1633,7 +1676,7 @@ def create_app(cfg) -> FastAPI:
     def api_game_ra(gid: int, force: int = 0):
         """Obiettivi del gioco e progresso dell'utente. Cache: catalogo della console 7 giorni, abbinamento 30 giorni,
         progresso 30 minuti (force=1 lo riscarica)."""
-        g = lib.get(gid)
+        g = lib.game(gid)  # serve il nome canonico
         conf = _ra_conf()
         if not (conf.get("username") and conf.get("key")):
             return {"configured": False}
@@ -2208,6 +2251,21 @@ def create_app(cfg) -> FastAPI:
         return {"themes": X.list_themes(cfg), "active_theme": cfg.app.get("theme", "default"),
                 "plugins": X.list_plugins(cfg, plugin_errors),
                 "paths": {"themes": str(X.user_dir(cfg, "themes")), "plugins": str(X.user_dir(cfg, "plugins"))}}
+
+    @app.get("/api/app/launch")
+    def api_launch_opts():
+        return cfg.app.get("launch") or {}
+
+    @app.post("/api/app/launch")
+    def api_launch_opts_save(body: dict = Body(...)):
+        """Script prima/dopo ogni gioco e chiusura del launcher dello store a fine partita."""
+        conf = {k: str(body.get(k) or "").strip() for k in L.SCRIPT_KEYS}
+        conf = {k: v for k, v in conf.items() if v}
+        if body.get("close_launcher"):
+            conf["close_launcher"] = True
+        C.save_settings(cfg, app={"launch": conf})
+        cfg.app["launch"] = conf
+        return conf
 
     @app.post("/api/app/duplicates")
     def api_duplicates(body: dict = Body(...)):

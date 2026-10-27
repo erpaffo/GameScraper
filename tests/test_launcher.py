@@ -58,8 +58,74 @@ def test_eden_plan_and_command(tmp: Path):
     print("ok  comando di avvio Switch con Eden (standard, fullscreen e gioco in cartella)")
 
 
+class FakeUser:
+    def __init__(self):
+        self.plays = []
+
+    def record_play(self, key, secs):
+        self.plays.append(key)
+
+    def mark_started(self, key):
+        pass
+
+
+def test_scripts_and_close_launcher(tmp: Path):
+    import time
+    log = tmp / "log.txt"
+    hook = tmp / "hook.py"
+    hook.write_text("import os, sys\nopen(sys.argv[1], 'a').write(sys.argv[2] + ':' + os.environ['GAMESCRAPER_TITLE'] + '\\n')\n")
+    run = lambda tag: f'"{sys.executable}" "{hook}" "{log}" {tag}'  # noqa: E731
+    cfg = C.Config()
+    cfg.app["launch"] = {"before": run("all-before"), "after": run("all-after"), "close_launcher": True}
+    prof = {"before": run("game-before"), "after": run("game-after")}
+    # gli script nel profilo non lo rendono un profilo di emulatore
+    assert L.plan(cfg, P.get("switch"), prof) == L.plan(cfg, P.get("switch"))
+
+    closed, open_now = [], {"steam.exe": False}
+    saved = (L._procs_named, L.close_launcher, L.LAUNCHER_GRACE)
+    L._procs_named = lambda name: [1] if open_now.get(name) else []
+    L.close_launcher, L.LAUNCHER_GRACE = closed.append, 0
+    try:
+        for was_open in (False, True):
+            log.write_text("")
+            open_now["steam.exe"] = was_open
+            user = FakeUser()
+            ln = L.Launcher(cfg, user, profile_of=lambda k: prof)
+            ln.launch_pc("steam:1", "Gioco", {"type": "exe", "target": sys.executable, "args": ["-c", "pass"]}, "", "Steam", "steam")
+            open_now["steam.exe"] = True  # il gioco ha aperto Steam
+            deadline = time.time() + 30
+            while ln.state.get("status") != "finished" and time.time() < deadline:
+                time.sleep(0.1)
+            time.sleep(0.2)
+            assert ln.state.get("status") == "finished" and user.plays == ["steam:1"], ln.state
+            assert log.read_text().split() == ["all-before:Gioco", "game-before:Gioco", "game-after:Gioco", "all-after:Gioco"], log.read_text()
+        assert closed == ["steam.exe"], closed  # chiuso solo quando l'aveva aperto il gioco
+    finally:
+        L._procs_named, L.close_launcher, L.LAUNCHER_GRACE = saved
+    print("ok  script prima/dopo (tutti i giochi + gioco) e chiusura del launcher")
+
+
+def test_shortcut(tmp: Path):
+    from gamescraper.library import shortcut as SC
+    assert SC.file_name('Zelda: Ocarina of Time? "3D"') == "Zelda Ocarina of Time 3D"
+    assert SC.split_cmd('"C:\\a b\\cli.exe" -c "x y"') == ("C:\\a b\\cli.exe", '-c "x y"')
+    if sys.platform == "win32":
+        saved = SC.desktop_dir
+        SC.desktop_dir = lambda: tmp
+        try:
+            lnk = SC.create("Mario & Luigi: 'Test'", f'"{sys.executable}" -m gamescraper', str(tmp), "snes/x.sfc", None)
+            assert lnk == tmp / "Mario & Luigi 'Test'.lnk" and lnk.stat().st_size > 0
+        finally:
+            SC.desktop_dir = saved
+    print("ok  collegamento sul desktop")
+
+
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_eden_plan_and_command(Path(t))
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_scripts_and_close_launcher(Path(t))
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_shortcut(Path(t))
     print("TUTTI I TEST OK")
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.5 (2026-10-28)
+## 0.6.0 (2026-10-28)
 ### Migliorato
 
 - All'avvio, se è uscita una nuova versione compare un pop-up cliccabile che la scarica e la installa
@@ -9,6 +9,13 @@
 ### Corretto
 
 - La chiusura della finestra termina subito l'app: prima restava un processo attivo (CPU e memoria) finché non finivano i lavori in sottofondo, come la lettura degli store
+- Le console con uno store online ma senza giochi posseduti compaiono nella barra laterale
+
+### Aggiunto
+
+- Script prima e dopo il gioco: per tutti i giochi (Impostazioni › Emulatori › Avvio dei giochi) e per singolo gioco, anche PC (⚙ Profilo di avvio)
+- Chiusura automatica del launcher dello store (Steam, Epic, GOG Galaxy, Battle.net, Amazon) a fine partita, se l'aveva aperto il gioco
+- Collegamento sul desktop per ogni gioco, con l'icona del gioco: avvia il gioco tramite GameScraper e ne registra il tempo
 
 ## 0.5.4 (2026-10-27)
 

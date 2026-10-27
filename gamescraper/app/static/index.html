@@ -133,6 +133,7 @@
   <dialog id="prof-dlg">
     <h3>Profilo di avvio <span class="muted small" id="pf-game"></span></h3>
     <p class="muted small">Vale solo per questo gioco (tutte le sue versioni). I campi vuoti usano le impostazioni della console.</p>
+    <div id="pf-emu-box">
     <div class="pf-grid">
       <label>Emulatore <select class="field" id="pf-emu"></select></label>
       <label id="pf-core-row">Core RetroArch <select class="field" id="pf-core"></select></label>
@@ -145,6 +146,13 @@
         <input class="field" id="pf-extra" placeholder="es. -fullscreen"></label>
     </div>
     <div class="pf-preview"><span class="muted small">Comando:</span> <code id="pf-cmd"></code></div>
+    </div>
+    <div class="pf-grid">
+      <label class="wide">Script prima dell'avvio <span class="muted small">(comando o file .bat/.ps1; dopo quello di tutti i giochi)</span>
+        <input class="field" id="pf-before" placeholder="es. C:\Script\hdr-on.bat"></label>
+      <label class="wide">Script dopo la chiusura
+        <input class="field" id="pf-after" placeholder="es. C:\Script\hdr-off.bat"></label>
+    </div>
     <div class="row end"><button class="btn" id="pf-reset">Ripristina predefinito</button><span class="grow"></span>
       <button class="btn" id="pf-cancel">Annulla</button><button class="btn primary" id="pf-save">Salva</button></div>
   </dialog>
@@ -401,6 +409,17 @@
           <span class="muted small" id="emu-saved-to"></span>
           <button class="btn primary" id="emu-save">Salva</button>
         </div>
+        <h3>Avvio dei giochi</h3>
+        <p class="muted small">Script eseguiti per <b>tutti</b> i giochi (console e PC), ad esempio per cambiare risoluzione o
+          attivare l'HDR. Un comando o un file <code>.bat</code>/<code>.ps1</code>; ricevono <code>GAMESCRAPER_TITLE</code> e
+          <code>GAMESCRAPER_KEY</code>. Ogni gioco può averne di propri in «⚙ Profilo di avvio».</p>
+        <div class="pf-grid">
+          <label class="wide">Prima dell'avvio <input class="field" id="ln-before" placeholder="es. C:\Script\prima.bat"></label>
+          <label class="wide">Dopo la chiusura <input class="field" id="ln-after" placeholder="es. C:\Script\dopo.bat"></label>
+        </div>
+        <label class="chk"><input type="checkbox" id="ln-close"> Chiudi il launcher dello store (Steam, Epic, GOG Galaxy,
+          Battle.net, Amazon) a fine partita, se l'aveva aperto il gioco</label>
+        <div class="row end"><button class="btn primary" id="ln-save" type="button">Salva</button></div>
       </section>
 
       <!-- ---------------- libreria -->

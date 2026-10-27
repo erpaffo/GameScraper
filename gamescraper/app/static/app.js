@@ -331,10 +331,10 @@ function renderSidebar() {
   $("#cnt-missing").textContent = c.missing || "";
   $("#cnt-hidden").textContent = c.hidden || "";
   $("#cnt-dups").textContent = S.games.filter((g) => g.store !== "online" && g.id !== g.grp.primary).length || "";
-  const plats = [...S.plats.values()].filter((p) => c.plat.get(p.id) && p.id !== "windows").sort((a, b) => collator.compare(a.name, b.name));
+  const plats = [...S.plats.values()].filter((p) => (c.plat.get(p.id) || S.catalogs[p.id]?.length) && p.id !== "windows").sort((a, b) => collator.compare(a.name, b.name));
   $("#platform-list").innerHTML = plats.map((p) =>
     `<a class="nav-item" data-view="platform" data-id="${esc(p.id)}"><span class="ico">${platIcon(p.id)}</span>`
-    + `<span class="lbl">${esc(p.name)}</span><span class="cnt">${(c.plat.get(p.id) || 0).toLocaleString("it")}</span></a>`).join("");
+    + `<span class="lbl">${esc(p.name)}</span><span class="cnt">${c.plat.get(p.id)?.toLocaleString("it") || ""}</span></a>`).join("");
   S.collCounts = c.coll;
   // PC: tutti + uno per store (installati / posseduti)
   const st = c.store;
@@ -763,7 +763,8 @@ async function openDetail(id) {
       : pc ? `${esc(d.store_name)} · ${d.installed ? "installato" : "non installato"}`
       : d.emulator ? "Emulatore: " + esc(d.emulator) + (d.profile ? ` <span class="tag" title="Profilo di avvio di questo gioco">profilo</span>` : "")
       : `Nessun emulatore configurato per ${esc(d.platform_name)} — <a href="#" id="d-emu-cfg">impostazioni</a>`}
-      ${!pc && !online ? `<a href="#" id="d-profile" title="Emulatore, core, eseguibile e argomenti solo per questo gioco">⚙ Profilo di avvio</a>` : ""}</div>
+      ${!online ? `<a href="#" id="d-profile" title="${pc ? "Script prima e dopo il gioco" : "Emulatore, core, eseguibile, argomenti e script solo per questo gioco"}">⚙ Profilo di avvio</a>
+      · <a href="#" id="d-shortcut" title="Collegamento sul desktop che avvia il gioco con GameScraper">🖥 Collegamento sul desktop</a>` : ""}</div>
     ${storePages.length ? `<div class="d-emu muted" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span>🌐 Pagine dello store:</span>
       ${storePages.map((s) => `<button class="btn" data-open="${esc(s.url)}"
@@ -1830,6 +1831,10 @@ async function openProfile(d) {
   PF.id = d.id;
   const p = PF.profile, def = PF.default;
   $("#pf-game").textContent = `— ${d.title} (${PF.platform})`;
+  $("#pf-before").value = p.before || "";
+  $("#pf-after").value = p.after || "";
+  $("#pf-emu-box").hidden = !!PF.pc; // giochi PC: solo gli script
+  if (PF.pc) return $("#prof-dlg").showModal();
   const emus = PF.emulators.filter((e) => e.configured || e.id === p.emulator).sort((a, b) => (b.preset - a.preset) || a.id.localeCompare(b.id));
   $("#pf-emu").innerHTML = `<option value="">Predefinito della console${def ? ` (${esc(def.emulator)}${def.core ? " · " + esc(def.core) : ""})` : ""}</option>`
     + emus.map((e) => `<option value="${esc(e.id)}"${p.emulator === e.id ? " selected" : ""}>${esc(e.id)}${e.preset ? "" : " (non previsto per questa console)"}</option>`).join("");
@@ -1855,8 +1860,9 @@ function pfRefresh() {
 async function saveProfile(reset = false) {
   try {
     PF = Object.assign(PF, reset ? await api(`/api/game/${PF.id}/profile`, { method: "DELETE" })
-      : await api(`/api/game/${PF.id}/profile`, { body: { emulator: $("#pf-emu").value, core: $("#pf-emu").value === "retroarch" || !$("#pf-emu").value ? $("#pf-core").value : "",
-        exe: $("#pf-exe").value, args: $("#pf-args").value, extra: $("#pf-extra").value } }));
+      : await api(`/api/game/${PF.id}/profile`, { body: PF.pc ? { before: $("#pf-before").value, after: $("#pf-after").value }
+        : { emulator: $("#pf-emu").value, core: $("#pf-emu").value === "retroarch" || !$("#pf-emu").value ? $("#pf-core").value : "",
+          exe: $("#pf-exe").value, args: $("#pf-args").value, extra: $("#pf-extra").value, before: $("#pf-before").value, after: $("#pf-after").value } }));
   } catch (e) { return toast(e.message, true); }
   $("#prof-dlg").close();
   toast(reset ? "Profilo rimosso: si usano le impostazioni della console" : "Profilo di avvio salvato");
@@ -2792,6 +2798,9 @@ async function startScan() {
 async function loadEmu() {
   try { SET.emu = await api("/api/emulators"); } catch (e) { return toast(e.message, true); }
   renderEmu(SET.emu);
+  api("/api/app/launch").then((l) => {
+    $("#ln-before").value = l.before || ""; $("#ln-after").value = l.after || ""; $("#ln-close").checked = !!l.close_launcher;
+  }).catch(() => {});
 }
 
 function collectEmu() {
@@ -3102,6 +3111,10 @@ function bind() {
     else if (t.id === "d-folder") api(`/api/game/${d.id}/open-folder`, { body: {} }).catch((err) => toast(err.message, true));
     else if (t.id === "d-emu-cfg") { e.preventDefault(); openSettings("emu"); }
     else if (t.id === "d-profile") { e.preventDefault(); openProfile(d); }
+    else if (t.id === "d-shortcut") {
+      e.preventDefault();
+      api(`/api/game/${d.id}/shortcut`, { body: {} }).then(() => toast(`Collegamento «${d.title}» creato sul desktop`), (err) => toast(err.message, true));
+    }
     else if (t.id === "d-shots-all") { e.preventDefault(); openLightbox(SHOTS.detail, 0); }
     else if (t.closest("#d-myshots img")) { openLightbox(SHOTS.detail, +t.closest("img").dataset.i); }
     else if (t.id === "d-scrape") {
@@ -3390,6 +3403,8 @@ function bind() {
 
   // emulatori
   $("#emu-save").onclick = () => saveEmu();
+  $("#ln-save").onclick = () => api("/api/app/launch", { body: { before: $("#ln-before").value, after: $("#ln-after").value,
+    close_launcher: $("#ln-close").checked } }).then(() => toast("Impostazioni di avvio salvate"), (e) => toast(e.message, true));
   $("#emu-folder-pick").onclick = async () => { const p = await pickPath("folder"); if (p) $("#emu-folder").value = p; };
   $("#emu-detect").onclick = async () => {
     const folder = $("#emu-folder").value.trim();
