@@ -4,6 +4,10 @@
 ### Migliorato
 
 - Manuale completo in docs/ (13 capitoli: ogni funzione, come aggiungere store online e store PC, configurazione e comandi): sito su GitHub Pages e PDF con indice tra i file di ogni release
+
+### Corretto
+
+- Messaggi d'errore degli store che spiegano il motivo: verifica anti-bot (Cloudflare) non superabile con richieste semplici, accesso negato, pagina non trovata, sito che limita le richieste
 ### In corso
 
 - Prezzi delle key da allkeyshop (lista desideri) — `gamescraper/keyprices.py` `tests/test_keyprices.py` `tests/fixtures/aks_product.html` `tests/fixtures/aks_search.json` `tests/fixtures/aks_history.json`

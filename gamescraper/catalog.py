@@ -494,8 +494,41 @@ async def _get_page(cfg, cache, client, pid: str, url: str, log=print) -> str:
     finally:
         ledger.close()
     if r is None or r.status_code != 200:
-        raise RuntimeError(f"pagina non raggiungibile (HTTP {r.status_code if r is not None else '?'})")
+        raise RuntimeError(_http_error(r, url))
     return r.text
+
+
+def _http_error(r, url: str) -> str:
+    """Messaggio d'errore che dice anche *perché*: blocco anti-bot, pagina assente, accesso negato.
+
+    La protezione anti-bot (Cloudflare e simili) risponde 403/503 con una pagina di verifica JavaScript:
+    un client che fa solo richieste HTTP non può superarla, quindi conviene dirlo subito invece di
+    lasciare un generico «HTTP 403».
+    """
+    if r is None:
+        return "pagina non raggiungibile (nessuna risposta)"
+    code = r.status_code
+    text = ""
+    try:
+        text = (r.text or "")[:4000].lower()
+    except Exception:
+        pass
+    headers = {str(k).lower(): str(v).lower() for k, v in (r.headers or {}).items()}
+    blocked = (headers.get("cf-mitigated", "") in ("challenge", "managed")
+               or "challenge-platform" in text or "just a moment" in text
+               or "cf_chl_opt" in text or "_cf_chl_opt" in text
+               or (headers.get("server", "") == "cloudflare" and code in (403, 503)))
+    if blocked:
+        return (f"il sito si protegge con una verifica anti-bot (Cloudflare: HTTP {code}): "
+                f"risponde solo a un browser, non a richieste semplici — l'elenco non è leggibile qui "
+                f"({url}). Non è un problema della configurazione: serve un altro indirizzo o un altro sito.")
+    if code == 403:
+        return f"accesso negato dal sito (HTTP 403): {url}"
+    if code == 404:
+        return f"pagina non trovata (HTTP 404): {url}"
+    if code in (429, 503):
+        return f"il sito sta limitando le richieste (HTTP {code}): riprova più tardi — {url}"
+    return f"pagina non raggiungibile (HTTP {code}): {url}"
 
 
 async def fetch(cfg, cache, client, platform, url: str, log=print, options: dict | None = None,

@@ -85,3 +85,29 @@ def test_pagina_vuota_resta_filelist():
     assert info["kind"] == "filelist"
     assert info["games"] == 0
     assert info["samples"] == []
+
+
+def test_errori_chiari():
+    """403 anti-bot, 404 e 429 devono spiegare il motivo, non solo il codice."""
+
+    class R:
+        def __init__(self, code, text="", headers=None):
+            self.status_code = code
+            self.text = text
+            self.headers = headers or {}
+
+    cf = R(403, "<html><script src='/cdn-cgi/challenge-platform/h/b/orchestrate/jsch/v1'></script>",
+           {"server": "cloudflare", "cf-mitigated": "challenge"})
+    msg = catalog._http_error(cf, "https://esempio.test/elenco/")
+    assert "anti-bot" in msg and "Cloudflare" in msg and "403" in msg, msg
+    assert "esempio.test" in msg
+
+    # 403 senza Cloudflare: messaggio diverso (non è una verifica JavaScript)
+    msg2 = catalog._http_error(R(403), "https://esempio.test/x/")
+    assert "accesso negato" in msg2 and "anti-bot" not in msg2, msg2
+
+    assert "non trovata" in catalog._http_error(R(404), "https://esempio.test/x/")
+    assert "limitando" in catalog._http_error(R(429), "https://esempio.test/x/")
+    assert "nessuna risposta" in catalog._http_error(None, "https://esempio.test/x/")
+    # 503 di Cloudflare = verifica, non «sito giù»
+    assert "anti-bot" in catalog._http_error(R(503, "", {"server": "cloudflare"}), "https://e.test/")
