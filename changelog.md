@@ -4,6 +4,11 @@
 ### Migliorato
 
 - All'avvio, se è uscita una nuova versione compare un pop-up cliccabile che la scarica e la installa
+- Meno memoria: descrizioni, pagine degli store, fonti e valutazioni dettagliate si leggono dal database solo quando apri un gioco (circa 250 MB in meno con 160.000 giochi)
+
+### Corretto
+
+- La chiusura della finestra termina subito l'app: prima restava un processo attivo (CPU e memoria) finché non finivano i lavori in sottofondo, come la lettura degli store
 
 ## 0.5.4 (2026-10-27)
 

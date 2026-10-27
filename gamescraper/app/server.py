@@ -56,6 +56,11 @@ THUMB_WIDTHS = (200, 300, 450, 700, 1280)
 class Library:
     """Istantanea in memoria di library.db + dati utente."""
 
+    # colonne pesanti servite solo dalla scheda del gioco (details): fuori dalla memoria, ~300 MB su 160.000 giochi.
+    # Della descrizione resta il primo carattere: basta a _missing() per sapere se c'e'.
+    DETAIL_SQL = {"description": "substr(description, 1, 1) AS description", "store_pages": "NULL AS store_pages",
+                  "origin": "NULL AS origin", "ratings": "NULL AS ratings"}
+
     def __init__(self, cfg):
         self.cfg = cfg
         self.path = Path(cfg.cache) / "library.db"
@@ -75,7 +80,8 @@ class Library:
             return
         db = sqlite3.connect(self.path)
         db.row_factory = sqlite3.Row
-        games = [dict(r) for r in db.execute("SELECT * FROM games" + ("" if online else " WHERE store IS NOT 'online'"))]
+        cols = ", ".join(self.DETAIL_SQL.get(c, c) for c in (r[1] for r in db.execute("PRAGMA table_info(games)")))
+        games = [dict(r) for r in db.execute(f"SELECT {cols} FROM games" + ("" if online else " WHERE store IS NOT 'online'"))]
         for g in games:
             g["genres"] = json.loads(g["genres"] or "[]")
             g["files"] = json.loads(g["files"] or "[]")
@@ -105,6 +111,17 @@ class Library:
         if not g:
             raise HTTPException(404, "Gioco non trovato")
         return g
+
+    def details(self, gid: int) -> dict:
+        """Le colonne lasciate fuori dalla memoria (vedi DETAIL_SQL), lette da library.db per un solo gioco."""
+        db = sqlite3.connect(self.path)
+        try:
+            row = db.execute(f"SELECT {', '.join(self.DETAIL_SQL)} FROM games WHERE id=?", (gid,)).fetchone()
+        except sqlite3.OperationalError:  # library.db di una versione vecchia, senza una di queste colonne
+            row = None
+        finally:
+            db.close()
+        return dict(zip(self.DETAIL_SQL, row)) if row else dict.fromkeys(self.DETAIL_SQL)
 
 
 def _players(v, platform: str = "") -> int:
@@ -279,7 +296,7 @@ def create_app(cfg) -> FastAPI:
 
     @app.get("/api/game/{gid}")
     def api_game(gid: int):
-        g = lib.get(gid)
+        g = {**lib.get(gid), **lib.details(gid)}
         v = view([g["grp"]])
         grp = v["groups"][g["grp"]]
         p = P.PLATFORMS.get(g["platform"])
@@ -2980,3 +2997,7 @@ def run(cfg, port: int = 8765, browser: bool = False, bigpicture: bool = False):
         t.join()
     finally:
         server.should_exit = True
+        t.join(timeout=3)  # spegnimento ordinato del server: telefono e controller virtuali
+        # uscita immediata: senza, Python aspetta i lavori in sottofondo (lettura store, scraping) e la
+        # finestra chiusa resta un processo che lavora; quei lavori riprendono da soli al prossimo avvio
+        os._exit(0)

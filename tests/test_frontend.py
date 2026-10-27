@@ -681,6 +681,8 @@ def test_library_parts():
         db = sqlite3.connect(tmp / "library.db")
         db.execute("INSERT INTO games(key, platform, title, sort_title, genres, files, media, found, grp, is_primary, "
                    "origin, store) VALUES('gba/ON', 'gba', 'Online', 'online', '[]', '[]', '{}', 1, 'gba/on', 1, '{}', 'online')")
+        db.execute("UPDATE games SET description = 'Una descrizione lunga', origin = '{\"title\": \"libretro\"}' "
+                   "WHERE key = 'gba/AAA'")
         db.commit()
         db.close()
         cfg = config.Config(cache=tmp, output=tmp / "out")
@@ -693,7 +695,12 @@ def test_library_parts():
         for lib in (own, onl):  # gli indici di gruppo valgono dentro ciascuna parte
             assert all(r[6] < len(lib["groups"]["rows"]) for r in lib["games"]["rows"])
             assert all(lib["groups"]["rows"][r[6]][0] == r[0] for r in lib["games"]["rows"] if r[1] != "Pocket Monsters - Ruby")
-    print("ok  libreria in due parti: posseduti subito, catalogo online dopo")
+        # le colonne pesanti non stanno in memoria ma la scheda del gioco le ha complete
+        ruby = next(r for r in own["games"]["rows"] if r[1] == "Pokemon - Versione Rubino")
+        d = c.get(f"/api/game/{ruby[0]}").json()
+        assert d["description"] == "Una descrizione lunga" and d["sources"] == {"title": "libretro"}, d
+        assert "descrizione" not in d["missing"], d["missing"]  # in memoria ne resta il primo carattere
+    print("ok  libreria in due parti: posseduti subito, catalogo online dopo; dettagli letti solo per la scheda")
 
 
 if __name__ == "__main__":
