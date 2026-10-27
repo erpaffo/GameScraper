@@ -2545,8 +2545,25 @@ async function checkUpdate(force = false, show = false) {
     if ($("#about-install")) $("#about-install").onclick = installUpdate;
   } else if (u.newer && store.get("updateSeen", "") !== u.latest) {
     store.set("updateSeen", u.latest); // un solo avviso per versione
-    toast(`${txt} Impostazioni › Info`);
+    updatePopup(u);
   }
+}
+
+/** Piccolo pop-up cliccabile: installa la nuova versione (o apre la pagina di download se non si puo' installare dall'app). */
+function updatePopup(u) {
+  document.querySelector("#update-pop")?.remove();
+  const p = document.createElement("button");
+  p.id = "update-pop";
+  p.type = "button";
+  p.innerHTML = `<b>⬆ Nuova versione ${esc(u.latest)}</b><span>${u.install_kind ? "Clicca per scaricare e installare" : "Clicca per scaricarla"}</span><i title="Chiudi">✕</i>`;
+  p.onclick = (e) => {
+    p.remove();
+    if (e.target.tagName === "I") return;
+    if (!u.install_kind) return api("/api/open", { body: { url: u.url } });
+    openSettings("about");
+    installUpdate();
+  };
+  overlayHost().appendChild(p);
 }
 
 /** Scarica e installa la nuova versione (dal server); alla fine l'app si chiude e si riapre aggiornata. */

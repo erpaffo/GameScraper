@@ -185,6 +185,10 @@ select { background: var(--bg-2); border: 1px solid var(--line); border-radius: 
 #popover .opt .muted { font-size: 12px; }
 #toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); background: #23283a; border: 1px solid var(--line); padding: 10px 16px; border-radius: 10px; z-index: 50; max-width: 70vw; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
 #toast.err { border-color: var(--bad); }
+#update-pop { position: fixed; right: 20px; bottom: 20px; z-index: 51; display: flex; flex-direction: column; gap: 2px; text-align: left; cursor: pointer; background: #1d2333; color: var(--text); border: 1px solid var(--accent, #6c8cff); padding: 10px 40px 10px 16px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.5); font: inherit; }
+#update-pop span { font-size: 12px; opacity: .75; }
+#update-pop i { position: absolute; top: 8px; right: 12px; font-style: normal; opacity: .6; }
+#update-pop:hover { filter: brightness(1.15); }
 #running { position: fixed; left: calc(var(--sidebar) + 20px); bottom: 20px; z-index: 30; background: #1d2333; border: 1px solid var(--line); border-radius: 12px; padding: 10px 16px; display: flex; gap: 12px; align-items: center; box-shadow: 0 10px 30px rgba(0,0,0,.5); max-width: 60vw; }
 #running .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--good); box-shadow: 0 0 10px var(--good); animation: pulse 1.4s infinite; }
 #running.extracting .dot { background: var(--warn); box-shadow: 0 0 10px var(--warn); }

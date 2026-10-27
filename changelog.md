@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.5 (2026-10-28)
+### Migliorato
+
+- All'avvio, se è uscita una nuova versione compare un pop-up cliccabile che la scarica e la installa
+
 ## 0.5.4 (2026-10-27)
 
 ### Corretto
