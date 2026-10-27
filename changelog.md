@@ -1,9 +1,6 @@
 # Changelog
 
-## 0.6.0 (2026-10-27)
-### Migliorato
-
-- Manuale completo in docs/ (13 capitoli: ogni funzione, come aggiungere store online e store PC, configurazione e comandi): sito su GitHub Pages e PDF con indice tra i file di ogni release
+## 0.5.4 (2026-10-27)
 
 ### Corretto
 
