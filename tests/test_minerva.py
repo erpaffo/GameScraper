@@ -54,7 +54,22 @@ def test_platform_hints():
     print("ok  console non riconosciute dal nome del set")
 
 
+def test_store_switch_preimpostati():
+    """I preset Switch: tre indirizzi di elenco completo e una copia indipendente dalla costante."""
+    pre = M.presets()
+    assert list(pre) == ["switch"], pre
+    assert pre["switch"] == [
+        "https://nxbrew.net/game-index/",
+        "https://www.ziperto.com/nintendo-switch-nsp/",
+        "https://www.ziperto.com/nintendo-switch-xci/",
+    ], pre
+    pre["switch"].append("https://esempio.test/")  # il chiamante non deve modificare PRESETS
+    assert "https://esempio.test/" not in M.PRESETS["switch"], M.PRESETS
+    print("ok  preset Switch: NXBrew + Ziperto NSP + Ziperto XCI, copia indipendente")
+
+
 if __name__ == "__main__":
     test_collect()
     test_platform_hints()
+    test_store_switch_preimpostati()
     print("TUTTI I TEST OK")

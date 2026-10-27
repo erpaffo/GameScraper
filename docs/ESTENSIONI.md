@@ -184,6 +184,12 @@ Il plugin incluso **Statistiche** (`gamescraper/app/plugins/statistiche/`) usa t
 |---|---|
 | **Statistiche** | tempo di gioco per console e store, giochi più giocati, completezza dei metadati |
 | **Link → Store** | legge una pagina che raccoglie altri siti, raggruppa i link per intestazione (h2/h3) e aggiunge ciascuno come store di una console o come store PC (repack / download diretto) |
+| **Store Minerva + Switch** | importa in un clic le cartelle di minerva-archive.org elencate su r-roms.github.io **e** aggiunge gli store Switch preimpostati (NXBrew `game-index`, Ziperto NSP, Ziperto XCI) |
+
+**Store Minerva + Switch** tiene i preset in `PRESETS` (`backend.py`): per aggiungerne altri basta una riga
+(`{"console": ["https://…"]}`). Poiché gli elenchi della stessa console possono avere formati diversi
+(`type_b`, `type_c`, `type_d`), quando una console ha più di un indirizzo il `type` fisso viene rimosso:
+ogni pagina viene riconosciuta da sola da `catalog.detect_kind`.
 
 **Link → Store** è anche un esempio di plugin che **scrive nelle impostazioni**: usa le stesse funzioni
 dell'interfaccia (`config.set_setting`) e quindi le modifiche valgono subito, senza riavviare l'app.

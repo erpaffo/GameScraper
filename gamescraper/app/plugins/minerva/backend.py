@@ -1,5 +1,6 @@
 """Plugin Minerva: riempie gli "Store online" di ogni console con i link a minerva-archive.org
-elencati su https://r-roms.github.io (gli altri siti linkati da r-roms vengono ignorati).
+elencati su https://r-roms.github.io (gli altri siti linkati da r-roms vengono ignorati), più gli
+store Switch preimpostati (NXBrew e Ziperto).
 
 POST /plugin-api/minerva/importa  -> avvia l'importazione (in background)
 GET  /plugin-api/minerva/stato    -> stato e log
@@ -17,6 +18,23 @@ from gamescraper import platforms as P
 RROMS = "https://r-roms.github.io/"
 _PAGE = re.compile(r'href="(\./[^"#]+)"')
 _MINERVA = re.compile(r'https?://(?:www\.)?minerva-archive\.org/browse/[^"\'<>\s]+', re.I)
+
+# Store Switch preimpostati: le pagine che elencano TUTTI i giochi, non una categoria.
+# I tre formati sono diversi (type_b, type_c, type_d): non si fissa un "type" per la console,
+# ogni pagina viene riconosciuta da sola (catalog.detect_kind).
+PRESETS: dict[str, list[str]] = {
+    "switch": [
+        "https://nxbrew.net/game-index/",             # elenco A-Z su una pagina (type_b)
+        "https://www.ziperto.com/nintendo-switch-nsp/",  # archivio paginato (type_c)
+        "https://www.ziperto.com/nintendo-switch-xci/",  # elenco XCI su una pagina (type_d)
+    ],
+}
+
+
+def presets() -> dict[str, list[str]]:
+    """Copia degli store preimpostati {console: [url]} (così il chiamante non modifica la costante)."""
+    return {pid: list(urls) for pid, urls in PRESETS.items()}
+
 
 
 def subpages(index: str) -> list[str]:
@@ -89,8 +107,17 @@ def register(gs):
             say("Lettura di r-roms.github.io…")
             with httpx.Client(follow_redirects=True, timeout=30) as h:
                 found = collect(lambda u: h.get(u).raise_for_status().text)
+            # store preimpostati (Switch: NXBrew e Ziperto), aggiunti a quelli trovati
+            pre = presets()
+            for pid, urls in pre.items():
+                cur = found.setdefault(pid, [])
+                for u in urls:
+                    if unquote(u) not in map(unquote, cur):
+                        cur.append(u)
             job["found"] = {k: len(v) for k, v in found.items()}
             say(f"{sum(map(len, found.values()))} link Minerva per {len(found)} console")
+            if pre.get("switch"):
+                say(f"Switch: {len(pre['switch'])} store preimpostati (NXBrew, Ziperto NSP, Ziperto XCI)")
             # aggiunge ai link gia' presenti (quelli inseriti a mano restano)
             cats = C.read_settings(cfg).get("catalogs", {})
             for pid, urls in found.items():
@@ -99,6 +126,12 @@ def register(gs):
                 old = list(cur.get("urls") or []) if isinstance(cur, dict) else list(cur)
                 merged = old + [u for u in urls if unquote(u) not in map(unquote, old)]
                 if isinstance(cur, dict):
+                    # piu' elenchi della stessa console possono avere formati diversi: il "type"
+                    # fissato per la console ne romperebbe alcuni, quindi si lascia il riconoscimento
+                    if len(merged) > 1 and cur.get("type"):
+                        say(f"{pid}: tolto il tipo fisso «{cur['type']}» "
+                            f"(con piu' elenchi ogni pagina viene riconosciuta da sola)")
+                        cur = {k: v for k, v in cur.items() if k != "type"}
                     cats[pid] = {**cur, "urls": merged}
                 else:
                     cats[pid] = merged

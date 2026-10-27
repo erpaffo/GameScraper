@@ -5,6 +5,7 @@
 
 - All'avvio, se è uscita una nuova versione compare un pop-up cliccabile che la scarica e la installa
 - Meno memoria: descrizioni, pagine degli store, fonti e valutazioni dettagliate si leggono dal database solo quando apri un gioco (circa 250 MB in meno con 160.000 giochi)
+- Memoria del server quasi dimezzata (da ~750 a ~410 MB con 160.000 giochi): fonti di download, indirizzi di installazione e pagine degli store si leggono solo per il gioco che apri, e i valori ripetuti (console, store, regione, generi) sono condivisi. Anche il caricamento della libreria è più veloce
 
 ### Corretto
 
@@ -16,6 +17,7 @@
 - Script prima e dopo il gioco: per tutti i giochi (Impostazioni › Emulatori › Avvio dei giochi) e per singolo gioco, anche PC (⚙ Profilo di avvio)
 - Chiusura automatica del launcher dello store (Steam, Epic, GOG Galaxy, Battle.net, Amazon) a fine partita, se l'aveva aperto il gioco
 - Collegamento sul desktop per ogni gioco, con l'icona del gioco: avvia il gioco tramite GameScraper e ne registra il tempo
+- Store Minerva + Switch: l'estensione aggiunge anche gli store Switch preimpostati (NXBrew game-index, Ziperto NSP e Ziperto XCI) e toglie il tipo fisso quando una console ha piu' elenchi, cosi' ogni pagina viene riconosciuta da sola
 
 ## 0.5.4 (2026-10-27)
 
