@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.1 (2026-10-27)
+### Corretto
+
+- L'app non partiva con la versione 0.5.0 (mancava un modulo dei port PC e un import nell'avvio con --log)
+- settings.json non si svuota piu' se il file e' bloccato (OneDrive, antivirus) o rotto; scritture da piu' thread senza perdite
+- Eseguibili: incluso beautifulsoup4, senza il quale gli store type_a/type_b e «Link → Store» non funzionavano
+
+### Rimosso
+
+- nxbrew_giochi.md (elenco di prova non usato dal programma)
+
 ## 0.5.0 (2026-10-27)
 ### Migliorato
 
@@ -31,18 +42,12 @@
 ### Corretto
 
 - Sicurezza: il server dell'app risponde solo a se' stesso (blocca richieste e WebSocket da altri siti e il DNS rebinding) e le icone scaricate dai siti sono servite in sandbox, cosi' uno script in un SVG non puo' usare l'app
-- settings.json non si svuota piu' se il file e' bloccato (OneDrive, antivirus) o rotto; scritture da piu' thread senza perdite
 - Due clic rapidi (o PC e telefono insieme) non avviano piu' due volte la stessa ricerca o installazione
 - Scheda del gioco: la riga «Fonti» compare di nuovo (era sovrascritta dai link di download degli store online)
-- Eseguibili: incluso beautifulsoup4, senza il quale gli store type_a/type_b e «Link → Store» non funzionavano
 - **Aggiungere un altro store mentre una lettura è in corso lo accoda** invece di rispondere «già in corso»: usano la
   stessa coda il pulsante ⟳, «Leggi gli elenchi» degli store PC, la pagina store delle console e il plugin Link → Store.
 - L'interruzione e l'accodamento non si bloccano più a vicenda: dopo «Interrompi» il job si chiude davvero (prima poteva
   restare «in corso»), e più letture in parallelo non si scontrano sulle stesse connessioni al database.
-
-### Rimosso
-
-- nxbrew_giochi.md (elenco di prova non usato dal programma)
 
 ## 0.4.0 (2026-10-27)
 ### Aggiunto

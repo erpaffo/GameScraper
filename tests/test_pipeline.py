@@ -19,9 +19,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import httpx  # noqa: E402
 from rich.progress import Progress  # noqa: E402
 
-from gamescraper import config, pipeline, platforms as P  # noqa: E402
+from gamescraper import config, net, pipeline, platforms as P  # noqa: E402
 from gamescraper.cache import Cache  # noqa: E402
 from gamescraper.scanner import Game  # noqa: E402
+
+# senza attese fra le richieste: col ritmo vero (ScreenScraper < 1 al secondo) il test durava oltre 2 minuti
+net.RateLimiter.interval = property(lambda self: 0, lambda self, v: None)
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 1000
 

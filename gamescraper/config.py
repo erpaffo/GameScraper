@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -210,35 +211,48 @@ def rom_roots(cfg: Config) -> list[Path]:
     return out
 
 
+_WRITE_LOCK = threading.Lock()  # app, telefono e job scrivono settings.json da thread diversi
+
+
+def _update_settings(cfg: Config, change):
+    """Legge settings.json, applica change(dict) e lo riscrive, un thread alla volta.
+    Se il file esiste ma non si legge (bloccato da OneDrive/antivirus) si ferma con l'errore: ripartire
+    da {} cancellerebbe tutte le altre impostazioni. Un JSON rotto resta in settings.rotto.json."""
+    p = settings_path(cfg)
+    with _WRITE_LOCK:
+        try:
+            s = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+        except ValueError:
+            os.replace(p, p.with_suffix(".rotto.json"))
+            s = {}
+        change(s)
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(json.dumps(s, indent=2, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, p)
+        apply_settings(cfg)
+
+
 def set_setting(cfg: Config, key: str, value):
     """Scrive una voce intera di settings.json (es. una lista) e riapplica le impostazioni."""
-    s = read_settings(cfg)
-    if value in (None, [], {}):
-        s.pop(key, None)
-    else:
-        s[key] = value
-    p = settings_path(cfg)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(s, indent=2, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, p)
-    apply_settings(cfg)
+    def change(s):
+        if value in (None, [], {}):
+            s.pop(key, None)
+        else:
+            s[key] = value
+    _update_settings(cfg, change)
 
 
 def save_settings(cfg: Config, **sections):
     """Aggiorna settings.json (solo le sezioni passate) e riapplica al config in memoria."""
-    s = read_settings(cfg)
-    for k, v in sections.items():
-        target = getattr(cfg, k, None)
-        for kk, vv in v.items():  # valore vuoto = rimuovi (anche dal config in memoria)
-            if vv in (None, "", {}) and isinstance(target, dict):
-                target.pop(kk, None)
-        s.setdefault(k, {}).update(v)
-        s[k] = {kk: vv for kk, vv in s[k].items() if vv not in (None, "", {})}
-    p = settings_path(cfg)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(s, indent=2, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, p)
-    apply_settings(cfg)
+    def change(s):
+        for k, v in sections.items():
+            target = getattr(cfg, k, None)
+            for kk, vv in v.items():  # valore vuoto = rimuovi (anche dal config in memoria)
+                if vv in (None, "", {}) and isinstance(target, dict):
+                    target.pop(kk, None)
+            s.setdefault(k, {}).update(v)
+            s[k] = {kk: vv for kk, vv in s[k].items() if vv not in (None, "", {})}
+    _update_settings(cfg, change)
 
 
 def load(path: str | os.PathLike | None) -> Config:
