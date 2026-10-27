@@ -51,7 +51,7 @@ def test_catalog_entries_merge(tmp_path):
         "publisher": "Editore Uno", "players": 2, "genres": ["Action"],
         "release_date": "2024-03-15", "size": 1024 ** 3}, "page")
 
-    entries = {e["name"]: e for e in B._catalog_entries(cfg, cache, {})}
+    entries = {e["name"]: e for e in B._catalog_entries(cfg, cache, {})[0]}
     uno, due = entries["Gioco Uno Switch NSP"], entries["Gioco Due XCI"]
     assert uno["title"] == "Gioco Uno" and due["title"] == "Gioco Due", (uno["title"], due["title"])
     assert uno["description"].startswith("Descrizione completa"), uno["description"]
@@ -108,7 +108,7 @@ def test_same_game_two_sources(tmp_path):
                                "magnet": None},
                               {"name": "Altro Gioco Switch NSP", "size": None, "url": "https://bbb.test/altro/",
                                "magnet": None}]})
-    entries = B._catalog_entries(cfg, cache, {})
+    entries, _pages = B._catalog_entries(cfg, cache, {})
     assert len(entries) == 2, [e["title"] for e in entries]
     same = next(e for e in entries if e["title"] == "Same Game")
     assert [s["site"] for s in same["sources"]] == ["aaa.test", "bbb.test"], same["sources"]
@@ -130,6 +130,45 @@ def test_same_game_two_sources(tmp_path):
     print("ok  libreria: i due link sono salvati nella voce (launch.sources)")
 
 
+def test_owned_game_keeps_store_page(tmp_path):
+    """Un gioco già scaricato non compare tra gli online, ma conserva il link alla pagina dello store."""
+    from types import SimpleNamespace
+    (tmp_path / "roms").mkdir()
+    (tmp_path / "config.toml").write_text('[paths]\nroms = "roms"\ncache = "cache"\n[scrape]\nsources = []\n',
+                                          encoding="utf-8")
+    cfg = config.load(tmp_path / "config.toml")
+    cfg.catalogs = {"switch": [URL]}
+    cache = Cache(cfg.cache)
+    cache.kv_set(f"catalog:type_c:{URL}",
+                 {"url": URL, "index_url": URL, "pid": "switch", "time": time.time(),
+                  "entries": [{"name": "Zelda Test Switch NSP", "size": None,
+                               "url": "https://example-z.test/zelda-test/", "magnet": None}]})
+    owned_game = SimpleNamespace(key="switch/abc123", platform=SimpleNamespace(id="switch"), stem="Zelda Test",
+                                 inner_name="", data={}, search_name="Zelda Test")
+    entries, pages = B._catalog_entries(cfg, cache, {"switch/abc123": owned_game})
+    assert entries == [], entries  # già posseduto: niente doppione tra gli online
+    assert pages["switch/abc123"][0]["url"] == "https://example-z.test/zelda-test/", pages
+    assert pages["switch/abc123"][0]["site"] == "example-z.test"
+    cache.close()
+    print("ok  gioco posseduto: nessun doppione e link allo store conservato per la sua scheda")
+
+
+def test_library_has_store_pages(tmp_path):
+    cfg = make_env(tmp_path) if "make_env" in globals() else None
+    if cfg is None:
+        (tmp_path / "roms").mkdir()
+        (tmp_path / "config.toml").write_text('[paths]\nroms = "roms"\ncache = "cache"\n[scrape]\nsources = []\n',
+                                              encoding="utf-8")
+        cfg = config.load(tmp_path / "config.toml")
+    B.build(cfg, log=lambda m: None)
+    import sqlite3
+    db = sqlite3.connect(cfg.cache / "library.db")
+    cols = [r[1] for r in db.execute("PRAGMA table_info(games)")]
+    db.close()
+    assert "store_pages" in cols, cols
+    print("ok  libreria: la colonna store_pages esiste")
+
+
 if __name__ == "__main__":
     import tempfile
     from pathlib import Path
@@ -140,4 +179,8 @@ if __name__ == "__main__":
         test_build_includes_online(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_same_game_two_sources(Path(t))
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_owned_game_keeps_store_page(Path(t))
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_library_has_store_pages(Path(t))
     print("TUTTI I TEST OK")

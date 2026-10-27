@@ -207,6 +207,61 @@ def next_page_url(page: str, base_url: str) -> str | None:
     return urljoin(base_url, href) if href else None
 
 
+# --------------------------------------------------------------------------- type_d: elenco A-Z su una pagina
+
+def parse_type_d_index(page: str, base_url: str, exts: set[str] | None = None,
+                       config: dict | None = None) -> tuple[list[CatalogItem], int]:
+    """Legge un elenco A-Z completo su una sola pagina (es. ziperto.com/nintendo-switch-xci-list/).
+
+    Struttura riconosciuta: un contenitore `div.az-listing` (o `.items-inner`) con, per ogni lettera,
+    un blocco `div.letter-section` che contiene `<h2 class="letter-title">A</h2>` e `<ul><li><a>titolo</a>`.
+    Nessuna paginazione: si restituisce sempre 1.
+    """
+    _require_soup()
+    soup = BeautifulSoup(page, "html.parser")
+    container = (soup.select_one("div.az-listing") or soup.select_one("div.items-inner")
+                 or soup.select_one("article") or soup.body or soup)
+    items: list[CatalogItem] = []
+    seen: set[str] = set()
+
+    sections = container.select("div.letter-section")
+    if sections:
+        for section in sections:
+            title = section.select_one("h2.letter-title, h2, h3")
+            group = _clean_text(title) if title is not None else None
+            for a in section.select("ul li a[href]"):
+                item = _link_item(a, base_url, group, seen)
+                if item:
+                    items.append(item)
+    else:  # stesso elenco senza i blocchi per lettera
+        for a in container.select("ul li a[href]"):
+            item = _link_item(a, base_url, None, seen)
+            if item:
+                items.append(item)
+    return items, 1
+
+
+def _link_item(a, base_url: str, group: str | None, seen: set[str]) -> CatalogItem | None:
+    """Voce da un link dell'elenco (scarta «torna su», ancore e link senza testo utile)."""
+    href = (a.get("href") or "").strip()
+    if not href or href.startswith(("#", "javascript:", "magnet:")):
+        return None
+    name = _clean_text(a)
+    if len(name) < 6 or name.lower().startswith("back to top"):
+        return None
+    url = urljoin(base_url, href)
+    if url in seen:
+        return None
+    seen.add(url)
+    return {"name": name, "size": None, "url": url, "magnet": None, "group": group}
+
+
+def parse_type_d_page(page: str, base_url: str, exts: set[str] | None = None,
+                      config: dict | None = None) -> list[CatalogItem]:
+    """Voci dell'eventuale pagina successiva (per type_d non c'e': serve per uniformita')."""
+    return parse_type_d_index(page, base_url, exts, config)[0]
+
+
 # --------------------------------------------------------------------------- type_b: elenco A-Z
 def parse_type_b(page: str, base_url: str, exts: set[str] | None = None,
                  config: dict | None = None) -> list[CatalogItem]:
@@ -272,6 +327,7 @@ PARSERS: dict[str, ParserFunc] = {
     "type_a": parse_type_a_index,
     "type_b": parse_type_b,
     "type_c": parse_type_c_index,
+    "type_d": parse_type_d_index,
 }
 
 
@@ -306,6 +362,9 @@ def detect_kind(page: str) -> str | None:
                 return "type_b"
     if soup.select_one("article h2.post-title a[href], article h2.entry-title a[href], article h1.entry-title a[href]"):
         return "type_c"
+    # elenco A-Z completo su una pagina: struttura .az-listing o tanti link in lista dentro l'articolo
+    if soup.select_one("div.az-listing") or len(soup.select("article ul li a[href]")) >= 50:
+        return "type_d"
     return None
 
 
@@ -351,6 +410,19 @@ def cache_key(kind: str, url: str, page: int = 1) -> str:
     if kind == "type_b":
         return cache_key_url("type_b", url)
     return cache_key_url(kind, page_url(url, page, kind))
+
+
+def describe_page(page: str, base_url: str, exts: set[str] | None = None) -> dict:
+    """Anteprima di una pagina: formato riconosciuto, giochi trovati, pagine totali, primi titoli.
+
+    Serve al pulsante «Prova» dell'app: dice se l'indirizzo scelto elenca tutto il catalogo
+    (piu' pagine) oppure solo una parte, senza salvare nulla in cache.
+    """
+    kind = detect_kind(page) or "filelist"
+    got = PARSERS[kind](page, base_url, exts, {})
+    items, total = got if isinstance(got, tuple) else (got, 1)
+    return {"kind": kind, "games": len(items), "pages": total,
+            "samples": [i.get("name", "") for i in items[:5]]}
 
 
 def cached_info(cache, pid: str, url: str) -> dict:
@@ -453,11 +525,12 @@ async def fetch(cfg, cache, client, platform, url: str, log=print, options: dict
             return entries
 
     parser = PARSERS[kind]
-    if kind == "type_b":  # indice unico, nessuna paginazione
-        entries = parser(first, url, exts, options)
-        cache.kv_set(cache_key("type_b", url), {"url": url, "index_url": url, "pid": platform.id,
-                                                "time": time.time(), "entries": entries})
-        _prune(cache, platform.id, url, {"type_b": 1})
+    if kind in ("type_b", "type_d"):  # indice unico, nessuna paginazione
+        got = parser(first, url, exts, options)
+        entries = got[0] if isinstance(got, tuple) else got  # type_d restituisce anche le pagine
+        cache.kv_set(cache_key(kind, url), {"url": url, "index_url": url, "pid": platform.id,
+                                            "time": time.time(), "entries": entries})
+        _prune(cache, platform.id, url, {kind: 1})
         log(f"{platform.name}: {len(entries):,} giochi da {url}")
         return entries
 

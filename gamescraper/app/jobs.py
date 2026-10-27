@@ -339,6 +339,39 @@ class HltbJob(StoreJob):
 
 
 @dataclass
+class TopGamesJob(StoreJob):
+    """Voti online (IGDB, RAWG) per i candidati alla classifica dei migliori giochi, poi ricostruzione della libreria."""
+    pids: list = field(default_factory=list)  # vuoto = tutte le console
+    stop: bool = False
+
+    def run(self, cfg, after_build):
+        from .. import topgames
+        from ..library.build import build
+        self.status, self.started = "running", time.time()
+        self.summary = {}  # aggiornato in corso d'opera
+        cache = None
+        try:
+            cache = Cache(cfg.cache)
+            self.phase = "Voti online dei candidati"
+            topgames.run(cfg, cache, self.pids or None, log=self.say, stats=self.summary, cancelled=lambda: self.stop)
+            cache.close()
+            cache = None
+            self.phase = "Aggiornamento libreria"
+            after_build(build(cfg, log=self.say))
+            self.status = "done"
+            s = self.summary
+            self.phase = (f"Completato: {s.get('done', 0)} console, {s.get('candidates', 0):,} candidati, "
+                          f"{s.get('found', 0):,} voti trovati" + (" (interrotto)" if s.get("stopped") else ""))
+        except Exception as e:
+            self.status, self.phase = "error", f"Errore: {type(e).__name__}: {e}"
+            self.say(self.phase)
+        finally:
+            if cache:
+                cache.close()
+            self.finished = time.time()
+
+
+@dataclass
 class CollArtJob(StoreJob):
     """Icone e copertine delle collezioni da Wikipedia."""
     collections: list = field(default_factory=list)

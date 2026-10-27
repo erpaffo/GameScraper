@@ -38,8 +38,8 @@ def fake_get_page(html):
 
 
 def test_registry():
-    assert set(catalog.PARSERS) == {"filelist", "type_a", "type_b", "type_c"}, catalog.PARSERS
-    print("ok  registro: filelist, type_a, type_b, type_c")
+    assert set(catalog.PARSERS) == {"filelist", "type_a", "type_b", "type_c", "type_d"}, catalog.PARSERS
+    print("ok  registro: filelist, type_a, type_b, type_c, type_d")
 
 
 def test_default_type_is_filelist():

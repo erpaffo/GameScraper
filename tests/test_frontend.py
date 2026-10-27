@@ -616,8 +616,34 @@ def test_single_data_dir():
     print("ok  una sola cartella dati per exe e sorgenti")
 
 
+def test_library_parts():
+    """Avvio rapido: prima i giochi posseduti (part=owned), poi il catalogo online (part=online)."""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        tmp = Path(t)
+        rom = tmp / "game.gba"
+        rom.write_bytes(b"x")
+        make_library(tmp, rom)
+        db = sqlite3.connect(tmp / "library.db")
+        db.execute("INSERT INTO games(key, platform, title, sort_title, genres, files, media, found, grp, is_primary, "
+                   "origin, store) VALUES('gba/ON', 'gba', 'Online', 'online', '[]', '[]', '{}', 1, 'gba/on', 1, '{}', 'online')")
+        db.commit()
+        db.close()
+        cfg = config.Config(cache=tmp, output=tmp / "out")
+        cfg.config_path = tmp / "config.toml"
+        c = TestClient(create_app(cfg))
+        own, onl, every = (c.get("/api/library" + q).json() for q in ("?part=owned", "?part=online", ""))
+        assert sorted(r[1] for r in onl["games"]["rows"]) == ["Online"], onl["games"]["rows"]
+        assert "Online" not in {r[1] for r in own["games"]["rows"]} and len(own["games"]["rows"]) == 4
+        assert len(every["games"]["rows"]) == 5
+        for lib in (own, onl):  # gli indici di gruppo valgono dentro ciascuna parte
+            assert all(r[6] < len(lib["groups"]["rows"]) for r in lib["games"]["rows"])
+            assert all(lib["groups"]["rows"][r[6]][0] == r[0] for r in lib["games"]["rows"] if r[1] != "Pocket Monsters - Ruby")
+    print("ok  libreria in due parti: posseduti subito, catalogo online dopo")
+
+
 if __name__ == "__main__":
     main()
+    test_library_parts()
     test_names_settings_emulators()
     test_single_data_dir()
     test_relink_apply()

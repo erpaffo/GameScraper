@@ -178,6 +178,18 @@ Il plugin incluso **Statistiche** (`gamescraper/app/plugins/statistiche/`) usa t
 - un frontend con una pagina, una voce nella barra laterale e un'azione nel dettaglio;
 - un foglio di stile.
 
+### Plugin inclusi
+
+| Plugin | Cosa fa |
+|---|---|
+| **Statistiche** | tempo di gioco per console e store, giochi più giocati, completezza dei metadati |
+| **Link → Store** | legge una pagina che raccoglie altri siti, raggruppa i link per intestazione (h2/h3) e aggiunge ciascuno come store di una console o come store PC (repack / download diretto) |
+
+**Link → Store** è anche un esempio di plugin che **scrive nelle impostazioni**: usa le stesse funzioni
+dell'interfaccia (`config.set_setting`) e quindi le modifiche valgono subito, senza riavviare l'app.
+La logica di lettura della pagina sta in `gamescraper/linklist.py` (`scan_page`, `add_store`), fuori dal
+plugin, così è testabile senza avviare il server.
+
 ### Sicurezza
 
 Un plugin con `backend.py` gira con gli stessi permessi dell'app: può leggere e scrivere file e avviare programmi. Installa solo plugin di cui ti fidi e di cui puoi leggere il codice.

@@ -54,7 +54,7 @@ def test_build_pc_entries(tmp_path: Path):
                  {"url": URL2, "index_url": URL2, "pid": "windows", "time": time.time(),
                   "entries": [{"name": "Same Game", "size": None, "url": "https://direct.example.test/same/",
                                "magnet": None}]})
-    entries = B._catalog_entries(cfg, cache, {})
+    entries, _pages = B._catalog_entries(cfg, cache, {})
     assert len(entries) == 1, entries
     e = entries[0]
     assert e["pid"] == "windows" and e["kind"] == "repack", (e["pid"], e["kind"])

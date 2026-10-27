@@ -43,7 +43,8 @@ CREATE TABLE games(id INTEGER PRIMARY KEY, key TEXT UNIQUE, platform TEXT, title
                    rating REAL, description TEXT, region TEXT, found INT, files TEXT, media TEXT,
                    video_url TEXT, canonical TEXT, crc TEXT, origin TEXT, grp TEXT, is_primary INT,
                    store TEXT, installed INT, launch TEXT, install_uri TEXT, page TEXT, store_playtime REAL,
-                   install_dir TEXT, rating_count INT, rating_critics REAL, ratings TEXT, size INT, hltb TEXT);
+                   install_dir TEXT, rating_count INT, rating_critics REAL, ratings TEXT, size INT, hltb TEXT,
+                   store_pages TEXT);
 CREATE TABLE collections(slug TEXT PRIMARY KEY, name TEXT);
 CREATE INDEX games_grp ON games(grp);
 CREATE TABLE collection_games(slug TEXT, key TEXT, PRIMARY KEY(slug, key));
@@ -396,8 +397,9 @@ def _catalog_to_store_game(item: CatalogItem, console_pid: str) -> dict:
     }
 
 
-def _catalog_entries(cfg, cache, merged: dict) -> list[dict]:
-    """Voci lette dalle pagine degli store online, esclusi i giochi gia' posseduti (stesso nome file).
+def _catalog_entries(cfg, cache, merged: dict) -> tuple[list[dict], dict]:
+    """Voci lette dalle pagine degli store online (esclusi i giochi gia' posseduti) e, per i giochi
+    posseduti che compaiono negli elenchi, i link alla pagina dello store: (voci, {chiave: fonti}).
     Dati e immagini dal database LaunchBox (offline): le immagini si scaricano solo quando servono."""
     from .. import platforms as P
     from ..bulk import LaunchBoxDB
@@ -418,23 +420,40 @@ def _catalog_entries(cfg, cache, merged: dict) -> list[dict]:
     owned: dict[str, set[str]] = defaultdict(set)
     owned_titles: dict[str, set[str]] = defaultdict(set)
     owned_lb: dict[str, set[int]] = defaultdict(set)
+    owned_key: dict[tuple[str, str], str] = {}        # (console, nome file) -> chiave del gioco
+    owned_title_key: dict[tuple[str, str], str] = {}  # (console, titolo confrontabile) -> chiave
+    owned_lb_key: dict[tuple[str, int], str] = {}     # (console, id LaunchBox) -> chiave
     for g in merged.values():
         pid = g.platform.id
         owned[pid].add(g.stem.lower())
+        owned_key[(pid, g.stem.lower())] = g.key
         if g.inner_name:
             owned[pid].add(Path(g.inner_name).stem.lower())
+            owned_key.setdefault((pid, Path(g.inner_name).stem.lower()), g.key)
         if pid not in with_cat:
             continue
         names = {clean_title(g.stem), str(g.data.get("title") or ""), g.search_name}
-        owned_titles[pid].update(n for n in (tkey(x, pid) for x in names) if n)
+        for n in (tkey(x, pid) for x in names):
+            if n:
+                owned_titles[pid].add(n)
+                owned_title_key.setdefault((pid, n), g.key)
         if lb.ready():
             r = lb.find(pid, [t for t in names if t], files=[g.stem], fuzzy=0)
             if r:
                 owned_lb[pid].add(r["id"])
+                owned_lb_key.setdefault((pid, r["id"]), g.key)
     lang_regions = [l for l in cfg.languages if l in REGION_TAGS.values()]
     pref = lang_regions + [r for r in cfg.regions if r not in lang_regions]
     out, seen = [], set()
     by_title: dict[tuple[str, str], dict] = {}  # (console, titolo normalizzato) -> gioco gia' creato
+    owned_pages: dict[str, list[dict]] = defaultdict(list)  # chiave gioco -> pagine dello store
+
+    def remember_owned(key: str | None, source: dict) -> None:
+        """Il gioco e' gia' in libreria: si tiene il link allo store per la sua scheda."""
+        if not key:
+            return
+        if source["url"] not in {s["url"] for s in owned_pages[key]}:
+            owned_pages[key].append(source)
 
     def apply_store_meta(e: dict, meta: dict) -> None:
         """Copertina e descrizione lette dalla pagina dello store (o da GameTDB): riempie solo i vuoti."""
@@ -473,19 +492,23 @@ def _catalog_entries(cfg, cache, merged: dict) -> list[dict]:
         is_file_list = info["type"] == "filelist"
         for it in info["entries"]:
             stem = entry_stem(it, set(P.PLATFORMS[pid].exts))
-            # stesso URL ripetuto = doppione; nomi uguali da siti diversi sono fonti diverse
-            if stem.lower() in owned[pid] or (pid, it["url"]) in seen or stem.startswith("[BIOS]"):
-                continue
-            seen.add((pid, it["url"]))
-            title = _store_title(stem)
-            if tkey(title, pid) in owned_titles[pid]:
-                continue
-            # stesso gioco da piu' fonti (es. nxbrew + ziperto): una sola voce con piu' link
-            key = (pid, normalize(title))
             source = {"site": (urlparse(it["url"]).hostname or "").removeprefix("www."),
                       "url": it["url"], "magnet": it.get("magnet"), "name": it["name"]}
             if kind:
                 source["kind"] = kind  # repack / download diretto (solo store PC)
+            # stesso URL ripetuto = doppione; nomi uguali da siti diversi sono fonti diverse
+            if stem.lower() in owned[pid] or (pid, it["url"]) in seen or stem.startswith("[BIOS]"):
+                if stem.lower() in owned[pid]:  # gia' scaricato: si conserva il link nella sua scheda
+                    remember_owned(owned_key.get((pid, stem.lower())), source)
+                continue
+            seen.add((pid, it["url"]))
+            title = _store_title(stem)
+            tk = tkey(title, pid)
+            if tk in owned_titles[pid]:
+                remember_owned(owned_title_key.get((pid, tk)), source)
+                continue
+            # stesso gioco da piu' fonti (es. nxbrew + ziperto): una sola voce con piu' link
+            key = (pid, normalize(title))
             existing = by_title.get(key)
             if existing is not None:
                 if it["url"] not in {s["url"] for s in existing["sources"]}:
@@ -501,6 +524,7 @@ def _catalog_entries(cfg, cache, merged: dict) -> list[dict]:
             if lb.ready():
                 r = lb.find(pid, [title], files=[stem], fuzzy=0)
                 if r and r["id"] in owned_lb[pid]:
+                    remember_owned(owned_lb_key.get((pid, r["id"])), source)
                     continue  # stesso gioco gia' posseduto (titolo diverso)
                 if r:
                     e.update({"description": r["overview"], "developer": r["developer"], "publisher": r["publisher"],
@@ -520,6 +544,7 @@ def _catalog_entries(cfg, cache, merged: dict) -> list[dict]:
             by_title[key] = e
             out.append(e)
     lb.close()
+    _apply_online(cache, out)
     # una voce principale per gioco (le altre regioni restano tra le "versioni")
     groups: dict[str, list[dict]] = defaultdict(list)
     for e in out:
@@ -531,7 +556,41 @@ def _catalog_entries(cfg, cache, merged: dict) -> list[dict]:
         best = min(members, key=rank)
         for e in members:
             e["primary"] = int(e is best)
-    return out
+    return out, owned_pages
+
+
+def _apply_online(cache, entries: list[dict]) -> None:
+    """Voti e dati delle fonti online (IGDB, RAWG) per le voci da scaricare, cercati da «Migliori giochi»
+    (topgames.py): il voto unisce LaunchBox e le fonti online; gli altri campi riempiono solo i vuoti."""
+    res = cache.all_resources([e["key"] for e in entries])
+    if not res:
+        return
+
+    def val(v):
+        try:
+            return json.loads(v)
+        except (TypeError, ValueError):
+            return v
+
+    for e in entries:
+        per = res.get(e["key"])
+        if not per:
+            continue
+        rs = {src: {f: val(v) for f, v in d.items()} for src, d in per.items()}
+        lb_r = {"launchbox": {"rating": r["rating"], "rating_count": r["count"]}
+                for r in (e["ratings"] or {}).get("ratings", []) if r.get("source") == "launchbox"}
+        e["ratings"] = combine({**lb_r, **rs})
+        for d in rs.values():
+            for f in ("description", "developer", "publisher", "release_date", "players"):
+                if not e.get(f) and d.get(f):
+                    e[f] = d[f] if f != "players" else str(d[f])
+            if not e["genres"] and d.get("genres"):
+                e["genres"] = list(d["genres"])
+            if not e["year"] and str(d.get("release_date") or "")[:4].isdigit():
+                e["year"] = int(str(d["release_date"])[:4])
+            for mtype in ("cover", "screenshot"):
+                if mtype not in e["media"] and d.get(f"url:{mtype}"):
+                    e["media"][mtype] = "url:" + d[f"url:{mtype}"]
 
 
 def _attach_hltb(db, cache):
@@ -617,7 +676,7 @@ def build(cfg, log=print, progress=None) -> dict:
         shared_ratings = _share_metadata(merged, groups, primary, res)
 
         pc = _store_entries(cfg, cache)
-        net = _catalog_entries(cfg, cache, merged)
+        net, owned_pages = _catalog_entries(cfg, cache, merged)
         colls = compute_collections(cfg, list(merged.values()) + [e["obj"] for e in pc], franchises)
         from .sizes import game_size
 
@@ -647,7 +706,8 @@ def build(cfg, log=print, progress=None) -> dict:
                          json.dumps(g.origin), groups[key], int(key in primary),
                          None, None, None, None, None, None, None,
                          comb.get("rating_count"), comb.get("rating_critics"), json.dumps(comb.get("ratings", [])),
-                         game_size(g.path, g.is_dir, cache) or None))
+                         game_size(g.path, g.is_dir, cache) or None,
+                         json.dumps(owned_pages.get(key, []), ensure_ascii=False) if owned_pages else "[]"))
         for e in pc:
             rc = e["ratings"]
             rows.append((e["key"], "windows", e["title"], e["sort"], e["year"], e["release_date"], e["developer"],
@@ -656,7 +716,7 @@ def build(cfg, log=print, progress=None) -> dict:
                          json.dumps({"title": e["store"]}), e["grp"], e["primary"],
                          e["store"], e["installed"], json.dumps(e["launch"]), e["install_uri"], e["page"],
                          e["store_playtime"], e["install_dir"], rc.get("rating_count"), rc.get("rating_critics"),
-                         json.dumps(rc.get("ratings", [])), e["size"]))
+                         json.dumps(rc.get("ratings", [])), e["size"], "[]"))
         for e in net:  # disponibili online (non posseduti)
             rc = e["ratings"]
             rows.append((e["key"], e["pid"], e["title"], sort_title(e["title"]), e["year"], e["release_date"],
@@ -666,11 +726,13 @@ def build(cfg, log=print, progress=None) -> dict:
                          json.dumps({"magnet": e["magnet"], "kind": e.get("kind"),
                                      "sources": e.get("sources") or []}),
                          e["url"], e["url"], 0, None, rc.get("rating_count"), rc.get("rating_critics"),
-                         json.dumps(rc.get("ratings", [])), e["size"]))
+                         json.dumps(rc.get("ratings", [])), e["size"],
+                         json.dumps(e.get("sources") or [], ensure_ascii=False)))
         db.executemany("INSERT INTO games(key, platform, title, sort_title, year, release_date, developer, publisher,"
                        " genres, players, rating, description, region, found, files, media, video_url, canonical,"
                        " crc, origin, grp, is_primary, store, installed, launch, install_uri, page, store_playtime,"
-                       " install_dir, rating_count, rating_critics, ratings, size) VALUES(" + ",".join("?" * 33) + ")", rows)
+                       " install_dir, rating_count, rating_critics, ratings, size, store_pages) VALUES("
+                       + ",".join("?" * 34) + ")", rows)
         _attach_hltb(db, cache)
         db.executemany("INSERT INTO collections VALUES(?,?)", [(s, n) for s, (n, _) in colls.items()])
         db.executemany("INSERT INTO collection_games VALUES(?,?)",

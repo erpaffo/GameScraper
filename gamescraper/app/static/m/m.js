@@ -895,7 +895,7 @@ $("#lib-chips").onclick = (e) => {
 
 async function start() {
   $("#pair").hidden = true; $("#main").hidden = false;
-  try { decode(await api("/api/library")); } catch (e) { if (!$("#pair").hidden) return; toast(e.message, true); return; }
+  try { decode(await api("/api/library?part=owned")); } catch (e) { if (!$("#pair").hidden) return; toast(e.message, true); return; }
   renderHome(); renderLibTools();
   pollRun();
 }

@@ -3,6 +3,17 @@
 Le novità più recenti in alto. L'ultima release è la **0.2.2** (`release\GameScraper-0.2.2-windows-x64.zip`).
 
 
+## 0.5.0 (2026-10-27)
+### Migliorato
+
+- Anteprima di un indirizzo store con «Prova»: formato, giochi e pagine totali prima di aggiungerlo
+- Avvio molto più rapido: i tuoi giochi compaiono in circa un secondo (prima 10-15) con il tema scelto e una barra di caricamento; i giochi del catalogo degli store arrivano subito dopo in sottofondo. Anche l'apertura della scheda di un gioco è più veloce
+
+### Aggiunto
+
+- **🏆 Migliori giochi**: Top 100 di ogni console (pulsante «🏆 Top 100» nella pagina della console) e classifica globale Top 100 / Top 1000 nella barra laterale, fra giochi posseduti e scaricabili dagli store. Entrano solo i giochi con voti affidabili (almeno 2 fonti, voto della critica o 50 voti); il punteggio unisce critica (Metacritic/IGDB) e giocatori. «↻ Aggiorna voti online» chiede a IGDB e RAWG i voti dei candidati (i migliori della console su IGDB + i già ben votati), ora usati anche nelle schede dei giochi da scaricare. Nella globale lo stesso gioco su più console conta una volta (prima la versione posseduta).
+- Estensione «Link -> Store»: legge una pagina che raccoglie altri siti, raggruppa i link per intestazione (h2/h3) e li aggiunge come store di una console o come store PC (repack / download diretto)
+
 ## 0.4.0 (2026-10-27)
 ### Aggiunto
 - **Store online: tipo di pagina per ogni console** (campo `type` in `settings.json`): `filelist` (elenco di file, invariato),

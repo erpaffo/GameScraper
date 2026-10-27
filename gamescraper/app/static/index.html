@@ -22,11 +22,17 @@
       <a class="nav-item" data-view="ports"><span class="ico">🕹</span><span class="lbl">Port PC</span><span class="cnt" id="cnt-ports"></span></a>
       <a class="nav-item" data-view="wishlist"><span class="ico">♡</span><span class="lbl">Lista desideri</span><span class="cnt" id="cnt-wish"></span></a>
       <a class="nav-item" data-view="shots"><span class="ico">📷</span><span class="lbl">Schermate</span><span class="cnt" id="cnt-shots"></span></a>
+      <a class="nav-item" data-view="top" data-id="all"><span class="ico">🏆</span><span class="lbl">Migliori giochi</span></a>
       <a class="nav-item" data-view="stats"><span class="ico">📊</span><span class="lbl">Statistiche</span></a>
       <a class="nav-item" data-view="recent"><span class="ico">◷</span><span class="lbl">Giocati di recente</span><span class="cnt" id="cnt-recent"></span></a>
 
       <div class="nav-section">Stato</div>
       <div id="status-list"></div>
+
+      <div id="plugin-nav-section" hidden>
+        <div class="nav-section">Estensioni</div>
+        <div id="plugin-nav"></div>
+      </div>
 
       <div class="nav-section with-action">
         <span>PC</span>
@@ -36,11 +42,6 @@
 
       <div class="nav-section">Console</div>
       <div id="platform-list"></div>
-
-      <div id="plugin-nav-section" hidden>
-        <div class="nav-section">Estensioni</div>
-        <div id="plugin-nav"></div>
-      </div>
 
       <div class="nav-section with-action">
         <span>Collezioni</span>
@@ -112,6 +113,7 @@
       </div>
     </header>
     <div id="coll-banner" hidden></div>
+    <div id="loadbar" role="status" hidden><span id="loadbar-text"></span><div class="loadbar-track"><i></i></div></div>
     <div id="grid-scroll" tabindex="-1">
       <div id="grid-sizer"></div>
       <div id="grid-layer"></div>
@@ -155,7 +157,7 @@
         <button type="button" class="tab" data-tab="health">🩺 Salute</button>
         <button type="button" class="tab" data-tab="scan">⟳ Nuovi giochi</button>
         <button type="button" class="tab" data-tab="src">🔌 Fonti</button>
-        <button type="button" class="tab" data-tab="acc">🛒 Account</button>
+        <button type="button" class="tab" data-tab="acc">🛒 Store</button>
         <button type="button" class="tab" data-tab="emu">🎮 Emulatori</button>
         <button type="button" class="tab" data-tab="remote">📱 Telefono e streaming</button>
         <button type="button" class="tab" data-tab="look">🎨 Aspetto</button>
@@ -221,6 +223,9 @@
         <p>GameScraper <b id="about-ver"></b> <span class="muted small" id="about-data"></span></p>
         <div id="about-update" class="muted"></div>
         <button class="btn" id="about-check">↻ Controlla aggiornamenti</button>
+        <h4>Dati scaricati</h4>
+        <p class="muted small">Metadati, copertine e cache: dove stanno e quanto pesano. <button class="btn" id="storage-go">⟳ Calcola</button></p>
+        <div id="storage-box" class="small"></div>
         <h4>Novità</h4>
         <div id="about-log" class="changelog"></div>
       </section>
@@ -324,8 +329,10 @@
         <div class="row wrap">
           <input class="field grow" id="pcst-url" placeholder="https://esempio.test/elenco-giochi/">
           <select class="field" id="pcst-kind"><option value="repack">📦 Repack</option><option value="direct">⬇ Download diretto</option></select>
+          <button class="btn" id="pcst-probe" type="button" title="Legge solo questa pagina e dice quanti giochi ci sono e quante pagine">🔍 Prova</button>
           <button class="btn" id="pcst-add" type="button">Aggiungi</button>
         </div>
+        <div id="pcst-probe-out" class="muted small"></div>
         <div class="row end"><span class="muted small grow" id="pcst-info"></span>
           <button class="btn primary" id="pcst-refresh" type="button">↻ Leggi gli elenchi</button></div>
         <pre class="log" id="pcst-log"></pre>

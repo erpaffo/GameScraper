@@ -19,21 +19,68 @@ const S = {
   shopF: store.get("shopF", { src: "", plat: "", size: "" }), shop: [], shopIds: new Set(),
 };
 
+// prima i giochi posseduti (pochi, subito), poi in sottofondo il catalogo degli store online
+let onlineSeq = 0;
 async function loadLibrary() {
-  const lib = await api("/api/library");
+  const seq = ++onlineSeq;
+  const lib = await api("/api/library?part=owned");
+  // stessa libreria (stessi id): il catalogo gia' caricato resta visibile finche' arriva quello nuovo
+  const prev = lib.built_at === S.builtAt ? S.games.slice(S.nOwned?.[0] ?? S.games.length) : [];
   Object.assign(S, decodeLibrary(lib));
+  S.nOwned = [S.games.length, S.groups.length];
+  addOnline(prev);
   S.skipDup = lib.skip_duplicates !== false;
   S.userRev = lib.user_rev;
   S.catalogs = lib.catalogs || {};
   S.iconsCredit = lib.icons_credit || "";
   RECO.setPlatName(platName);
   S.smart = S.smart || [];
+  libraryChanged();
+  loadOnline(seq);
+  return lib.games.rows.length > 0;
+}
+
+function libraryChanged() {
   S.shop = shopGames(S.games);
   renderDiscTools();
   S.shopIds = new Set(S.shop.map((g) => g.id));
   S.hasOnline = new Set(S.games.filter((g) => g.store === "online").map((g) => g.platform));
   GS.emit("libraryLoaded", S);
-  return lib.games.rows.length > 0;
+}
+
+// accoda i giochi del catalogo dopo quelli posseduti, rinumerando i gruppi (gi) senza collisioni
+function addOnline(games) {
+  const gi = new Map();
+  for (const g of games) {
+    if (!gi.has(g.gi)) { gi.set(g.gi, S.groups.length); S.groups.push(g.grp); }
+    g.gi = gi.get(g.gi);
+    S.byId.set(g.id, g);
+    S.games.push(g);
+  }
+}
+
+async function loadOnline(seq) {
+  if (S.games.length === S.nOwned[0]) loading("Caricamento dei giochi degli store…");
+  try {
+    const d = decodeLibrary(await api("/api/library?part=online"));
+    if (seq !== onlineSeq) return; // nel frattempo la libreria e' stata ricaricata
+    for (const g of S.games.slice(S.nOwned[0])) S.byId.delete(g.id);
+    S.games.length = S.nOwned[0];
+    S.groups.length = S.nOwned[1];
+    addOnline(d.games);
+    libraryChanged();
+    renderSidebar();
+    refreshGrid(true);
+  } catch (e) {
+    if (seq === onlineSeq) toast("Giochi degli store non caricati: " + e.message, true);
+  } finally {
+    if (seq === onlineSeq) loading(null);
+  }
+}
+
+function loading(text) {
+  $("#loadbar").hidden = !text;
+  $("#loadbar-text").textContent = text || "";
 }
 
 /* ------------------------------------------------------------------ filtri e ordinamento */
@@ -132,6 +179,7 @@ function layout() {
   sizer.style.height = S.total + "px";
   $("#empty").hidden = S.items.length > 0;
   $("#empty").innerHTML = S.search ? esc(`Nessun gioco trovato per «${S.search}».`)
+    : !$("#loadbar").hidden ? ""
     : !S.games.length ? `<div class="empty-lib"><b>La libreria è vuota.</b><p class="muted">Scegli la cartella delle ROM o importa i giochi degli store.</p>
         <button class="btn primary" onclick="SETUP.open(true).then(() => reload(true))">🧭 Configurazione guidata</button></div>`
     : "Nessun gioco in questa vista.";
@@ -433,6 +481,7 @@ function renderShopTools() {
 function viewTitle() {
   const v = S.view;
   return { shots: "Schermate", free: "Giochi gratis", ports: "Port PC", wishlist: "Lista desideri", stats: "Statistiche",
+    top: !v.id || v.id === "all" ? "🏆 Migliori giochi" : `🏆 Top 100 · ${platName(v.id)}`,
     status: `${STATUS[v.id]?.icon || ""} ${STATUS[v.id]?.label || ""}`,
     smart: `${S.smart.find((x) => x.id === v.id)?.icon || "⚡"} ${S.smart.find((x) => x.id === v.id)?.name || "Collezione"}`,
     foryou: "Per te", multi: "Multigiocatore in locale", shop: "Store · da installare", all: "Tutti i giochi", favorites: "Preferiti", recent: "Giocati di recente", missing: "Senza dati",
@@ -464,7 +513,8 @@ function updateHeader() {
     : S.view.type === "shop"
       ? `<button class="btn smeta-btn" id="smeta-open" title="Cerca descrizioni, generi, giocatori e valutazioni dei giochi degli store SOLO nei database offline (LaunchBox, TheGamesDB): nessuna richiesta online">📚 Scraping metadati store <span class="pill">offline</span></button>`
     : S.view.type === "platform" && S.view.id !== "windows"
-      ? `<button class="icon-btn" id="cat-open" title="Collega pagine web con i giochi di questa console">`
+      ? `<button class="icon-btn" id="top-open" title="I 100 migliori giochi di questa console, posseduti e scaricabili">🏆 Top 100</button>`
+        + `<button class="icon-btn" id="cat-open" title="Collega pagine web con i giochi di questa console">`
         + ((S.catalogs[S.view.id] || []).map((u) => `<img class="sico" src="/icons/site?url=${encodeURIComponent(u)}" alt="">`).join("") || "🌐")
         + ` Store online${(S.catalogs[S.view.id] || []).length ? ` (${S.catalogs[S.view.id].length})` : ""}</button>` : "";
 }
@@ -474,15 +524,15 @@ function setView(v) {
   store.set("view", v);
   GS.emit("viewChanged", v);
   const pv = $("#plugin-view");
-  document.body.classList.toggle("foryou-mode", ["foryou", "free", "ports", "wishlist", "stats", "shots"].includes(v.type));
+  document.body.classList.toggle("foryou-mode", ["foryou", "free", "ports", "wishlist", "stats", "shots", "top"].includes(v.type));
   if (v.type !== "collection") $("#coll-banner").hidden = true;
-  if (["free", "ports", "wishlist", "stats", "shots"].includes(v.type)) {
+  if (["free", "ports", "wishlist", "stats", "shots", "top"].includes(v.type)) {
     $("#grid-scroll").hidden = true;
     pv.hidden = false;
     markActive();
     updateHeader();
     $("#view-count").textContent = "";
-    ({ free: renderFree, ports: renderPorts, wishlist: renderWishlist, stats: renderStats, shots: renderShots })[v.type](pv);
+    ({ free: renderFree, ports: renderPorts, wishlist: renderWishlist, stats: renderStats, shots: renderShots, top: renderTop })[v.type](pv);
     return;
   }
   if (v.type === "foryou") {
@@ -676,6 +726,8 @@ async function openDetail(id) {
   const pc = !!d.store;
   const online = d.store === "online";
   const dlSources = online ? (d.sources || []).filter((s) => s && s.url) : [];
+  // giochi gia' scaricati che compaiono negli elenchi degli store online: link per riscaricarli
+  const storePages = !online ? (d.store_pages || []).filter((s) => s && s.url) : [];
   // una fonte sola: pulsante unico; due o piu' (es. NXBrew e Ziperto): un pulsante per sito
   const mainBtn = online
     ? (dlSources.length > 1
@@ -712,6 +764,11 @@ async function openDetail(id) {
       : d.emulator ? "Emulatore: " + esc(d.emulator) + (d.profile ? ` <span class="tag" title="Profilo di avvio di questo gioco">profilo</span>` : "")
       : `Nessun emulatore configurato per ${esc(d.platform_name)} — <a href="#" id="d-emu-cfg">impostazioni</a>`}
       ${!pc && !online ? `<a href="#" id="d-profile" title="Emulatore, core, eseguibile e argomenti solo per questo gioco">⚙ Profilo di avvio</a>` : ""}</div>
+    ${storePages.length ? `<div class="d-emu muted" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span>🌐 Pagine dello store:</span>
+      ${storePages.map((s) => `<button class="btn" data-open="${esc(s.url)}"
+        title="Apri la pagina di download su ${esc(s.site || "questo sito")}">⬇ ${esc((s.site || "sito").replace(/^www\./, ""))}</button>`).join("")}
+      </div>` : ""}
     ${ratingBlock(d)}
     ${online ? "" : `<div class="d-status">${Object.entries(STATUS).map(([k, s]) =>
       `<button class="btn st-btn${u.status === k ? " on st-" + k : ""}" data-status="${k}">${s.icon} ${s.label}</button>`).join("")}</div>`}
@@ -1555,6 +1612,62 @@ async function renderStats(pv) {
   pv.onclick = (e) => { const li = e.target.closest("li[data-id]"); if (li) openDetail(+li.dataset.id); };
 }
 
+/* ---- migliori giochi: Top 100 per console e classifica globale (100/1000) */
+const TOP_F = { limit: +store.get("topLimit", 100) || 100, own: "", plat: "" };
+let topTimer = 0;
+async function renderTop(pv) {
+  clearTimeout(topTimer);
+  const pid = S.view.id || "all", glob = pid === "all";
+  let d;
+  try { d = await api(`/api/top?pid=${encodeURIComponent(pid)}&limit=${glob ? TOP_F.limit : 100}`); }
+  catch (e) { pv.innerHTML = `<div class="page"><p>${esc(e.message)}</p></div>`; return; }
+  if (S.view.type !== "top" || (S.view.id || "all") !== pid) return;
+  const js = d.job, run = js.status === "running";
+  const items = d.items.filter((t) => (!TOP_F.own || (TOP_F.own === "owned") === t.owned) && (!glob || !TOP_F.plat || t.platform === TOP_F.plat));
+  const plats = [...new Set(d.items.map((t) => t.platform))].sort((a, b) => collator.compare(platName(a), platName(b)));
+  const opt = (v, l, sel) => `<option value="${esc(v)}"${String(v) === String(sel) ? " selected" : ""}>${esc(l)}</option>`;
+  const pct = (x) => Math.round(x * 100);
+  const row = (t, i) => `<div class="top-row" data-id="${t.id}">
+      <span class="top-n">${i + 1}</span>
+      <span class="top-cv">${t.id ? `<img loading="lazy" src="/img/${t.id}/cover?w=120" alt="" onerror="this.remove()">` : ""}</span>
+      <span class="top-t"><b>${esc(t.title)}</b>
+        <span class="muted small">${[glob ? platName(t.platform) : "", t.year, t.also?.length ? `anche su ${t.also.map(platName).join(", ")}` : ""].filter(Boolean).map(esc).join(" · ")}</span>
+        <span class="muted small">${[t.critics != null ? `Critica ${pct(t.critics)}` : "", t.rating != null ? `Giocatori ${pct(t.rating)}%${t.votes ? ` (${t.votes.toLocaleString("it")} voti)` : ""}` : "", t.sources.join(", ")].filter(Boolean).map(esc).join(" · ")}</span></span>
+      <span class="badge ${t.owned ? "inst" : ""}">${t.owned ? "✓ Posseduto" : "⬇ Scaricabile"}</span>
+      <span class="top-s" title="Punteggio fra critica e giocatori">${pct(glob ? t.best ?? t.score : t.score)}</span></div>`;
+  pv.innerHTML = `<div class="page top">
+    <p class="muted small">Solo giochi con voti affidabili (almeno 2 fonti, un voto della critica o 50 voti dei giocatori).
+      Punteggio = media fra critica (Metacritic / IGDB) e giocatori. ${glob ? "Lo stesso gioco su più console conta una volta." : "Le versioni regionali contano una volta."}</p>
+    <div class="top-tools">
+      ${glob ? `<select class="field" id="top-limit">${opt(100, "Top 100", TOP_F.limit)}${opt(1000, "Top 1000", TOP_F.limit)}</select>
+        <select class="field" id="top-plat">${opt("", "Tutte le console", TOP_F.plat)}${plats.map((p) => opt(p, platName(p), TOP_F.plat)).join("")}</select>` : ""}
+      <select class="field" id="top-own">${opt("", "Posseduti e scaricabili", TOP_F.own)}${opt("owned", "Solo posseduti", TOP_F.own)}${opt("net", "Solo scaricabili", TOP_F.own)}</select>
+      <button class="btn" id="top-fetch"${run ? " disabled" : ""} title="Chiede a IGDB e RAWG i voti dei candidati${glob ? " di tutte le console" : ""}: i giochi già cercati negli ultimi 30 giorni non si richiedono">↻ Aggiorna voti online${glob ? " (tutte le console)" : ""}</button>
+      <button class="btn" id="top-stop"${run ? "" : " hidden"}>■ Ferma</button>
+    </div>
+    <div id="top-job"></div>
+    ${items.length ? `<div class="top-list">${items.map(row).join("")}</div>`
+      : `<p class="muted">Nessun gioco con voti affidabili${TOP_F.own || TOP_F.plat ? " con questi filtri" : ""}. Premi «↻ Aggiorna voti online» per cercarli su IGDB e RAWG.</p>`}</div>`;
+  renderJobInto($("#top-job"), js);
+  const re = () => renderTop(pv);
+  $("#top-own").onchange = (e) => { TOP_F.own = e.target.value; re(); };
+  if (glob) {
+    $("#top-limit").onchange = (e) => { TOP_F.limit = +e.target.value; store.set("topLimit", TOP_F.limit); re(); };
+    $("#top-plat").onchange = (e) => { TOP_F.plat = e.target.value; re(); };
+  }
+  $("#top-fetch").onclick = async () => {
+    try { await api("/api/top/fetch", { body: { pid } }); } catch (e) { return toast(e.message, true); }
+    re();
+  };
+  $("#top-stop").onclick = () => api("/api/top/cancel", { body: {} });
+  pv.onclick = (e) => { const r = e.target.closest(".top-row[data-id]"); if (r && +r.dataset.id) openDetail(+r.dataset.id); };
+  if (run) topTimer = setTimeout(async () => {
+    const st = await api("/api/top/state").catch(() => null);
+    if (st && st.status !== "running") { await reload(true); toast(st.phase, st.status === "error"); }
+    if (S.view.type === "top") re();
+  }, 2000);
+}
+
 /* ---- schermate dei giochi */
 const SHOTS = { detail: [], page: [], hotkey: "Ctrl+Shift+S" };
 
@@ -2219,6 +2332,25 @@ function miniMd(md) {
   return html + (list ? "</ul>" : "");
 }
 
+async function loadStorage(force = false) {
+  const box = $("#storage-box");
+  box.innerHTML = `<span class="muted">Calcolo in corso…</span>`;
+  try {
+    const d = await api(`/api/storage${force ? "?force=1" : ""}`);
+    const tbl = (head, rows) => `<table class="tbl"><thead><tr>${head.map((h, i) => `<th${i ? ' style="text-align:right"' : ""}>${h}</th>`).join("")}</tr></thead>`
+      + `<tbody>${rows.map((r) => `<tr>${r.map((c, i) => `<td${i ? ' style="text-align:right"' : ""}>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+    const n = (x) => x.toLocaleString("it");
+    box.innerHTML = `<p>Cartella: <code>${esc(d.path)}</code> · <b>${esc(fmtSize(d.total))}</b></p>`
+      + `<h5>Per cartella</h5>` + tbl(["Cartella", "File", "Peso"], d.folders.map((f) => [esc(f.name), n(f.files), esc(fmtSize(f.bytes))]))
+      + `<h5>Per console</h5>` + tbl(["Console", "Media (immagini, video)", "Metadati nel database", "Elenco store online", "Totale"],
+          d.platforms.map((p) => [esc(platName(p.id)), `${esc(fmtSize(p.media))} · ${n(p.files)} file`,
+            `${esc(fmtSize(p.db))} · ${n(p.rows)} voci`, p.entries ? `${esc(fmtSize(p.catalog))} · ${n(p.entries)} elenchi` : "—", esc(fmtSize(p.total))]))
+      + `<h5>Per fonte dei metadati</h5>` + tbl(["Fonte", "Voci", "Peso"], d.sources.map((s) => [esc(s.source), n(s.rows), esc(fmtSize(s.bytes))]))
+      + `<h5>Store online e altri dati</h5>` + tbl(["Dati", "Voci", "Peso"], d.kv.map((k) => [esc(k.label), n(k.rows), esc(fmtSize(k.bytes))]))
+      + `<h5>Database</h5>` + tbl(["File", "Peso"], Object.entries(d.files).map(([k, v]) => [esc(k), esc(fmtSize(v))]));
+  } catch (e) { box.innerHTML = ""; toast(e.message, true); }
+}
+
 async function loadAbout() {
   try {
     const a = await api("/api/about");
@@ -2565,8 +2697,19 @@ function bind() {
     savePcStores([...PCST.rows, { url, kind: $("#pcst-kind").value }], false);
     $("#pcst-url").value = "";
   };
-  $("#pcst-refresh").onclick = async () => {
-    try { await api("/api/pc-stores/refresh", { body: {} }); } catch (e) { return toast(e.message, true); }
+  // anteprima: legge solo la prima pagina e dice quanti giochi/pagine ci sono
+  $("#pcst-probe").onclick = async () => {
+    const url = $("#pcst-url").value.trim();
+    if (!/^https?:\/\//i.test(url)) return toast("Indirizzo non valido (serve http:// o https://)", true);
+    const out = $("#pcst-probe-out");
+    out.textContent = "Lettura in corso…";
+    let r;
+    try { r = await api("/api/pc-stores/probe", { body: { url } }); } catch (e) { out.textContent = ""; return toast(e.message, true); }
+    const many = r.pages > 1 ? `su ${r.pages.toLocaleString("it")} pagine` : "su una sola pagina";
+    const ex = r.samples.length ? ` Esempi: ${r.samples.slice(0, 3).join(" · ")}` : "";
+    out.textContent = `${r.games ? "✅" : "⚠️"} Formato ${r.kind}: ${r.games.toLocaleString("it")} giochi in questa pagina, ${many}.${ex}`;
+  };
+  $("#pcst-refresh").onclick = async () => {    try { await api("/api/pc-stores/refresh", { body: {} }); } catch (e) { return toast(e.message, true); }
     pollPcStores();
   };
   $("#pcst-filter").addEventListener("click", (e) => {
@@ -2654,6 +2797,7 @@ function bind() {
   };
   $("#view-actions").addEventListener("click", async (e) => {
     if (e.target.id === "cat-open") { openCatalog(S.view.id); return; }
+    if (e.target.id === "top-open") { setView({ type: "top", id: S.view.id }); return; }
     if (e.target.closest("#smart-edit")) { openSmart(S.view.id); return; }
     if (e.target.closest("#smeta-open")) { $("#smeta").showModal(); pollStoreMeta(); return; }
     if (e.target.id === "dup-toggle") {
@@ -2769,6 +2913,7 @@ function bind() {
   };
   $("#health-reload").onclick = loadHealth;
   $("#about-check").onclick = () => checkUpdate(true, true);
+  $("#storage-go").onclick = () => loadStorage(true);
   $('[data-pane="about"]').addEventListener("click", (e) => {
     const o = e.target.closest("[data-open]");
     if (o) { e.preventDefault(); api("/api/open", { body: { url: o.dataset.open } }); }
@@ -3065,6 +3210,8 @@ GS.refresh = () => reload(true);
 
 (async function main() {
   bind();
+  loading("Caricamento dei tuoi giochi…");
+  await loadExtensions(); // prima della libreria: l'attesa si vede gia' col tema scelto
   try {
     await SETUP.open();  // primo avvio: configurazione guidata (non fa nulla se gia' configurato)
     if (!(await loadLibrary())) {
@@ -3072,10 +3219,10 @@ GS.refresh = () => reload(true);
       if (!st.has_library) { await waitFirstBuild(); await loadLibrary(); }
     }
   } catch (e) {
+    loading(null);
     toast("Errore nel caricamento della libreria: " + e.message, true);
     return;
   }
-  await loadExtensions();
   if (S.view.type === "collection" && !S.collBySlug.has(S.view.id)) S.view = { type: "all" };
   if (S.view.type === "platform" && !S.plats.has(S.view.id)) S.view = { type: "all" };
   if (S.view.type === "plugin" && !GS.ui.views.has(S.view.id)) S.view = { type: "all" };

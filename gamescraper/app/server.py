@@ -66,13 +66,16 @@ class Library:
         self.auto: dict[str, dict] = {}
         self.built_at = 0.0
         self.lock = threading.RLock()
+        self.full = threading.Event()  # impostato quando ci sono anche i giochi del catalogo online
 
-    def load(self):
+    def load(self, online: bool = True):
+        """online=False: solo i giochi posseduti (avvio rapido); il catalogo online si carica dopo."""
         if not self.path.exists():
+            self.full.set()
             return
         db = sqlite3.connect(self.path)
         db.row_factory = sqlite3.Row
-        games = [dict(r) for r in db.execute("SELECT * FROM games")]
+        games = [dict(r) for r in db.execute("SELECT * FROM games" + ("" if online else " WHERE store IS NOT 'online'"))]
         for g in games:
             g["genres"] = json.loads(g["genres"] or "[]")
             g["files"] = json.loads(g["files"] or "[]")
@@ -94,6 +97,8 @@ class Library:
                 self.groups[g["grp"]].append(g)
             self.auto = auto
             self.built_at = float(built[0]) if built else 0.0
+        if online:
+            self.full.set()
 
     def get(self, gid: int) -> dict:
         g = self.by_id.get(gid)
@@ -131,9 +136,10 @@ def _players_label(v, platform: str = "") -> str:
 
 def create_app(cfg) -> FastAPI:
     app = FastAPI(title="GameScraper")
-    app.add_middleware(GZipMiddleware, minimum_size=2048)
+    app.add_middleware(GZipMiddleware, minimum_size=2048, compresslevel=1)  # in locale conta la velocita', non il peso
     lib = Library(cfg)
-    lib.load()
+    lib.load(online=False)
+    threading.Thread(target=lib.load, daemon=True).start()
     Path(cfg.cache).mkdir(parents=True, exist_ok=True)  # prima installazione: la cache non esiste ancora
     user = UserData(Path(cfg.cache) / "userdata.db")
     events = X.Events()
@@ -149,16 +155,17 @@ def create_app(cfg) -> FastAPI:
     state = {"building": False, "build_log": [], "build_stats": None, "thumbs_total": 0, "thumbs_done": 0}
     job: dict = {"current": J.ScrapeJob(), "stores": J.StoreJob(), "storemeta": J.StoreMetaJob(),
                  "hltb": J.HltbJob(), "collart": J.CollArtJob(), "netmeta": J.NetMetaJob(),
-                 "pcstores": J.PcStoreJob()}
+                 "pcstores": J.PcStoreJob(), "top": J.TopGamesJob()}
 
     # ------------------------------------------------------------ vista unita (gruppi + utente)
-    def view() -> dict:
-        """Calcola gruppi, versione principale, dati utente e collezioni (modifiche incluse)."""
+    def view(only=None) -> dict:
+        """Calcola gruppi, versione principale, dati utente e collezioni (modifiche incluse).
+        only: i soli gruppi di cui servono i dati (le collezioni restano complete)."""
         with lib.lock:
             ug = user.games()
             uc = user.collections()
             edits = user.edits()
-            groups = lib.groups
+            groups = lib.groups if only is None else {grp: lib.groups[grp] for grp in only}
             # collezioni: automatiche + personali, a livello di GRUPPO (tutte le versioni di un gioco)
             colls: dict[str, dict] = {}
             for slug, c in lib.auto.items():
@@ -196,16 +203,20 @@ def create_app(cfg) -> FastAPI:
 
     # ------------------------------------------------------------ API
     @app.get("/api/library")
-    def api_library():
-        v = view()
+    def api_library(part: str = ""):
+        """part='owned': solo i giochi posseduti (subito); 'online': solo il catalogo (dopo); vuoto: tutto."""
+        if part != "owned":
+            lib.full.wait()
         with lib.lock:
+            sel = lib.games if not part else [g for g in lib.games if (g.get("store") == "online") == (part == "online")]
+            grp_list = list(dict.fromkeys(g["grp"] for g in sel))
+            v = view(grp_list)
             coll_list = sorted((c for c in v["colls"].values()), key=lambda c: c["name"].lower())
             coll_idx = {c["slug"]: i for i, c in enumerate(coll_list)}
             grp_colls: dict[str, list[int]] = defaultdict(list)
             for c in coll_list:
                 for grp in c["groups"]:
                     grp_colls[grp].append(coll_idx[c["slug"]])
-            grp_list = list(lib.groups)
             grp_idx = {g: i for i, g in enumerate(grp_list)}
             groups = []
             for grp in grp_list:
@@ -217,12 +228,13 @@ def create_app(cfg) -> FastAPI:
                      g["region"] or "", g.get("store") or "", 1 if g.get("store") is None else g.get("installed") or 0,
                      g.get("size") or 0, g.get("rating_count") or 0, g.get("rating_critics"), _players(g.get("players"), g["platform"]),
                      round((g.get("store_playtime") or 0) / 60), _hltb_main(g.get("hltb"))]
-                    for g in lib.games]
+                    for g in sel]
             plats = defaultdict(int)
             for grp, members in lib.groups.items():
                 if members[0].get("store") != "online":  # i giochi solo online non contano come posseduti
                     plats[members[0]["platform"]] += 1
-            return {
+            # JSONResponse diretto: jsonable_encoder di FastAPI su ~150.000 righe costa secondi
+            return JSONResponse({
                 "built_at": lib.built_at, "user_rev": user.rev,
                 "platforms": sorted(({"id": p, "name": P.PLATFORMS[p].name if p in P.PLATFORMS else p, "count": n}
                                      for p, n in plats.items()), key=lambda x: x["name"].lower()),
@@ -237,7 +249,7 @@ def create_app(cfg) -> FastAPI:
                 "groups": {"cols": ["primary", "favorite", "hidden", "last_played", "playtime", "play_count",
                                     "collections", "versions", "status"], "rows": groups},
                 "smart": cfg.app.get("smart_collections") or [],
-            }
+            })
 
     FIELD_LABELS = {"title": "dati del gioco", "description": "descrizione", "developer": "sviluppatore",
                     "publisher": "editore", "genres": "generi", "release_date": "data di uscita",
@@ -257,7 +269,7 @@ def create_app(cfg) -> FastAPI:
     @app.get("/api/game/{gid}")
     def api_game(gid: int):
         g = lib.get(gid)
-        v = view()
+        v = view([g["grp"]])
         grp = v["groups"][g["grp"]]
         p = P.PLATFORMS.get(g["platform"])
         try:
@@ -290,6 +302,8 @@ def create_app(cfg) -> FastAPI:
                 "kind": (g.get("launch") or {}).get("kind") if g.get("store") == "online" else None,
                 "file_name": g.get("canonical") if g.get("store") == "online" else None,
                 "page_url": g.get("page") if g.get("store") == "online" else None,
+                # pagine degli store online dove il gioco si puo' scaricare (anche se e' gia' in libreria)
+                "store_pages": json.loads(g.get("store_pages") or "[]"),
                 "ratings": json.loads(g.get("ratings") or "[]"),
                 "store": g.get("store"), "store_name": STORE_NAMES.get(g.get("store"), ""),
                 "installed": bool(g.get("installed")) if g.get("store") else True,
@@ -1272,6 +1286,30 @@ def create_app(cfg) -> FastAPI:
             threading.Thread(target=lambda: (build(cfg, log=lambda m: None), lib.load()), daemon=True).start()
         return api_pc_stores()
 
+    @app.post("/api/pc-stores/probe")
+    async def api_pc_stores_probe(body: dict = Body(...)):
+        """Anteprima di un indirizzo: formato, giochi nella pagina, pagine totali, primi titoli.
+
+        Non salva nulla: serve a capire se l'elenco scelto contiene tutto il catalogo.
+        """
+        from .. import catalog, platforms as P
+        from ..cache import Cache
+        from ..net import make_client
+        url = str(body.get("url") or "").strip()
+        if not url.startswith(("http://", "https://")):
+            raise HTTPException(400, "Indirizzo non valido (serve http:// o https://)")
+        c = Cache(cfg.cache)
+        try:
+            async with make_client() as client:
+                page = await catalog._get_page(cfg, c, client, "windows", url, log=lambda m: None)
+        except Exception as e:
+            raise HTTPException(502, f"Pagina non raggiungibile: {type(e).__name__}: {e}")
+        finally:
+            c.close()
+        info = catalog.describe_page(page, url, set(P.PLATFORMS["windows"].exts))
+        info["url"] = url
+        return info
+
     @app.post("/api/pc-stores/refresh")
     def api_pc_stores_refresh():
         if job["pcstores"].status == "running":
@@ -1697,6 +1735,93 @@ def create_app(cfg) -> FastAPI:
         from .. import __version__, updates
         return {"version": __version__, "changelog": updates.changelog(), "data_dir": str(C.settings_path(cfg).parent)}
 
+    # ------------------------------------------------------------ spazio dei dati scaricati (cache)
+    storage_cache: dict = {}
+
+    def _dir_size(path: Path) -> tuple[int, int]:
+        """(byte, file) di una cartella, senza seguire i collegamenti."""
+        total = n = 0
+        stack = [str(path)]
+        while stack:
+            try:
+                with os.scandir(stack.pop()) as it:
+                    for e in it:
+                        try:
+                            if e.is_dir(follow_symlinks=False):
+                                stack.append(e.path)
+                            elif e.is_file(follow_symlinks=False):
+                                total += e.stat(follow_symlinks=False).st_size
+                                n += 1
+                        except OSError:
+                            pass
+            except OSError:
+                pass
+        return total, n
+
+    @app.get("/api/storage")
+    def api_storage(force: int = 0):
+        """Dove stanno i metadati scaricati e quanto pesano: per cartella, console, fonte e store online."""
+        if not force and storage_cache.get("t", 0) > time.time() - 120:
+            return storage_cache["v"]
+        from ..cache import Cache
+        root = Path(cfg.cache)
+        folders = []
+        for e in sorted(root.iterdir(), key=lambda x: x.name):
+            if e.is_dir():
+                b, n = _dir_size(e)
+            else:
+                b, n = e.stat().st_size, 1
+            folders.append({"name": e.name + ("/" if e.is_dir() else ""), "bytes": b, "files": n})
+        folders.sort(key=lambda x: -x["bytes"])
+        media = root / "media"
+        plats: dict = defaultdict(lambda: {"media": 0, "files": 0, "types": {}, "db": 0, "rows": 0, "catalog": 0, "entries": 0})
+        if media.is_dir():
+            for pd in media.iterdir():
+                if not pd.is_dir():
+                    continue
+                for td in pd.iterdir():
+                    b, n = _dir_size(td) if td.is_dir() else (td.stat().st_size, 1)
+                    d = plats[pd.name]
+                    d["media"] += b
+                    d["files"] += n
+                    d["types"][td.name] = d["types"].get(td.name, 0) + b
+        sources, kv = [], []
+        c = Cache(cfg.cache)
+        try:
+            # il peso e' quello del testo salvato (le righe del database), non del file .db intero
+            for plat, nrow, nb in c.db.execute(
+                    "SELECT substr(key,1,instr(key,'/')-1), COUNT(*), SUM(length(value)+length(field)+length(key)) "
+                    "FROM resources GROUP BY 1"):
+                if plat:
+                    plats[plat]["db"] += nb or 0
+                    plats[plat]["rows"] += nrow
+            for src, nrow, nb in c.db.execute(
+                    "SELECT source, COUNT(*), SUM(length(value)+length(field)+length(key)) FROM resources GROUP BY source ORDER BY 3 DESC"):
+                sources.append({"source": src, "rows": nrow, "bytes": nb or 0})
+            labels = {"catalog": "Elenchi degli store online", "netmeta": "Copertine e descrizioni degli store",
+                      "storemeta": "Dati degli store PC", "store": "Store PC", "ports": "Port PC", "art": "Immagini",
+                      "hltb": "Durata (HowLongToBeat)", "collart": "Immagini delle collezioni", "size": "Dimensioni"}
+            for k, nrow, nb in c.db.execute(
+                    "SELECT substr(k,1,instr(k||':',':')-1), COUNT(*), SUM(length(v)) FROM kv GROUP BY 1 ORDER BY 3 DESC"):
+                kv.append({"kind": k or "altro", "label": labels.get(k, k or "altro"), "rows": nrow, "bytes": nb or 0})
+            try:
+                for pid, nrow, nb in c.db.execute(
+                        "SELECT json_extract(v,'$.pid'), COUNT(*), SUM(length(v)) FROM kv WHERE k LIKE 'catalog:%' GROUP BY 1"):
+                    if pid:
+                        plats[pid]["catalog"] += nb or 0
+                        plats[pid]["entries"] += nrow
+            except sqlite3.Error:
+                pass
+        finally:
+            c.close()
+        files = {n: (root / n).stat().st_size for n in ("cache.db", "library.db", "userdata.db") if (root / n).exists()}
+        out = {"path": str(root), "total": sum(f["bytes"] for f in folders), "folders": folders, "files": files,
+               "platforms": sorted(({"id": k, **v, "total": v["media"] + v["db"] + v["catalog"]} for k, v in plats.items()),
+                                   key=lambda x: -x["total"]),
+               "sources": sources, "kv": kv}
+        storage_cache.update(t=time.time(), v=out)
+        return out
+
     @app.get("/api/update")
     def api_update(force: int = 0):
         from .. import updates
@@ -1971,6 +2096,8 @@ def create_app(cfg) -> FastAPI:
 
     @app.on_event("startup")
     def _startup():
+        if not lib.games and lib.path.exists():
+            lib.full.wait()  # nessun gioco posseduto: prima di ricreare la libreria si guarda anche il catalogo
         if not lib.games:
             if not _setup_done() and not Path(cfg.roms).is_dir():
                 return  # primo avvio: prima la configurazione guidata
@@ -2087,6 +2214,40 @@ def create_app(cfg) -> FastAPI:
     def api_hltb_cancel():
         job["hltb"].stop = True
         return job["hltb"].state()
+
+    # ------------------------------------------------------------ migliori giochi (Top 100 per console, globale 100/1000)
+    @app.get("/api/top")
+    def api_top(pid: str = "all", limit: int = 100):
+        from .. import topgames
+        limit = max(1, min(limit, topgames.GLOBAL))
+        with lib.lock:
+            games = list(lib.games)
+        items = topgames.global_(games, limit) if pid == "all" else topgames.local(games, pid, min(limit, topgames.LOCAL))
+        return {"pid": pid, "items": items, "job": job["top"].state()}
+
+    @app.post("/api/top/fetch")
+    def api_top_fetch(body: dict = Body(default={})):
+        if job["top"].status == "running":
+            raise HTTPException(409, "Ricerca dei voti gia' in corso")
+        pid = body.get("pid") or "all"
+        j = J.TopGamesJob(pids=[] if pid == "all" else [pid])
+        job["top"] = j
+
+        def after(stats):
+            lib.load()
+            events.emit("library_built", stats)
+
+        threading.Thread(target=j.run, args=(cfg, after), daemon=True).start()
+        return j.state()
+
+    @app.get("/api/top/state")
+    def api_top_state():
+        return job["top"].state()
+
+    @app.post("/api/top/cancel")
+    def api_top_cancel():
+        job["top"].stop = True
+        return job["top"].state()
 
     # ------------------------------------------------------------ immagini delle collezioni
     # icona: logo da Wikipedia, altrimenti il logo (wheel) del gioco piu' votato della collezione;

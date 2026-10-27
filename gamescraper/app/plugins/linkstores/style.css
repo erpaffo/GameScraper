@@ -1,0 +1,60 @@
+/* Estensione «Link → Store»: elenco dei link raggruppati per intestazione. */
+
+.ls-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+
+.ls-chk {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.ls-group { margin: 18px 0 6px; }
+
+.ls-h {
+  font-size: 0.95rem;
+  margin: 0 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line, #2a2f40);
+}
+
+.ls-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 5px 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.ls-text {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.ls-text a {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ls-ctl {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ls-ctl .field { min-width: 120px; }
+
+.ls-ok { color: var(--ok, #67d391); font-size: 0.85rem; white-space: nowrap; }

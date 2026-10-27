@@ -367,6 +367,29 @@ Comandi/endpoint: `GET /api/pc-stores`, `POST /api/pc-stores`, `POST /api/pc-sto
 La tabella degli store mostra ora anche la riga **Port PC** (prima nascosta): numero di port installati e
 pulsante **Gestisci** che apre la pagina dei port.
 
+### Anteprima di un indirizzo («🔍 Prova»)
+
+Problema tipico: incolli un indirizzo e ottieni pochi giochi (o zero) perché non è la pagina che elenca
+**tutto** il catalogo (magari è una categoria, un archivio parziale o una singola pagina).
+
+Accanto al campo dell'indirizzo c'è ora **🔍 Prova**: legge solo quella pagina (una richiesta, fuori cache)
+e risponde con formato riconosciuto, numero di giochi nella pagina, numero di pagine totali e i primi
+titoli trovati:
+
+```
+✅ Formato type_c: 10 giochi in questa pagina, su 1.373 pagine. Esempi: …
+⚠️ Formato filelist: 0 giochi in questa pagina, su una sola pagina.
+```
+
+- Se `pages > 1` l'app leggerà tutte le pagine in sequenza: l'indirizzo è un indice completo.
+- Se `games` è basso e `pages == 1`, probabilmente non è l'elenco completo: cerca la pagina «tutti i
+  giochi» / archivio dell'area che ti interessa (spesso linkata come *All*, *Archive*, *A-Z*, *Index*).
+- Il controllo vale sia per gli store PC sia per quelli console: la funzione usata è `describe_page()`
+  in `catalog.py` (formato, voci, pagine, primi titoli), esposta da `POST /api/pc-stores/probe`.
+
+> Nota: l'app **non contiene e non importa** elenchi di siti da fonti esterne; il controllo serve a
+> verificare un indirizzo che scegli tu.
+
 ---
 
 ## 11. Stato del repository
@@ -395,3 +418,45 @@ git add gamescraper/catalog.py gamescraper/config.py gamescraper/library/build.p
         gamescraper/app/server.py tests/catalog changelog.md
 python tools/version.py commit --force
 ```
+
+---
+
+## 12. Estensione «Link → Store»
+
+Plugin incluso (`gamescraper/app/plugins/linkstores/`) che parte da **una pagina che raccoglie altri
+siti** e arriva agli store dell'app, con la console scelta da te per ogni link.
+
+Flusso: incolli l'indirizzo → l'app legge la pagina **una volta** (stessa policy dei cataloghi, una
+richiesta) → i link sono mostrati **raggruppati per intestazione** (`h2`/`h3`) nell'ordine del documento →
+per ogni link scegli la console e premi «Aggiungi».
+
+- **Raggruppamento**: si tiene l'ultimo `h2`/`h3` incontrato; i link prima della prima intestazione
+  finiscono in «Senza intestazione». Livello 2 e 3 sono riportati (`level`), così si vede la gerarchia.
+  Si ignorano `nav`, `header`, `footer`, `aside`, `script`, `style`, `noscript`, le ancore (`#`),
+  `mailto:`, `magnet:` e i rimandi alla pagina stessa.
+- **Solo altri siti**: opzione attiva per default (una pagina di elenco linka altri host). Si può
+  disattivare per tenere anche i link interni.
+- **Deduplica** per URL (prima occorrenza), limite di 3000 link per pagina.
+- **Destinazione**: il selettore contiene tutte le console registrate (il **PC per primo**). Se scegli il
+  PC compare la categoria **📦 Repack** / **⬇ Diretto**; per le console la categoria è nascosta e il link
+  va in `catalogs[console].urls` (il tipo di parser esistente viene mantenuto).
+- **Niente download al click**: «Aggiungi» scrive solo `settings.json` (`config.set_setting`), quindi la
+  modifica è immediata. Il pulsante **«↻ Leggi gli store aggiunti (N)»** chiama poi gli endpoint già
+  esistenti (`POST /api/catalogs/{pid}`, `POST /api/pc-stores`) per avviare la lettura.
+- I link **già configurati** sono riconosciuti (confronto per URL) e restano senza selettore.
+- Per pagine lunghe: filtro per nome/indirizzo, primi 400 link mostrati e pulsante «Mostra tutti».
+
+Endpoint dell'estensione (sotto `/plugin-api/linkstores/`):
+
+| Endpoint | Corpo | Risposta |
+|---|---|---|
+| `GET state` | — | console disponibili (`platforms`, PC per primo), `catalogs`, `pc_stores` |
+| `POST scan` | `{url, external_only}` | `{url, title, groups: [{name, level, links: [{text, url, host}]}], total}` |
+| `POST add` | `{url, platform, kind}` | `{added, platform, kind, state}` — `platform: "pc"`/`"windows"` = store PC |
+
+La logica sta in `gamescraper/linklist.py` (`scan_page`, `add_store`, `platform_id`), fuori dal plugin,
+così i test non avviano il server: `tests/test_linklist.py` (12 test) e `tests/test_plugin_linkstores.py`
+(5 test, backend caricato con un finto `PluginAPI`).
+
+> L'estensione è **generica**: non contiene né importa elenchi di siti. L'indirizzo lo scegli tu e vale
+> l'avvertenza di sempre (scaricare solo ciò che si ha il diritto di scaricare).
