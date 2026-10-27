@@ -34,6 +34,7 @@ DEFAULTS = {
     "itad": (2.0, 2000, 0, 0, 5, 600),  # IsThereAnyDeal (prezzi della lista dei desideri)
     "steam_store": (1.0, 2000, 0, 0, 5, 600),  # prezzi e lista desideri di Steam
     "freegames": (0.5, 200, 0, 0, 3, 900),  # pagine dei giochi gratis  # gratuita, senza quota: solo un ritmo cortese
+    "netmeta": (2.0, 0, 0, 0, 5, 300),  # pagine degli store online (copertine e descrizioni): solo un ritmo cortese
     "steam_reviews": (1.0, 2000, 0, 0, 3, 600),
     "launchbox_images": (4.0, 0, 0, 0, 5, 300),
     "libretro_thumbs": (12.0, 0, 0, 0, 8, 120),

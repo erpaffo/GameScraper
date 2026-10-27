@@ -147,7 +147,9 @@ def create_app(cfg) -> FastAPI:
     plugin_errors = X.load_backends(app, cfg, events)
     thumbs_dir = Path(cfg.cache) / "thumbs"
     state = {"building": False, "build_log": [], "build_stats": None, "thumbs_total": 0, "thumbs_done": 0}
-    job: dict = {"current": J.ScrapeJob(), "stores": J.StoreJob(), "storemeta": J.StoreMetaJob(), "hltb": J.HltbJob(), "collart": J.CollArtJob()}
+    job: dict = {"current": J.ScrapeJob(), "stores": J.StoreJob(), "storemeta": J.StoreMetaJob(),
+                 "hltb": J.HltbJob(), "collart": J.CollArtJob(), "netmeta": J.NetMetaJob(),
+                 "pcstores": J.PcStoreJob()}
 
     # ------------------------------------------------------------ vista unita (gruppi + utente)
     def view() -> dict:
@@ -284,6 +286,8 @@ def create_app(cfg) -> FastAPI:
                 "shots": len(shots.list([m["key"] for m in lib.groups[g["grp"]]])),
                 "hltb": json.loads(g["hltb"]) if g.get("hltb") else None,
                 "size": g.get("size"), "magnet": (g.get("launch") or {}).get("magnet") if g.get("store") == "online" else None,
+                "sources": ((g.get("launch") or {}).get("sources") or []) if g.get("store") == "online" else [],
+                "kind": (g.get("launch") or {}).get("kind") if g.get("store") == "online" else None,
                 "file_name": g.get("canonical") if g.get("store") == "online" else None,
                 "page_url": g.get("page") if g.get("store") == "online" else None,
                 "ratings": json.loads(g.get("ratings") or "[]"),
@@ -1195,23 +1199,106 @@ def create_app(cfg) -> FastAPI:
     @app.get("/api/catalogs/{pid}")
     def api_catalog_get(pid: str):
         from ..cache import Cache
-        from ..catalog import catalog_key
+        from ..catalog import cached_info
+        from ..storemeta import coverage
         c = Cache(cfg.cache)
         try:
             pages = []
             for u in cfg.catalogs.get(pid, []):
-                d = c.kv_get(catalog_key(pid, u)) or {}
-                pages.append({"url": u, "games": len(d.get("entries", [])), "time": d.get("time", 0)})
+                d = cached_info(c, pid, u)
+                pages.append({"url": u, "games": len(d["entries"]), "time": d["time"],
+                              "type": d["type"] or (cfg.catalog_options.get(pid) or {}).get("type", "filelist"),
+                              "total_pages": d["total_pages"]})
+            cov = coverage(c)
         finally:
             c.close()
-        return {"platform": pid, "pages": pages, "job": cat_job}
+        return {"platform": pid, "pages": pages, "job": cat_job, "meta": job["netmeta"].state(),
+                "meta_coverage": cov}
+
+    @app.post("/api/catalogs/{pid}/netmeta")
+    def api_catalog_netmeta(pid: str, body: dict = Body(default={})):
+        """Copertine e descrizioni: GameTDB offline (subito) + lettura delle pagine dei siti."""
+        if pid not in P.PLATFORMS:
+            raise HTTPException(404, "Console sconosciuta")
+        if job["netmeta"].status == "running":
+            return job["netmeta"].state()
+        limit = int(body.get("limit") or 0)  # 0 = tutte le voci (circa 2 richieste al secondo)
+        job["netmeta"] = J.NetMetaJob(limit=max(0, min(limit, 50000)),
+                                     search_ziperto=bool(body.get("ziperto", True)))
+        threading.Thread(target=lambda: job["netmeta"].run(cfg, lambda stats: lib.load()),
+                         daemon=True).start()
+        return job["netmeta"].state()
+
+    @app.post("/api/catalogs/{pid}/netmeta/stop")
+    def api_catalog_netmeta_stop(pid: str):
+        job["netmeta"].stop = True
+        return job["netmeta"].state()
+
+    @app.get("/api/pc-stores")
+    def api_pc_stores():
+        """Store PC non ufficiali configurati, con quanti giochi ha reso ciascun elenco."""
+        from ..cache import Cache
+        from ..catalog import cached_info
+        c = Cache(cfg.cache)
+        try:
+            rows = []
+            for it in (cfg.pc_stores or []):
+                info = cached_info(c, "windows", it["url"])
+                rows.append({"url": it["url"], "kind": it.get("kind", "direct"), "games": len(info["entries"]),
+                             "type": info["type"], "time": info["time"]})
+        finally:
+            c.close()
+        return {"stores": rows, "job": job["pcstores"].state()}
+
+    @app.post("/api/pc-stores")
+    def api_pc_stores_set(body: dict = Body(...)):
+        raw = body.get("stores") or []
+        cleaned = []
+        for it in raw:
+            if not isinstance(it, dict):
+                continue
+            url = str(it.get("url") or "").strip()
+            if not url.startswith(("http://", "https://")):
+                continue
+            kind = str(it.get("kind") or "direct").lower()
+            cleaned.append({"url": url, "kind": kind if kind in ("repack", "direct") else "direct"})
+        C.set_setting(cfg, "pc_stores", cleaned)
+        if body.get("refresh") and cleaned:
+            if job["pcstores"].status != "running":
+                job["pcstores"] = J.PcStoreJob()
+                threading.Thread(target=lambda: job["pcstores"].run(cfg, lambda stats: lib.load()),
+                                 daemon=True).start()
+        elif not cleaned:
+            threading.Thread(target=lambda: (build(cfg, log=lambda m: None), lib.load()), daemon=True).start()
+        return api_pc_stores()
+
+    @app.post("/api/pc-stores/refresh")
+    def api_pc_stores_refresh():
+        if job["pcstores"].status == "running":
+            return job["pcstores"].state()
+        if not cfg.pc_stores:
+            raise HTTPException(400, "Nessuno store PC aggiunto")
+        job["pcstores"] = J.PcStoreJob()
+        threading.Thread(target=lambda: job["pcstores"].run(cfg, lambda stats: lib.load()), daemon=True).start()
+        return job["pcstores"].state()
 
     @app.post("/api/catalogs/{pid}")
     def api_catalog_set(pid: str, body: dict = Body(...)):
         if pid not in P.PLATFORMS:
             raise HTTPException(404, "Console sconosciuta")
         urls = [u.strip() for u in body.get("urls", []) if u.strip().startswith(("http://", "https://"))]
-        C.set_setting(cfg, "catalogs", {**C.read_settings(cfg).get("catalogs", {}), pid: urls})
+        # il tipo di parser (e le eventuali classi CSS) restano quando si cambiano solo gli URL
+        settings = dict(C.read_settings(cfg).get("catalogs", {}))
+        current = settings.get(pid)
+        opts = dict(current) if isinstance(current, dict) else {}
+        opts.pop("urls", None)
+        if body.get("type"):
+            opts["type"] = str(body["type"])
+        if urls:
+            settings[pid] = {**opts, "urls": urls} if opts else urls
+        else:  # nessun URL: la console esce dai cataloghi, con le sue opzioni
+            settings.pop(pid, None)
+        C.set_setting(cfg, "catalogs", settings)
         if body.get("refresh", True) and urls:
             _start_catalog_job(pid)
         elif not urls:
@@ -1829,25 +1916,31 @@ def create_app(cfg) -> FastAPI:
         hit = next(iter(folder.glob(h + ".*")), None) if folder.exists() else None
         if hit:
             return hit.relative_to(cfg.cache).as_posix()
-        host = urlparse(url_).hostname or ""
-        with _REMOTE_SEM:
-            # un host irraggiungibile (es. CDN che blocca l'IP) non deve tenere appese decine di richieste: il browser
-            # ha pochi collegamenti verso l'app e le copertine dei giochi resterebbero in coda dietro a queste
-            if _REMOTE_DOWN.get(host, 0) > time.time():
-                return None
-            try:
-                r = httpx.get(url_, timeout=httpx.Timeout(10, connect=4), follow_redirects=True, headers={"User-Agent": UA})
-            except httpx.HTTPError as e:
-                if isinstance(e, (httpx.ConnectTimeout, httpx.ConnectError)):
-                    _REMOTE_DOWN[host] = time.time() + 300
-                return None
-        ext = sniff(r.content[:16]) if r.status_code == 200 else None
-        if not ext:
-            return None
-        folder.mkdir(parents=True, exist_ok=True)
-        dest = folder / f"{h}.{ext}"
-        dest.write_bytes(r.content)
-        return dest.relative_to(cfg.cache).as_posix()
+        # piu' indirizzi separati da "|": si prova il primo che risponde (es. copertine GameTDB
+        # in regioni diverse, dove non tutte esistono)
+        candidates = [u.strip() for u in url_.split("|") if u.strip()][:4]
+        for candidate in candidates:
+            host = urlparse(candidate).hostname or ""
+            with _REMOTE_SEM:
+                # un host irraggiungibile (es. CDN che blocca l'IP) non deve tenere appese decine di richieste: il browser
+                # ha pochi collegamenti verso l'app e le copertine dei giochi resterebbero in coda dietro a queste
+                if _REMOTE_DOWN.get(host, 0) > time.time():
+                    continue
+                try:
+                    r = httpx.get(candidate, timeout=httpx.Timeout(10, connect=4), follow_redirects=True,
+                                  headers={"User-Agent": UA})
+                except httpx.HTTPError as e:
+                    if isinstance(e, (httpx.ConnectTimeout, httpx.ConnectError)):
+                        _REMOTE_DOWN[host] = time.time() + 300
+                    continue
+            ext = sniff(r.content[:16]) if r.status_code == 200 else None
+            if not ext:
+                continue
+            folder.mkdir(parents=True, exist_ok=True)
+            dest = folder / f"{h}.{ext}"
+            dest.write_bytes(r.content)
+            return dest.relative_to(cfg.cache).as_posix()
+        return None
 
     def _pregen_thumbs():
         """Genera in background le miniature delle copertine, cosi' lo scorrimento e' fluido da subito."""

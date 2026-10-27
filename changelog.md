@@ -3,6 +3,26 @@
 Le novità più recenti in alto. L'ultima release è la **0.2.2** (`release\GameScraper-0.2.2-windows-x64.zip`).
 
 
+## 0.4.0 (2026-10-27)
+### Aggiunto
+- **Store online: tipo di pagina per ogni console** (campo `type` in `settings.json`): `filelist` (elenco di file, invariato),
+  `type_a` (elenco paginato con `?lcp_page0=N`), `type_b` (elenco A-Z senza paginazione, con la lettera di ogni gioco) e
+  `type_c` (archivio paginato `/page/N/`, es. Ziperto); se il tipo non è indicato viene riconosciuto dalla pagina stessa.
+- **Store online: copertine e descrizioni** (pulsante 🖼 nella finestra dello store, con due barre di avanzamento — copertine
+  e descrizioni — e pulsante di stop): database offline **GameTDB** per i giochi Switch e lettura delle pagine dei siti
+  (nxbrew, ziperto) per copertina, descrizione, Title ID, data, editore, generi e peso. I dati già letti restano in cache:
+  ogni esecuzione riprende da dove era.
+- **Store online: Ziperto** (elenco paginato letto da solo, `https://www.ziperto.com/nintendo-switch-nsp/`) e **stesso gioco
+  da più fonti**: se dopo la pulizia del titolo NXBrew e Ziperto hanno la stessa partita, la libreria mostra una sola scheda
+  con un pulsante di scaricamento per ogni sito.
+- **Altri store PC** (Impostazioni › Store, separati dagli store ufficiali): si incolla l'indirizzo di una pagina elenco e
+  i giochi compaiono tra quelli PC, divisi in **📦 Repack** (download corto, installazione lunga) e **⬇ Download diretto**,
+  con filtro, cambio categoria e stesso gioco da più fonti su una sola scheda.
+### Migliorato
+- Titoli degli store online ripuliti da «Switch NSP (eShop)» e dalla versione finale; le copertine mancanti in una regione
+  vengono cercate nelle altre (GameTDB US/EN/JA).
+- La tabella degli store mostra anche i **Port PC**, con il numero di port e il pulsante per gestirli.
+
 ## 0.3.1 (2026-10-27)
 ### Aggiunto
 - **Port PC** (nuova voce nella barra laterale): i giochi console ricompilati o ricostruiti per Windows (Zelda64Recomp,

@@ -675,8 +675,13 @@ async function openDetail(id) {
   const shots = ["screenshot", "title", "wheel", "fanart", "marquee", "header"].filter((k) => d.media[k]);
   const pc = !!d.store;
   const online = d.store === "online";
+  const dlSources = online ? (d.sources || []).filter((s) => s && s.url) : [];
+  // una fonte sola: pulsante unico; due o piu' (es. NXBrew e Ziperto): un pulsante per sito
   const mainBtn = online
-    ? `<button class="btn primary" id="d-install" title="Apre la pagina di download nel browser">⬇ Scarica (browser)</button>`
+    ? (dlSources.length > 1
+      ? dlSources.map((s, i) => `<button class="btn${i === 0 ? " primary" : ""}" data-open="${esc(s.url)}"
+          title="Apri la pagina di download su ${esc(s.site || "questo sito")}">⬇ ${esc((s.site || "sito").replace(/^www\./, ""))}</button>`).join("")
+      : `<button class="btn primary" id="d-install" title="Apre la pagina di download nel browser">⬇ Scarica (browser)</button>`)
       + (d.magnet ? `<button class="btn" id="d-torrent" title="Apre il link nel client torrent">🧲 Torrent</button>` : "")
     : pc && !d.installed
     ? `<button class="btn primary" id="d-install" ${d.can_install ? "" : "disabled"}>⬇ Installa</button>`
@@ -702,7 +707,7 @@ async function openDetail(id) {
       + `<button class="btn" id="d-scrape" title="Riprova tutte le fonti per questo gioco (tutte le sue versioni)">⟳ Cerca dati mancanti</button></div>` : ""}
     ${online && d.magnet && !/dn=[^&]*\./.test(d.magnet) ? `<div class="d-note">Il link magnet scarica l'intero set:
       nel client torrent seleziona solo il file «${esc(d.file_name || d.title)}».</div>` : ""}
-    <div class="d-emu muted">${online ? `${d.page_url ? `<img class="sico" src="/icons/site?url=${encodeURIComponent(d.page_url)}" alt="">` : "🌐"} Disponibile online · ${esc(d.file_name || "")}`
+    <div class="d-emu muted">${online ? `${d.page_url ? `<img class="sico" src="/icons/site?url=${encodeURIComponent(d.page_url)}" alt="">` : "🌐"} Disponibile online${d.kind === "repack" ? " · 📦 Repack (gioco compresso: il download è corto, l'installazione lunga)" : d.kind === "direct" ? " · ⬇ Download diretto" : ""}${dlSources.length > 1 ? ` · ${dlSources.length} fonti (${dlSources.map((s) => esc(s.site)).join(", ")})` : ""} · ${esc(d.file_name || "")}`
       : pc ? `${esc(d.store_name)} · ${d.installed ? "installato" : "non installato"}`
       : d.emulator ? "Emulatore: " + esc(d.emulator) + (d.profile ? ` <span class="tag" title="Profilo di avvio di questo gioco">profilo</span>` : "")
       : `Nessun emulatore configurato per ${esc(d.platform_name)} — <a href="#" id="d-emu-cfg">impostazioni</a>`}
@@ -1924,12 +1929,62 @@ async function openCatalog(pid) {
   renderCatalog(d);
   $("#catalog-dlg").showModal();
   if (d.job.status === "running") pollCatalog();
+  if (d.meta && d.meta.status === "running") pollMeta();
 }
 
 function renderCatalog(d) {
   $("#cat-pages").innerHTML = d.pages.map((p) => `<div class="muted">${esc(p.url)} — ${p.games.toLocaleString("it")} giochi`
     + (p.time ? ` · letta ${new Date(p.time * 1000).toLocaleString("it", { dateStyle: "short", timeStyle: "short" })}` : " · mai letta") + `</div>`).join("");
   $("#cat-log").textContent = (d.job.log || []).slice(-10).join("\n");
+  renderMeta(d.meta, d.meta_coverage);
+}
+
+/* copertine e descrizioni delle voci online (GameTDB offline + pagine dei siti) */
+function metaBars(m, cov) {
+  const s = (m && m.summary) || {};
+  const total = s.games || cov.total || 0;
+  if (!total) return "";
+  const row = (label, done) => {
+    const pct = Math.min(100, Math.round((100 * (done || 0)) / total));
+    return `<div class="bar"><span>${label}</span><div class="track"><div class="fill" style="width:${pct}%"></div></div>`
+      + `<span class="n">${(done || 0).toLocaleString("it")} / ${total.toLocaleString("it")}</span></div>`;
+  };
+  return `<div class="bars">${row("🖼 Copertine", s.covers ?? cov.covers)}${row("📝 Descrizioni", s.descriptions ?? cov.descriptions)}</div>`;
+}
+
+function renderMeta(m, cov) {
+  const box = $("#cat-meta-info");
+  const btn = $("#cat-meta-btn");
+  SET.metaRunning = !!(m && m.status === "running");
+  cov = cov || {};
+  if (!m || m.status === "idle") {
+    btn.textContent = "🖼 Copertine e descrizioni";
+    box.innerHTML = cov.total ? `<span class="muted small">Ultimo giro:</span>${metaBars(null, cov)}` : "";
+    return;
+  }
+  const s = m.summary || {};
+  if (m.status === "running") {
+    btn.textContent = "⏹ Ferma";
+    box.innerHTML = `<div class="phase">${esc(m.phase || "In corso")} · ${(s.pages || 0).toLocaleString("it")} pagine lette</div>`
+      + metaBars(m, cov);
+  } else if (m.status === "done") {
+    btn.textContent = "🖼 Copertine e descrizioni";
+    box.innerHTML = `<div class="phase">${esc(m.phase)}</div>` + metaBars(m, cov);
+  } else {
+    btn.textContent = "🖼 Copertine e descrizioni";
+    box.innerHTML = `<div class="phase">${esc(m.phase || m.status)}</div>` + metaBars(m, cov);
+  }
+}
+
+let metaTimer = 0;
+async function pollMeta() {
+  clearTimeout(metaTimer);
+  const d = await api(`/api/catalogs/${SET.catPid}`).catch(() => null);
+  if (!d) return;
+  renderCatalog(d);
+  if (d.meta && d.meta.status === "running") { metaTimer = setTimeout(pollMeta, 2000); return; }
+  if (d.meta && d.meta.status === "done") { await reload(true); toast("Copertine e descrizioni aggiornate"); }
+  else if (d.meta && d.meta.status === "error") toast("Lettura delle pagine non riuscita: vedi il registro", true);
 }
 
 let catTimer = 0;
@@ -1951,6 +2006,53 @@ async function renderCustomConsoles() {
       <button class="btn" data-cdel="${esc(p.id)}">Rimuovi</button></div>`).join("") : "";
 }
 
+/* ---- altri store PC: repack / download diretto */
+let PCST = { rows: [], filter: "all", timer: 0 };
+
+async function loadPcStores() {
+  let d;
+  try { d = await api("/api/pc-stores"); } catch (e) { return toast(e.message, true); }
+  PCST.rows = d.stores || [];
+  renderPcStores(d.job);
+  if (d.job && d.job.status === "running") pollPcStores();
+}
+
+function renderPcStores(j) {
+  const rows = PCST.rows.filter((r) => PCST.filter === "all" || r.kind === PCST.filter);
+  $("#pcst-table").innerHTML = rows.length ? rows.map((r) => `<tr>
+      <td class="small">${esc(r.url)}${r.type && r.type !== "filelist" ? ` <span class="src-kind offline">${esc(r.type)}</span>` : ""}</td>
+      <td><select class="field" data-pcst-kind="${esc(r.url)}">
+        <option value="repack"${r.kind === "repack" ? " selected" : ""}>📦 Repack</option>
+        <option value="direct"${r.kind === "direct" ? " selected" : ""}>⬇ Download diretto</option></select></td>
+      <td class="num">${r.games ? r.games.toLocaleString("it") : "—"}</td>
+      <td><button class="btn" data-pcst-del="${esc(r.url)}">Rimuovi</button></td></tr>`).join("")
+    : `<tr><td colspan="4" class="muted small">Nessuno store aggiunto${PCST.filter !== "all" ? " in questa categoria" : ""}.</td></tr>`;
+  const jj = j || {};
+  $("#pcst-info").textContent = jj.status === "running" ? (jj.phase || "Lettura degli elenchi…") : "";
+  $("#pcst-log").textContent = (jj.log || []).slice(-8).join("\n");
+  $("#pcst-refresh").disabled = jj.status === "running";
+}
+
+async function savePcStores(stores, refresh) {
+  const body = { stores: stores.map((r) => ({ url: r.url, kind: r.kind })), refresh: !!refresh };
+  let d;
+  try { d = await api("/api/pc-stores", { body }); } catch (e) { return toast(e.message, true); }
+  PCST.rows = d.stores || [];
+  renderPcStores(d.job);
+  if (refresh) pollPcStores();
+}
+
+async function pollPcStores() {
+  clearTimeout(PCST.timer);
+  const d = await api("/api/pc-stores").catch(() => null);
+  if (!d) return;
+  PCST.rows = d.stores || [];
+  renderPcStores(d.job);
+  if (d.job && d.job.status === "running") { PCST.timer = setTimeout(pollPcStores, 1500); return; }
+  if (d.job && d.job.status === "done") { await reload(true); toast("Store PC aggiornati"); }
+  else if (d.job && d.job.status === "error") toast("Lettura non riuscita: vedi il registro", true);
+}
+
 /* ---- impostazioni › account degli store */
 async function loadAccounts() {
   api("/api/ra").then((r) => { $("#ra-user").value = r.username; $("#ra-key").placeholder = r.has_key ? "già salvata (lascia vuoto per non cambiarla)" : ""; }).catch(() => {});
@@ -1959,10 +2061,12 @@ async function loadAccounts() {
   SET.accounts = d;
   const when = d.refreshed ? new Date(d.refreshed * 1000).toLocaleString("it", { dateStyle: "short", timeStyle: "short" }) : "mai";
   $("#acc-info").textContent = `Ultimo aggiornamento: ${when}`;
-  $("#acc-table").innerHTML = d.stores.filter((x) => x.id !== "manual" && x.id !== "ports").map((x) => {
+  $("#acc-table").innerHTML = d.stores.filter((x) => x.id !== "manual").map((x) => {
     const a = x.account || {};
     let ctrl = "";
-    if (x.id === "steam") {
+    if (x.id === "ports") {
+      ctrl = `<span class="muted small">port non ufficiali installati</span> <button class="btn" data-ports-open>Gestisci</button>`;
+    } else if (x.id === "steam") {
       const accs = (a.accounts || []).map((u) => `<option value="${esc(u.steamid)}" ${u.steamid === a.steamid ? "selected" : ""}>${esc(u.persona || u.steamid)}</option>`).join("");
       ctrl = `<div class="acc-steam">
         <select class="field" id="steam-id" title="Account Steam">${accs || `<option value="">nessun account trovato</option>`}</select>
@@ -2086,7 +2190,7 @@ function showTab(tab) {
   else if (tab === "scan") { loadScan(); renderCustomConsoles(); }
   else if (tab === "emu") loadEmu();
   else if (tab === "remote") loadRemote();
-  else if (tab === "acc") loadAccounts();
+  else if (tab === "acc") { loadAccounts(); loadPcStores(); }
   else if (tab === "src") loadSources();
   else if (tab === "look") loadAppearance();
   else if (tab.startsWith("ext:")) {
@@ -2453,6 +2557,37 @@ function bind() {
     setView({ type: a.dataset.view, id: a.dataset.id || null });
   });
   $("#inst-filter").value = S.instFilter;
+  // altri store PC: aggiunta, rimozione, categoria e filtro
+  $("#pcst-add").onclick = () => {
+    const url = $("#pcst-url").value.trim();
+    if (!/^https?:\/\//i.test(url)) return toast("Indirizzo non valido (serve http:// o https://)", true);
+    if (PCST.rows.some((r) => r.url === url)) return toast("Questo elenco è già stato aggiunto");
+    savePcStores([...PCST.rows, { url, kind: $("#pcst-kind").value }], false);
+    $("#pcst-url").value = "";
+  };
+  $("#pcst-refresh").onclick = async () => {
+    try { await api("/api/pc-stores/refresh", { body: {} }); } catch (e) { return toast(e.message, true); }
+    pollPcStores();
+  };
+  $("#pcst-filter").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-pcst-filter]");
+    if (!b) return;
+    PCST.filter = b.dataset.pcstFilter;
+    document.querySelectorAll("#pcst-filter .btn").forEach((x) => x.classList.toggle("on", x === b));
+    renderPcStores(null);
+  });
+  $("#pcst-table").addEventListener("click", (e) => {
+    const del = e.target.closest("[data-pcst-del]");
+    if (del) savePcStores(PCST.rows.filter((r) => r.url !== del.dataset.pcstDel), true);
+  });
+  $("#pcst-table").addEventListener("change", (e) => {
+    const s = e.target.closest("[data-pcst-kind]");
+    if (!s) return;
+    savePcStores(PCST.rows.map((r) => (r.url === s.dataset.pcstKind ? { ...r, kind: s.value } : r)), false);
+  });
+  $("#acc-table").addEventListener("click", (e) => {
+    if (e.target.closest("[data-ports-open]")) { $("#settings").close(); setView({ type: "ports", id: null }); }
+  });
   $("#inst-filter").onchange = (e) => { S.instFilter = e.target.value; store.set("instFilter", S.instFilter); refreshGrid(); };
   $("#pc-add").onclick = () => openAddGame();
   $("#bp-btn").onclick = () => enterBigPicture();
@@ -2671,6 +2806,14 @@ function bind() {
   $("#cat-refresh").onclick = async () => {
     try { await api(`/api/catalogs/${SET.catPid}/refresh`, { body: {} }); } catch (e) { return toast(e.message, true); }
     pollCatalog();
+  };
+  $("#cat-meta-btn").onclick = async () => {
+    if (!SET.catPid) return;
+    try {
+      const running = SET.metaRunning;
+      await api(`/api/catalogs/${SET.catPid}/netmeta${running ? "/stop" : ""}`, { body: {} });
+    } catch (e) { return toast(e.message, true); }
+    pollMeta();
   };
   // console personalizzate
   $("#console-add").onclick = () => { ["cn-name", "cn-id", "cn-exts", "cn-aliases", "cn-igdb"].forEach((i) => { $("#" + i).value = ""; }); $("#console-dlg").showModal(); };

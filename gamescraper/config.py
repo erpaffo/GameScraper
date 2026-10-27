@@ -110,6 +110,10 @@ class Config:
     rawg: dict = field(default_factory=dict)  # {"api_key": ...}
     limits: dict = field(default_factory=dict)  # regole per fonte (vedi policy.py)
     catalogs: dict = field(default_factory=dict)  # store online per console: {"nds": ["https://..."]}
+    # opzioni per catalogo (dalla forma {"urls": [...], "type": ..., "css": {...}} di settings.json)
+    catalog_options: dict = field(default_factory=dict)  # console -> {"type": "type_a", ...}
+    # store PC non ufficiali (repack / download diretto): [{"url": ..., "kind": "repack"|"direct"}]
+    pc_stores: list = field(default_factory=list)
     stores: dict = field(default_factory=dict)  # store PC: {"steam": {"api_key":..., "steamid":...}, ...}
     app: dict = field(default_factory=dict)  # tema, plugin disattivati, modalita' di avvio
     config_path: Path | None = None
@@ -155,11 +159,33 @@ def apply_settings(cfg: Config):
     for pid, v in s.get("stores", {}).items():
         cfg.stores.setdefault(pid, {}).update(v or {})
     cfg.app.update(s.get("app", {}))
+    # la sezione e' l'unica fonte (settings.json): si riparte da zero, cosi' le console rimosse
+    # spariscono anche dal config in memoria e non restano voci vecchie
+    cfg.catalogs.clear()
+    cfg.catalog_options.clear()
     for pid, urls in s.get("catalogs", {}).items():
+        # forma storica: lista di URL. Forma estesa: {"urls": [...], "type": "type_a", "css": {...}}
+        opts = {}
+        if isinstance(urls, dict):
+            opts = {k: v for k, v in urls.items() if k != "urls"}
+            urls = urls.get("urls") or []
         if urls:
             cfg.catalogs[pid] = list(urls)
         else:
             cfg.catalogs.pop(pid, None)
+        if opts and cfg.catalogs.get(pid):
+            cfg.catalog_options[pid] = opts
+        else:
+            cfg.catalog_options.pop(pid, None)
+    # store PC non ufficiali: [{"url": ..., "kind": "repack"|"direct"}] (una voce per elenco)
+    cfg.pc_stores = [
+        {"url": str(it.get("url", "")).strip(), "kind": str(it.get("kind", "direct")).lower()}
+        for it in (s.get("pc_stores") or [])
+        if isinstance(it, dict) and str(it.get("url", "")).strip().startswith(("http://", "https://"))
+    ]
+    for it in cfg.pc_stores:
+        if it["kind"] not in ("repack", "direct"):
+            it["kind"] = "direct"
     cfg.rawg.update(s.get("rawg", {}))
     cfg.ss.update(s.get("screenscraper", {}))
     cfg.igdb.update(s.get("igdb", {}))

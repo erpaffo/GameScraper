@@ -25,12 +25,15 @@ import sqlite3
 import time
 from collections import Counter, defaultdict
 from pathlib import Path
+from urllib.parse import urlparse
 
 from ..cache import Cache
+from ..catalog import CatalogItem, cached_info, entry_stem
 from ..matching import normalize
+from .. import storemeta
 from ..net import make_client
 from ..pipeline import load_cached
-from ..scanner import Game, find_platform_dirs, scan
+from ..scanner import Game, clean_title, find_platform_dirs, scan
 from ..sources.base import Context
 from .ratings import combine
 
@@ -338,12 +341,67 @@ def _store_entries(cfg, cache) -> list[dict]:
 
 # ---------------------------------------------------------------- cataloghi online (store per console)
 
+def _platform_exts(pid: str) -> set[str]:
+    """Estensioni dei file della console (entry_stem aggiunge gli archivi piu' comuni)."""
+    from .. import platforms as P
+    return set(getattr(P.PLATFORMS.get(pid), "exts", ()) or ())
+
+
+# rumore dei siti di ROM in fondo al titolo: "Gioco Switch NSP (eShop)", "Gioco XCI", "Gioco - NSP"
+_STORE_NOISE = re.compile(r"\s*(?:[-–|:]\s*)?(?:\bswitch\s+)?\b(?:nsp|xci|eshop|nsz)\b.*$", re.I | re.S)
+_STORE_VERSION = re.compile(r"\s+v\d+(?:\.\d+)*$", re.I)
+
+
+def _store_title(stem: str) -> str:
+    """Titolo leggibile di una voce online: via «Switch NSP (eShop)» e la versione finale.
+
+    Il nome originale resta in `name` (serve per peso, deduplica e file); cambia solo il titolo mostrato.
+    Non tocca titoli che contengono «Switch» come parola vera (es. «1-2-Switch», «Nintendo Switch Sports»).
+    """
+    base = _STORE_NOISE.sub("", stem).strip(" -–|:")
+    base = _STORE_VERSION.sub("", base).strip()
+    return clean_title(base) or base or stem
+
+
+def _catalog_to_store_game(item: CatalogItem, console_pid: str) -> dict:
+    """Converte una voce di catalogo (catalog.py) nel gioco "da scaricare" della libreria.
+
+    `console_pid` e' la console a cui appartiene lo store (es. "nds"): serve per la chiave,
+    il gruppo delle versioni e il filtro per piattaforma.
+    """
+    from ..scanner import clean_title, regions_of
+
+    name = item["name"]
+    stem = entry_stem(item, _platform_exts(console_pid))
+    title = _store_title(stem)
+    return {
+        "key": f"{console_pid}/net:{hashlib.sha1(item['url'].encode()).hexdigest()[:16]}",
+        "pid": console_pid,
+        "name": name,
+        "title": title,
+        "url": item["url"],
+        "magnet": item.get("magnet"),
+        "size": item.get("size"),
+        "region": ",".join(regions_of(stem)),
+        "year": None,
+        "release_date": None,
+        "developer": None,
+        "publisher": None,
+        "genres": [],
+        "players": None,
+        "description": None,
+        "media": {},
+        "ratings": {},
+        "grp": f"{console_pid}/net:" + normalize(title),
+    }
+
+
 def _catalog_entries(cfg, cache, merged: dict) -> list[dict]:
     """Voci lette dalle pagine degli store online, esclusi i giochi gia' posseduti (stesso nome file).
     Dati e immagini dal database LaunchBox (offline): le immagini si scaricano solo quando servono."""
     from .. import platforms as P
     from ..bulk import LaunchBoxDB
-    from ..scanner import REGION_TAGS, clean_title, regions_of
+    from ..scanner import REGION_TAGS, clean_title
     # giochi gia' in libreria: stesso nome file, stesso titolo (anche in un'altra regione/formato,
     # es. "X (Europe).rvz" contro "X (USA).zip") o stesso gioco LaunchBox
     def tkey(t: str, pid: str) -> str:
@@ -355,7 +413,8 @@ def _catalog_entries(cfg, cache, merged: dict) -> list[dict]:
         return n
 
     lb = LaunchBoxDB(cfg.cache)
-    with_cat = set(getattr(cfg, "catalogs", {}) or {})
+    pc_stores = [x for x in (getattr(cfg, "pc_stores", None) or []) if x.get("url")]
+    with_cat = set(getattr(cfg, "catalogs", {}) or {}) | ({"windows"} if pc_stores else set())
     owned: dict[str, set[str]] = defaultdict(set)
     owned_titles: dict[str, set[str]] = defaultdict(set)
     owned_lb: dict[str, set[int]] = defaultdict(set)
@@ -375,24 +434,70 @@ def _catalog_entries(cfg, cache, merged: dict) -> list[dict]:
     lang_regions = [l for l in cfg.languages if l in REGION_TAGS.values()]
     pref = lang_regions + [r for r in cfg.regions if r not in lang_regions]
     out, seen = [], set()
-    for (k,) in cache.db.execute("SELECT k FROM kv WHERE k LIKE 'catalog:%'").fetchall():
-        pid = k.split(":")[1]
-        if pid not in P.PLATFORMS or pid not in (getattr(cfg, "catalogs", {}) or {}):
-            continue
-        data = cache.kv_get(k) or {}
-        for it in data.get("entries", []):
-            stem = it["name"].rsplit(".", 1)[0]
-            if stem.lower() in owned[pid] or (pid, stem.lower()) in seen or stem.startswith("[BIOS]"):
+    by_title: dict[tuple[str, str], dict] = {}  # (console, titolo normalizzato) -> gioco gia' creato
+
+    def apply_store_meta(e: dict, meta: dict) -> None:
+        """Copertina e descrizione lette dalla pagina dello store (o da GameTDB): riempie solo i vuoti."""
+        if not meta:
+            return
+        if not e["description"]:
+            e["description"] = meta.get("description")
+        if not e["developer"]:
+            e["developer"] = meta.get("developer")
+        if not e["publisher"]:
+            e["publisher"] = meta.get("publisher")
+        if not e["genres"]:
+            e["genres"] = list(meta.get("genres") or [])
+        if not e["players"] and meta.get("players"):
+            e["players"] = str(meta["players"])
+        if not e["release_date"] and meta.get("release_date"):
+            e["release_date"] = meta["release_date"]
+            e["year"] = int(meta["release_date"][:4]) if meta["release_date"][:4].isdigit() else e["year"]
+        if not e["size"] and meta.get("size"):
+            e["size"] = meta["size"]
+        covers = meta.get("covers") or ([meta["cover"]] if meta.get("cover") else [])
+        if covers and "cover" not in e["media"]:
+            # piu' indirizzi separati da "|": il server prova il primo che risponde
+            e["media"]["cover"] = "url:" + "|".join(covers[:3])
+        shots = meta.get("screenshots") or []
+        if shots and "screenshot" not in e["media"]:
+            e["media"]["screenshot"] = "url:" + shots[0]
+
+    sources_list: list[tuple[str, str, str | None]] = [
+        (pid, url, None) for pid, urls in (getattr(cfg, "catalogs", {}) or {}).items()
+        if pid in P.PLATFORMS for url in (urls or [])]
+    # store PC non ufficiali: giochi per Windows, con la categoria (repack / download diretto)
+    sources_list += [("windows", x["url"], x.get("kind")) for x in pc_stores]
+    for pid, url, kind in sources_list:
+        info = cached_info(cache, pid, url)
+        is_file_list = info["type"] == "filelist"
+        for it in info["entries"]:
+            stem = entry_stem(it, set(P.PLATFORMS[pid].exts))
+            # stesso URL ripetuto = doppione; nomi uguali da siti diversi sono fonti diverse
+            if stem.lower() in owned[pid] or (pid, it["url"]) in seen or stem.startswith("[BIOS]"):
                 continue
-            seen.add((pid, stem.lower()))
-            title = clean_title(stem)
+            seen.add((pid, it["url"]))
+            title = _store_title(stem)
             if tkey(title, pid) in owned_titles[pid]:
                 continue
-            e = {"key": f"{pid}/net:{hashlib.sha1(it['url'].encode()).hexdigest()[:16]}", "pid": pid, "name": it["name"],
-                 "title": title, "url": it["url"], "magnet": it.get("magnet"), "size": it.get("size"),
-                 "region": ",".join(regions_of(stem)), "year": None, "release_date": None, "developer": None,
-                 "publisher": None, "genres": [], "players": None, "description": None, "media": {}, "ratings": {},
-                 "grp": f"{pid}/net:" + normalize(title)}
+            # stesso gioco da piu' fonti (es. nxbrew + ziperto): una sola voce con piu' link
+            key = (pid, normalize(title))
+            source = {"site": (urlparse(it["url"]).hostname or "").removeprefix("www."),
+                      "url": it["url"], "magnet": it.get("magnet"), "name": it["name"]}
+            if kind:
+                source["kind"] = kind  # repack / download diretto (solo store PC)
+            existing = by_title.get(key)
+            if existing is not None:
+                if it["url"] not in {s["url"] for s in existing["sources"]}:
+                    existing["sources"].append(source)
+                if not existing["magnet"] and it.get("magnet"):
+                    existing["magnet"] = it["magnet"]
+                if not is_file_list:
+                    apply_store_meta(existing, storemeta.cached(cache, it["url"]))
+                continue
+            e = _catalog_to_store_game(it, pid)
+            if kind:
+                e["kind"] = kind
             if lb.ready():
                 r = lb.find(pid, [title], files=[stem], fuzzy=0)
                 if r and r["id"] in owned_lb[pid]:
@@ -407,6 +512,12 @@ def _catalog_entries(cfg, cache, merged: dict) -> list[dict]:
                     e["grp"] = f"{pid}/net:lb{r['id']}"  # stesso gioco in altre regioni = stesso gruppo
                     imgs = lb.images(r["id"], list(cfg.regions))
                     e["media"] = {k2: "url:" + v for k2, v in imgs.items() if k2 in ("cover", "screenshot", "wheel", "fanart")}
+            # copertina e descrizione lette dalla pagina dello store (o da GameTDB): riempiono i vuoti.
+            # Solo per le schede di gioco (type_a/type_b/type_c): i file hanno gia' i loro metadati.
+            if not is_file_list:
+                apply_store_meta(e, storemeta.cached(cache, it["url"]))
+            e["sources"] = [source]
+            by_title[key] = e
             out.append(e)
     lb.close()
     # una voce principale per gioco (le altre regioni restano tra le "versioni")
@@ -551,7 +662,9 @@ def build(cfg, log=print, progress=None) -> dict:
             rows.append((e["key"], e["pid"], e["title"], sort_title(e["title"]), e["year"], e["release_date"],
                          e["developer"], e["publisher"], json.dumps(e["genres"], ensure_ascii=False), e["players"],
                          rc.get("rating"), e["description"], e["region"], 1, "[]", json.dumps(e["media"]), None, e["name"],
-                         None, "{}", e["grp"], e["primary"], "online", 0, json.dumps({"magnet": e["magnet"]}),
+                         None, "{}", e["grp"], e["primary"], "online", 0,
+                         json.dumps({"magnet": e["magnet"], "kind": e.get("kind"),
+                                     "sources": e.get("sources") or []}),
                          e["url"], e["url"], 0, None, rc.get("rating_count"), rc.get("rating_critics"),
                          json.dumps(rc.get("ratings", [])), e["size"]))
         db.executemany("INSERT INTO games(key, platform, title, sort_title, year, release_date, developer, publisher,"

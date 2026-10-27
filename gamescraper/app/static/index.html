@@ -37,6 +37,11 @@
       <div class="nav-section">Console</div>
       <div id="platform-list"></div>
 
+      <div id="plugin-nav-section" hidden>
+        <div class="nav-section">Estensioni</div>
+        <div id="plugin-nav"></div>
+      </div>
+
       <div class="nav-section with-action">
         <span>Collezioni</span>
         <span class="section-tools">
@@ -48,11 +53,6 @@
       <div id="smart-list"></div>
       <input id="coll-filter" class="side-input" placeholder="Filtra collezioni…" autocomplete="off">
       <div id="coll-list"></div>
-
-      <div id="plugin-nav-section" hidden>
-        <div class="nav-section">Estensioni</div>
-        <div id="plugin-nav"></div>
-      </div>
 
       <div class="nav-section">Altro</div>
       <a class="nav-item" data-view="missing"><span class="ico">?</span><span class="lbl">Senza dati</span><span class="cnt" id="cnt-missing"></span></a>
@@ -308,6 +308,29 @@
           <tbody id="acc-table"></tbody></table>
         <div class="row end"><span class="muted small" id="acc-info"></span><button class="btn primary" id="acc-refresh">↻ Aggiorna store</button></div>
         <div id="acc-progress"></div>
+        <h4>Altri store PC (non ufficiali)</h4>
+        <p class="muted small">Elenchi di giochi PC che non sono store ufficiali, in due categorie: <b>📦 Repack</b> (giochi molto
+          compressi, pensati per chi ha una connessione lenta: il download è più corto ma l'installazione richiede tempo)
+          e <b>⬇ Download diretto</b>. Incolla l'indirizzo di una pagina elenco per ogni sito: l'app legge nomi e link e li
+          mostra tra i giochi PC, con il pulsante per ogni fonte.</p>
+        <div class="row wrap" id="pcst-filter">
+          <button class="btn on" data-pcst-filter="all" type="button">Tutti</button>
+          <button class="btn" data-pcst-filter="repack" type="button">📦 Repack</button>
+          <button class="btn" data-pcst-filter="direct" type="button">⬇ Download diretto</button>
+        </div>
+        <table class="emu"><thead><tr><th>Indirizzo dell'elenco</th><th style="width:150px">Categoria</th>
+          <th class="num" style="width:90px">Giochi</th><th style="width:90px"></th></tr></thead>
+          <tbody id="pcst-table"></tbody></table>
+        <div class="row wrap">
+          <input class="field grow" id="pcst-url" placeholder="https://esempio.test/elenco-giochi/">
+          <select class="field" id="pcst-kind"><option value="repack">📦 Repack</option><option value="direct">⬇ Download diretto</option></select>
+          <button class="btn" id="pcst-add" type="button">Aggiungi</button>
+        </div>
+        <div class="row end"><span class="muted small grow" id="pcst-info"></span>
+          <button class="btn primary" id="pcst-refresh" type="button">↻ Leggi gli elenchi</button></div>
+        <pre class="log" id="pcst-log"></pre>
+        <p class="muted small">Scarica solo ciò che hai il diritto di scaricare (giochi che possiedi dove la copia di backup è
+          consentita, freeware, demo): il download di giochi protetti senza licenza è illegale.</p>
         <h4>🏆 RetroAchievements</h4>
         <p class="muted small">Obiettivi e progresso dei giochi retro nella scheda di ogni gioco. La <i>Web API key</i> è nel tuo profilo su
           <a href="#" data-open="https://retroachievements.org/settings">retroachievements.org › Impostazioni</a>.</p>
@@ -386,6 +409,10 @@
       <textarea id="cat-urls" class="field" rows="4" style="width:100%" placeholder="https://..."></textarea>
       <div id="cat-pages" class="small"></div>
       <pre class="log" id="cat-log"></pre>
+      <div class="row spread" style="gap:8px;align-items:center">
+        <button class="btn" id="cat-meta-btn" type="button" title="Legge copertina e descrizione di ogni gioco dalla pagina dello store (e dal database offline GameTDB)">🖼 Copertine e descrizioni</button>
+        <span class="muted small grow" id="cat-meta-info"></span>
+      </div>
       <p class="muted small">Scarica solo ciò che hai il diritto di scaricare (giochi che possiedi dove la copia di backup è
         consentita, homebrew, titoli liberi): il download di giochi protetti senza licenza è illegale.</p>
       <div class="row end"><button class="btn" id="cat-refresh" type="button">↻ Rileggi</button>

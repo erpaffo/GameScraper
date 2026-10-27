@@ -222,6 +222,92 @@ class StoreMetaJob(StoreJob):
 
 
 @dataclass
+class NetMetaJob(StoreJob):
+    """Copertine e descrizioni delle voci degli store online (GameTDB offline + pagine dei siti)."""
+    limit: int = 0  # 0 = tutte le voci
+    search_ziperto: bool = True
+    stop: bool = False
+
+    def run(self, cfg, after_build):
+        from ..library.build import build
+        from .. import gametdb, storemeta
+        self.status, self.started = "running", time.time()
+        self.summary = {}  # aggiornato in corso d'opera: l'interfaccia mostra l'avanzamento
+        cache = None
+        try:
+            cache = Cache(cfg.cache)
+            self.phase = "Database GameTDB"
+            tdb = gametdb.GameTDB(cfg.cache, log=self.say)
+            if not tdb.ensure():
+                self.say("GameTDB non disponibile: uso solo le pagine dei siti")
+                tdb = None
+            self.phase = "Copertine e descrizioni"
+            asyncio.run(storemeta.fill(
+                cfg, cache, tdb, log=self.say, limit=self.limit, stats=self.summary,
+                cancelled=lambda: self.stop, search_site="ziperto.com" if self.search_ziperto else None))
+            cache.close()
+            cache = None
+            self.phase = "Aggiornamento libreria"
+            after_build(build(cfg, log=self.say))
+            self.status = "done"
+            done = self.summary.get("complete", 0)
+            total = self.summary.get("games", 0)
+            self.phase = f"Completato: {done:,} giochi con copertina e descrizione su {total:,}"
+            if self.summary.get("stopped"):
+                self.phase += " (interrotto)"
+        except Exception as e:
+            self.status, self.phase = "error", f"Errore: {type(e).__name__}: {e}"
+            self.say(self.phase)
+        finally:
+            if cache:
+                cache.close()
+            self.finished = time.time()
+
+
+@dataclass
+class PcStoreJob(StoreJob):
+    """Lettura degli elenchi degli store PC non ufficiali (repack / download diretto)."""
+
+    def run(self, cfg, after_build):
+        from .. import catalog, platforms as P
+        from ..library.build import build
+        from ..net import make_client
+        self.status, self.started = "running", time.time()
+        self.summary = {"stores": len(getattr(cfg, "pc_stores", []) or []), "games": 0}
+        cache = None
+        try:
+            cache = Cache(cfg.cache)
+            self.phase = "Lettura degli elenchi"
+            plat = P.PLATFORMS["windows"]
+            stores = list(getattr(cfg, "pc_stores", []) or [])
+
+            async def go():
+                async with make_client() as client:
+                    for it in stores:
+                        try:
+                            entries = await catalog.fetch(cfg, cache, client, plat, it["url"], log=self.say)
+                            self.summary["games"] += len(entries)
+                            self.summary["done"] = self.summary.get("done", 0) + 1
+                        except Exception as e:  # un sito giu' non ferma gli altri
+                            self.say(f"{it['url']}: {type(e).__name__}: {e}")
+
+            asyncio.run(go())
+            cache.close()
+            cache = None
+            self.phase = "Aggiornamento libreria"
+            after_build(build(cfg, log=self.say))
+            self.status = "done"
+            self.phase = f"Completato: {self.summary['games']:,} giochi da {len(stores)} elenchi"
+        except Exception as e:
+            self.status, self.phase = "error", f"Errore: {type(e).__name__}: {e}"
+            self.say(self.phase)
+        finally:
+            if cache:
+                cache.close()
+            self.finished = time.time()
+
+
+@dataclass
 class HltbJob(StoreJob):
     """Durate dei giochi da HowLongToBeat, poi ricostruzione della libreria."""
     only_missing: bool = True
