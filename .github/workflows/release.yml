@@ -151,12 +151,25 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v8
         with:
           path: release
           merge-multiple: true
+          # gli artifact sono gia' i file finali (archive: false): senza questo gli .zip portatili
+          # verrebbero estratti in cartelle e mancherebbero nella release
+          skip-decompress: true
+
+      # testo della release: la sezione "## <versione>" di changelog.md (fino alla sezione seguente)
+      - name: Novità della versione
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          awk -v v="$VER" '/^## /{p = ($2 == v); next} p' changelog.md > notes.md
+          [ -s notes.md ] || echo "Nessuna voce per la versione $VER in changelog.md." > notes.md
+          cat notes.md
 
       - uses: softprops/action-gh-release@v2
         with:
           files: release/*
-          generate_release_notes: true
+          body_path: notes.md
