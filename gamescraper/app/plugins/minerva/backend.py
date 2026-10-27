@@ -29,14 +29,24 @@ def subpages(index: str) -> list[str]:
     return out
 
 
+# nomi di set non riconosciuti da platforms.detect (Redump "Panasonic - 3DO...", cartelle Internet Archive)
+_HINTS = (("3do", "3do"), ("jagcd", "atarijaguar"), ("pcecd", "pcenginecd"), ("ngcd", "neogeocd"),
+          ("total_dos", "dos"), ("doom", "dos"), ("ibm - pc", "dos"))
+
+
 def platform_of(url: str, page: str) -> str | None:
     """Console di un link Minerva: dal nome del set nel percorso (dal piu' profondo), poi dalla pagina r-roms."""
     parts = [unquote(s) for s in url.split("/browse/", 1)[1].split("/") if s]
-    for name in (*reversed(parts), page.rstrip("/").rsplit("/", 1)[-1]):
+    for name in reversed(parts):
         p = P.detect(name)
         if p:
             return p.id
-    return None
+    low = " / ".join(parts).lower()
+    for key, pid in _HINTS:
+        if key in low and pid in P.PLATFORMS:
+            return pid
+    p = P.detect(page.rstrip("/").rsplit("/", 1)[-1])
+    return p.id if p else None
 
 
 def minerva_links(page_html: str) -> list[str]:
@@ -84,8 +94,14 @@ def register(gs):
             # aggiunge ai link gia' presenti (quelli inseriti a mano restano)
             cats = C.read_settings(cfg).get("catalogs", {})
             for pid, urls in found.items():
-                old = cats.get(pid, [])
-                cats[pid] = old + [u for u in urls if unquote(u) not in map(unquote, old)]
+                cur = cats.get(pid, [])
+                # forma estesa {"urls": [...], "type": ...}: si aggiornano solo gli URL, il resto resta
+                old = list(cur.get("urls") or []) if isinstance(cur, dict) else list(cur)
+                merged = old + [u for u in urls if unquote(u) not in map(unquote, old)]
+                if isinstance(cur, dict):
+                    cats[pid] = {**cur, "urls": merged}
+                else:
+                    cats[pid] = merged
             C.set_setting(cfg, "catalogs", cats)
             c = Cache(cfg.cache)
             try:

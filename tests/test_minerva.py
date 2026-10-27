@@ -43,6 +43,18 @@ def test_collect():
     print("ok  r-roms: solo cartelle Minerva, assegnate alla console giusta")
 
 
+def test_platform_hints():
+    pl = M.platform_of
+    b = "https://minerva-archive.org/browse/"
+    assert pl(b + "Redump/Panasonic%20-%203DO%20Interactive%20Multiplayer/", "./Retro/retro-games") == "3do"
+    assert pl(b + "Internet%20Archive/chadmaster/pcecd-chd-zstd-redump/pcecd-chd-zstd/", "./Retro/retro-games") == "pcenginecd"
+    assert pl(b + "Internet%20Archive/chadmaster/ngcd-chd-zstd-redump/ngcd-chd-zstd/", "./Retro/retro-games") == "neogeocd"
+    assert pl(b + "Internet%20Archive/chadmaster/jagcd-chd-zstd/jagcd-chd-zstd/", "./Retro/retro-games") == "atarijaguar"
+    assert pl(b + "Internet%20Archive/sketch_the_cow/Total_DOS_Collection_Release_16_March_2019/", "./PC/pc-games") == "dos"
+    print("ok  console non riconosciute dal nome del set")
+
+
 if __name__ == "__main__":
     test_collect()
+    test_platform_hints()
     print("TUTTI I TEST OK")

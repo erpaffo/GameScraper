@@ -3,7 +3,7 @@
 Le novità più recenti in alto. L'ultima release è la **0.2.2** (`release\GameScraper-0.2.2-windows-x64.zip`).
 
 
-## 0.3.0 (2026-10-27)
+## 0.3.1 (2026-10-27)
 ### Aggiunto
 - **Port PC** (nuova voce nella barra laterale): i giochi console ricompilati o ricostruiti per Windows (Zelda64Recomp,
   Ship of Harkinian, Banjo Recompiled…) dal catalogo di Quiver Launcher (~580 port, in cache 24 ore).
@@ -60,6 +60,7 @@ Le novità più recenti in alto. L'ultima release è la **0.2.2** (`release\Game
   i dati. Ora una partita, da qualunque dispositivo (PC, telefono, Moonlight), entra subito tra i recenti e «In corso»
   quando parte; l'app sul PC si accorge entro pochi secondi delle modifiche fatte altrove (partite, preferiti, stati)
   e mostra anche la barra «In esecuzione» dei giochi avviati dal telefono.
+- **Store Minerva: non per tutte le console venivano aggiunti i link.** L'importazione si fermava se una console aveva già gli store nella forma `{"urls": [...], "type": ...}` (le console seguenti restavano senza link); ora il tipo e le opzioni restano e gli URL si aggiungono. Riconosciute anche 3DO, PC Engine CD, Neo Geo CD, Jaguar CD e MS-DOS, prima scartate.
 
 ### Cambiato
 
