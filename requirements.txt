@@ -1,14 +1,14 @@
-httpx[http2]>=0.27
-rich>=13
-rapidfuzz>=3
-beautifulsoup4>=4.12  # store online type_a/type_b e «Link → Store»
+httpx[http2]>=0.28.1
+rich>=15.0.0
+rapidfuzz>=3.14.6
+beautifulsoup4>=4.15.0  # store online type_a/type_b e «Link → Store»
 # frontend
-fastapi>=0.110
-uvicorn[standard]>=0.29
-pillow>=10
-pywebview>=5
-psutil>=5
-pyyaml>=6          # salvataggi nel formato di Ludusavi (mapping.yaml) e manifest di Ludusavi
-howlongtobeatpy>=1.0
-qrcode>=7          # QR per abbinare il telefono
-cryptography>=42   # certificato HTTPS per l'app del telefono
+fastapi>=0.162.0
+uvicorn[standard]>=0.54.0
+pillow>=13.0.0
+pywebview>=6.2.1
+psutil>=7.2.2
+pyyaml>=6.0.3          # salvataggi nel formato di Ludusavi (mapping.yaml) e manifest di Ludusavi
+howlongtobeatpy>=1.0.24
+qrcode>=8.2          # QR per abbinare il telefono
+cryptography>=50.0.2   # certificato HTTPS per l'app del telefono
