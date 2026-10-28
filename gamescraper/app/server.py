@@ -1838,7 +1838,11 @@ def create_app(cfg) -> FastAPI:
             events.emit("library_built", stats)
             threading.Thread(target=_pregen_thumbs, daemon=True).start()
 
-        threading.Thread(target=j.run, args=(cfg, after), daemon=True).start()
+        def found(stats):  # file trovati: subito in libreria, senza attendere i metadati
+            lib.load()
+            events.emit("library_built", stats)
+
+        threading.Thread(target=j.run, args=(cfg, after, found), daemon=True).start()
         return j.state()
 
     @app.get("/api/scan")
@@ -2929,6 +2933,20 @@ def create_app(cfg) -> FastAPI:
     def api_duplicates(body: dict = Body(...)):
         C.save_settings(cfg, app={"skip_duplicates": bool(body.get("skip"))})
         return {"skip_duplicates": cfg.app.get("skip_duplicates", True)}
+
+    @app.post("/api/app/quit")
+    def api_quit():
+        """Chiude l'app dal menu File (solo dal PC: il telefono non ha accesso a questa rotta)."""
+        threading.Timer(0.5, os._exit, args=(0,)).start()
+        return {"ok": True}
+
+    @app.post("/api/cache/thumbs/clear")
+    def api_thumbs_clear():
+        """Elimina le miniature delle immagini: si rigenerano da sole quando servono. Gli originali non si toccano."""
+        import shutil
+        n = sum(1 for _ in thumbs_dir.rglob("*.webp")) if thumbs_dir.exists() else 0
+        shutil.rmtree(thumbs_dir, ignore_errors=True)
+        return {"removed": n}
 
     @app.post("/api/app/theme")
     def api_theme(body: dict = Body(...)):

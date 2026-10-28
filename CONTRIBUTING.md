@@ -49,7 +49,7 @@ Le estensioni stanno in `extensions/<id>/` e si installano dallo store dentro l'
 
 ```bash
 python tools/extensions.py index    # rigenera extensions/index.json (il test lo controlla)
-python tools/extensions.py link     # la collega alla tua cartella plugin per provarla
+python tools/extensions.py install  # la copia nella tua cartella plugin per provarla (da rifare dopo ogni modifica)
 ```
 
 ## Licenza dei contributi

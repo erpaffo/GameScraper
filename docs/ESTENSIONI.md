@@ -234,10 +234,11 @@ I repository hanno i fine riga fissati a LF (`.gitattributes`): lo sha256 nell'i
 `<cartella>` un repository pronto per ogni estensione di `extensions/` (file, `index.json`, README, licenza) e quello
 dello store, che punta a `<utente>/gamescraper-ext-<id>` al tag `v<versione>`.
 
-Per lo sviluppo, `python tools/extensions.py link [<cartella>]` collega le estensioni alla tua cartella `plugins/`
-(junction su Windows, symlink altrove): senza argomento quelle di `extensions/`, altrimenti quelle della cartella
-indicata (una cartella con i repository clonati, oppure una sola estensione). Così la tua copia dell'app le ha già
-installate e usa i sorgenti. La release, invece, contiene solo lo store.
+Per provare un'estensione nell'app, `python tools/extensions.py install [<cartella>]` la **copia** nella tua cartella
+`plugins/`: senza argomento quelle di `extensions/`, altrimenti quelle della cartella indicata (una cartella con i
+repository clonati, oppure una sola estensione). Dopo ogni modifica va rifatto, e riavviata l'app. Non si usano
+collegamenti (junction o symlink): l'app installata non attraversa quelli che puntano dentro OneDrive e
+non parte (WinError 448). La release contiene solo lo store.
 
 ### Estensioni disponibili
 

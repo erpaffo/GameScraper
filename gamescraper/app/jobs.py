@@ -93,8 +93,9 @@ class ScrapeJob:
                 "started": self.started, "finished": self.finished, "platforms": self.platforms, "refresh": self.refresh,
                 "retry_missing": self.retry_missing, "keys": self.keys, "title": self.title}
 
-    def run(self, cfg, after_build):
-        """Da eseguire in un thread. `after_build(stats)` viene chiamato a libreria ricostruita."""
+    def run(self, cfg, after_build, after_scan=None):
+        """Da eseguire in un thread. `after_build(stats)` viene chiamato a libreria ricostruita.
+        `after_scan(stats)`, se dato, a scansione finita: i file trovati compaiono subito, i metadati arrivano dopo."""
         from ..library.build import build
         self.status, self.started = "running", time.time()
         cache = None
@@ -114,6 +115,10 @@ class ScrapeJob:
             self.say(f"{len(games):,} file in {len({g.platform.id for g in games})} console")
             if self._cancel:
                 raise asyncio.CancelledError
+            if after_scan and not self.keys:
+                cache.commit()
+                self.phase = "Aggiornamento libreria"
+                after_scan(build(cfg, log=self.say))
 
             self.phase = "Scraping"
 

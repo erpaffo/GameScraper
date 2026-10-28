@@ -97,7 +97,10 @@ def list_themes(cfg) -> list[dict]:
             continue
         for d in sorted(base.iterdir()):
             mf = d / "theme.json"
-            if d.name in seen or not mf.exists():
+            try:
+                if d.name in seen or not mf.exists():
+                    continue
+            except OSError:  # cartella illeggibile (es. WinError 448): il tema si salta
                 continue
             try:
                 m = json.loads(mf.read_text(encoding="utf-8"))
@@ -141,37 +144,50 @@ def list_plugins(cfg, errors: dict | None = None) -> list[dict]:
     settings = C.read_settings(cfg).get("plugins", {})
     out, seen = [], set()
     for base in plugin_dirs(cfg):
-        if not base.exists():
+        try:
+            dirs = sorted(base.iterdir()) if base.exists() else []
+        except OSError:  # cartella dei plugin illeggibile: l'app parte lo stesso, senza estensioni
             continue
-        for d in sorted(base.iterdir()):
-            m = _manifest(d)
-            if m is None or d.name in seen or d.name.startswith("."):  # .<id>.tmp/.old: installazione dello store a meta'
+        for d in dirs:
+            if d.name.startswith(".") or d.name in seen:  # .<id>.tmp/.old: installazione dello store a meta'
                 continue
-            if d.name == STORE_ID and base != BUILTIN_PLUGINS:  # lo store e' sempre quello incluso nell'app
-                continue
-            seen.add(d.name)
-            out.append({
-                "id": d.name, "name": m.get("name", d.name), "version": str(m.get("version", "")),
-                "author": m.get("author", ""), "description": m.get("description", ""),
-                "enabled": (d.name not in disabled or d.name == STORE_ID) and int(m.get("api", 1)) <= API_VERSION,
-                "locked": d.name == STORE_ID,
-                "frontend": f"/plugins/{d.name}/frontend.js" if (d / "frontend.js").exists() else None,
-                "style": f"/plugins/{d.name}/style.css" if (d / "style.css").exists() else None,
-                "backend": str(d / "backend.py") if (d / "backend.py").exists() else None,
-                "settings": settings.get(d.name, {}), "error": (errors or {}).get(d.name),
-                "dir": str(d),
-            })
+            try:
+                m = _manifest(d)
+                if m is None or (d.name == STORE_ID and base != BUILTIN_PLUGINS):  # lo store e' sempre quello incluso nell'app
+                    continue
+                seen.add(d.name)
+                out.append({
+                    "id": d.name, "name": m.get("name", d.name), "version": str(m.get("version", "")),
+                    "author": m.get("author", ""), "description": m.get("description", ""),
+                    "enabled": (d.name not in disabled or d.name == STORE_ID) and int(m.get("api", 1)) <= API_VERSION,
+                    "locked": d.name == STORE_ID,
+                    "frontend": f"/plugins/{d.name}/frontend.js" if (d / "frontend.js").exists() else None,
+                    "style": f"/plugins/{d.name}/style.css" if (d / "style.css").exists() else None,
+                    "backend": str(d / "backend.py") if (d / "backend.py").exists() else None,
+                    "settings": settings.get(d.name, {}), "error": (errors or {}).get(d.name),
+                    "dir": str(d),
+                })
+            except OSError as e:
+                # es. WinError 448: collegamento (junction) non attendibile. Una cartella illeggibile non deve
+                # impedire l'avvio: l'estensione compare disattivata, con il motivo.
+                seen.add(d.name)
+                out.append({"id": d.name, "name": d.name, "version": "", "author": "", "description": "", "enabled": False,
+                            "locked": False, "frontend": None, "style": None, "backend": None, "settings": {},
+                            "error": f"Cartella illeggibile: {e}", "dir": str(d)})
     out.sort(key=lambda p: p["id"] != STORE_ID)  # lo store per primo: in Impostazioni e nella barra laterale
     return out
 
 
 def plugin_file(cfg, pid: str, rel: str) -> Path | None:
     for base in plugin_dirs(cfg):
-        root = (base / pid).resolve()
-        f = (root / rel).resolve()
-        if root.is_dir() and root in f.parents and f.is_file() and f.suffix in (".js", ".css", ".png", ".jpg",
-                                                                               ".svg", ".webp", ".json", ".woff2"):
-            return f
+        try:
+            root = (base / pid).resolve()
+            f = (root / rel).resolve()
+            if root.is_dir() and root in f.parents and f.is_file() and f.suffix in (".js", ".css", ".png", ".jpg",
+                                                                                   ".svg", ".webp", ".json", ".woff2"):
+                return f
+        except OSError:  # percorso non attraversabile: come se non ci fosse
+            continue
     return None
 
 

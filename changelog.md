@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.8.1 (2026-10-28)
+### Corretto
+
+- Se la cartella di un'estensione non è leggibile (per esempio un collegamento non attendibile di Windows, errore 448) l'app parte lo stesso: l'estensione compare disattivata, con il motivo, invece di bloccare l'avvio
+
+### Aggiunto
+
+- Barra dei menu in alto (File, Strumenti, Visualizza, Impostazioni) con le azioni e le impostazioni più usate
+- Pulsante «Cerca nuovi giochi» in ogni console e nei giochi PC (anche dal tasto destro sulla console): i file compaiono subito, i metadati arrivano dopo
+- Console preferite: tasto destro sulla console nella barra laterale; le preferite stanno in cima, poi le altre in ordine alfabetico
+- Tasto destro su un gioco: «Applicazioni abbinate…» e, per i giochi aggiunti a mano, «Rimuovi dalla libreria»
+
+### Cambiato
+
+- Immagini del gioco: la ricerca passa da SteamGridDB a Google Immagini, con il titolo già scritto
+
+### Migliorato
+
+- Giochi PC avviati da un launcher (Steam, Battle.net…): la finestra del launcher viene ridotta a icona se l'ha aperto il gioco
+
 ## 0.8.0 (2026-10-28)
 ### Aggiunto
 

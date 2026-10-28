@@ -329,6 +329,34 @@ function counts() {
   return c;
 }
 
+/* console preferite: salvate in questo browser/app (come zoom e ordinamento) */
+const favPlat = (id) => (store.get("favPlats", []).includes(id) ? 1 : 0);
+function toggleFavPlat(id) {
+  const cur = store.get("favPlats", []);
+  store.set("favPlats", cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
+  renderSidebar();
+}
+
+function openPlatCtx(e, id) {
+  closeCtx();
+  const m = document.createElement("div");
+  m.id = "ctxmenu";
+  m.innerHTML = `<div class="ci">${favPlat(id) ? "★ Togli dalle console preferite" : "☆ Aggiungi alle console preferite"}</div>`
+    + `<div class="ci" data-scan>⟳ Cerca nuovi giochi</div>`;
+  document.body.appendChild(m);
+  m.style.left = Math.max(6, Math.min(e.clientX, innerWidth - m.offsetWidth - 8)) + "px";
+  m.style.top = Math.max(6, Math.min(e.clientY, innerHeight - m.offsetHeight - 8)) + "px";
+  m.onclick = async (ev) => {
+    const it = ev.target.closest(".ci");
+    if (!it) return;
+    closeCtx();
+    if (!("scan" in it.dataset)) return toggleFavPlat(id);
+    try { await api("/api/scan", { body: { platforms: [id], mode: "new" } }); } catch (err) { return toast(err.message, true); }
+    toast("Cerco i giochi nuovi: compaiono subito, i dati arrivano dopo");
+    SET.lastStatus = "running"; setScanRunning(true); pollScan();
+  };
+}
+
 function renderSidebar() {
   const c = counts();
   $("#cnt-all").textContent = c.all.toLocaleString("it");
@@ -348,10 +376,10 @@ function renderSidebar() {
   $("#cnt-missing").textContent = c.missing || "";
   $("#cnt-hidden").textContent = c.hidden || "";
   $("#cnt-dups").textContent = S.games.filter((g) => g.store !== "online" && g.id !== g.grp.primary).length || "";
-  const plats = [...S.plats.values()].filter((p) => (c.plat.get(p.id) || S.catalogs[p.id]?.length) && p.id !== "windows").sort((a, b) => collator.compare(a.name, b.name));
+  const plats = [...S.plats.values()].filter((p) => (c.plat.get(p.id) || S.catalogs[p.id]?.length) && p.id !== "windows").sort((a, b) => (favPlat(b.id) - favPlat(a.id)) || collator.compare(a.name, b.name)); // prima le preferite, poi A–Z
   $("#platform-list").innerHTML = plats.map((p) =>
     `<a class="nav-item" data-view="platform" data-id="${esc(p.id)}"><span class="ico">${platIcon(p.id)}</span>`
-    + `<span class="lbl">${esc(p.name)}</span><span class="cnt">${c.plat.get(p.id)?.toLocaleString("it") || ""}</span></a>`).join("");
+    + `<span class="lbl">${favPlat(p.id) ? "★ " : ""}${esc(p.name)}</span><span class="cnt">${c.plat.get(p.id)?.toLocaleString("it") || ""}</span></a>`).join("");
   S.collCounts = c.coll;
   // PC: tutti + uno per store (installati / posseduti)
   const st = c.store;
@@ -530,10 +558,13 @@ function updateHeader() {
         + `${S.skipDup ? "✓ Esclusi dallo scraping" : "✗ Inclusi nello scraping"} (clic per cambiare)</button>`
     : S.view.type === "smart"
       ? `<button class="icon-btn" id="smart-edit" title="Modifica le regole">✎ Regole</button>`
+    : S.view.type === "store"
+      ? `<button class="icon-btn" id="plat-scan" title="Rilegge ${S.view.id === "all" ? "gli store PC" : "questo store"} e i giochi aggiunti a mano: i giochi nuovi compaiono subito">⟳ Cerca nuovi giochi</button>`
     : S.view.type === "shop"
       ? `<button class="btn smeta-btn" id="smeta-open" title="Cerca descrizioni, generi, giocatori e valutazioni dei giochi degli store SOLO nei database offline (LaunchBox, TheGamesDB): nessuna richiesta online">📚 Scraping metadati store <span class="pill">offline</span></button>`
     : S.view.type === "platform" && S.view.id !== "windows"
-      ? `<button class="icon-btn" id="top-open" title="I 100 migliori giochi di questa console, posseduti e scaricabili">🏆 Top 100</button>`
+      ? `<button class="icon-btn" id="plat-scan" title="Cerca nuovi giochi nella cartella di questa console: compaiono subito, i dati arrivano dopo">⟳ Cerca nuovi giochi</button>`
+        + `<button class="icon-btn" id="top-open" title="I 100 migliori giochi di questa console, posseduti e scaricabili">🏆 Top 100</button>`
         + `<button class="icon-btn" id="cat-open" title="Collega pagine web con i giochi di questa console">`
         + ((S.catalogs[S.view.id] || []).map((u) => `<img class="sico" src="/icons/site?url=${encodeURIComponent(u)}" alt="">`).join("") || "🌐")
         + ` Store online${(S.catalogs[S.view.id] || []).length ? ` (${S.catalogs[S.view.id].length})` : ""}</button>` : "";
@@ -1091,6 +1122,7 @@ function openCtx(e, g) {
   rows.push({ l: "Dettagli", f: () => openDetail(g.id) });
   if (!g.store) rows.push({ l: "📂 Mostra nella cartella", f: () => api(`/api/game/${g.id}/open-folder`, { body: {} }) });
   rows.push({ l: "🖼 Cerca immagini…", f: () => openMediaPick(g) });
+  if (g.store !== "online") rows.push({ l: "🔗 Applicazioni abbinate…", f: () => openProfile(g) });
   if (here) rows.push("-", { l: `✖ Rimuovi da «${here.l}»`, f: here.f, hl: 1 });
   rows.push("-", { l: grp.favorite ? "★ Togli dai preferiti" : "☆ Aggiungi ai preferiti", f: () => setGrp(g, "favorite", !grp.favorite) });
   rows.push({ l: "＋ Aggiungi a una collezione…", f: () => pickCollection(pt, g.id, grp.colls.map((i) => S.colls[i]?.slug)) });
@@ -1099,6 +1131,7 @@ function openCtx(e, g) {
   const others = rem.filter((r) => r !== here);
   if (others.length) rows.push({ h: "Rimuovi da" }, ...others.map((r) => ({ l: `✖ ${r.l}`, f: r.f })));
   rows.push("-", { l: grp.hidden ? "Mostra di nuovo" : "Nascondi dalla libreria", f: () => setGrp(g, "hidden", !grp.hidden) });
+  if (g.store === "manual") rows.push({ l: "🗑 Rimuovi dalla libreria", f: () => removeManual(g) });
 
   const m = document.createElement("div");
   m.id = "ctxmenu";
@@ -1115,37 +1148,29 @@ function openCtx(e, g) {
   };
 }
 
-/* ---- immagine scelta a mano: candidati da SteamGridDB (estensione) oppure un indirizzo incollato */
+/** Toglie un gioco aggiunto a mano dalla libreria: i file sul disco non vengono toccati. */
+async function removeManual(g) {
+  if (!confirm(`Rimuovere «${g.title}» dalla libreria? Il gioco sul disco non viene toccato.`)) return;
+  await api(`/api/manual/${encodeURIComponent(g.key)}`, { method: "DELETE" });
+  if (S.detail?.id === g.id) closeDetail();
+  await reload(true);
+  toast("Rimosso dalla libreria");
+}
+
+/* ---- immagine scelta a mano: ricerca su Google Immagini (titolo gia' scritto) e indirizzo incollato */
 let MD = null;
+function googleImages() {
+  const q = $("#md-q").value.trim() || MD?.title || "";
+  $("#md-google").href = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(q)}`;
+}
+
 function openMediaPick(g) {
   MD = g;
   $("#md-game").textContent = `— ${g.title}`;
+  $("#md-q").value = g.title;
   $("#md-url").value = "";
+  googleImages();
   $("#media-dlg").showModal();
-  searchMedia();
-}
-
-async function searchMedia() {
-  const g = MD;
-  if (!g) return;
-  const kind = $("#md-kind").value;
-  const grid = $("#md-grid");
-  grid.innerHTML = `<p class="muted small">Cerco…</p>`;
-  try {
-    const d = await api(`/plugin-api/steamgriddb/cerca?q=${encodeURIComponent(g.title)}&kind=${encodeURIComponent(kind)}`);
-    const items = d.items || [];
-    grid._items = items;
-    grid.innerHTML = items.length
-      ? items.map((it, i) => `<button type="button" data-md="${i}" title="${esc([it.w, it.h].filter(Boolean).join("×"))}"
-          style="padding:0;border:0;background:none;cursor:pointer"><img src="${esc(it.thumb || it.url)}" alt="" loading="lazy"
-          style="width:100%;border-radius:8px;display:block"></button>`).join("")
-      : `<p class="muted small">${kind === "screenshot"
-        ? "SteamGridDB non ha schermate: incolla qui sotto l'indirizzo di un'immagine."
-        : "Nessun candidato trovato."}</p>`;
-  } catch (e) {
-    grid._items = [];
-    grid.innerHTML = `<p class="muted small">${esc(e.message)}</p>`;
-  }
 }
 
 async function useMedia(url) {
@@ -3213,6 +3238,8 @@ async function pollScan() {
   try { js = await api("/api/scan"); } catch { return; }
   setScanRunning(js.status === "running");
   if ($("#settings").open && SET.tab === "scan") renderScanJob(js);
+  // scansione finita: i file trovati compaiono subito, i metadati arrivano dopo senza bloccare
+  if (js.status === "running" && js.phase === "Scraping" && SET.shownFor !== js.started) { SET.shownFor = js.started; reload(true); }
   if (js.status === "running") scanTimer = setTimeout(pollScan, 1000);
   else if (SET.lastStatus === "running") { // appena terminato
     if (js.status === "done") {
@@ -3458,6 +3485,12 @@ function bind() {
   GS.on("uiChanged", () => { if (S.games.length) { renderSidebar(); } });
   layer.addEventListener("click", (e) => { const t = e.target.closest(".tile"); if (t) openDetail(+t.dataset.id); });
   layer.addEventListener("dblclick", (e) => { const t = e.target.closest(".tile"); if (t) play(+t.dataset.id); });
+  $("#platform-list").addEventListener("contextmenu", (e) => {
+    const a = e.target.closest("[data-view=platform]");
+    if (!a) return;
+    e.preventDefault();
+    openPlatCtx(e, a.dataset.id);
+  });
   layer.addEventListener("contextmenu", (e) => {
     const t = e.target.closest(".tile");
     const g = t && S.byId.get(+t.dataset.id);
@@ -3511,6 +3544,20 @@ function bind() {
   };
   $("#view-actions").addEventListener("click", async (e) => {
     if (e.target.id === "cat-open") { openCatalog(S.view.id); return; }
+    if (e.target.id === "plat-scan") {
+      try {
+        if (S.view.type === "store") {
+          await api("/api/stores/refresh", { body: { only: S.view.id === "all" ? null : [S.view.id] } });
+          toast("Cerco i giochi nuovi…");
+          pollStores(true);
+        } else {
+          await api("/api/scan", { body: { platforms: [S.view.id], mode: "new" } });
+          toast("Cerco i giochi nuovi: compaiono subito, i dati arrivano dopo");
+          SET.lastStatus = "running"; setScanRunning(true); pollScan();
+        }
+      } catch (err) { toast(err.message, true); }
+      return;
+    }
     if (e.target.id === "top-open") { setView({ type: "top", id: S.view.id }); return; }
     if (e.target.closest("#smart-edit")) { openSmart(S.view.id); return; }
     if (e.target.closest("#smeta-open")) { $("#smeta").showModal(); pollStoreMeta(); return; }
@@ -3535,14 +3582,14 @@ function bind() {
   });
 
   $("#detail-close").onclick = closeDetail;
-  $("#md-search").onclick = searchMedia;
-  $("#md-kind").onchange = searchMedia;
+  $("#md-q").oninput = googleImages;
+  $("#md-q").onkeydown = (e) => { if (e.key === "Enter") $("#md-google").click(); };
   $("#md-use").onclick = () => useMedia($("#md-url").value.trim());
-  $("#md-grid").onclick = (e) => {
-    const b = e.target.closest("[data-md]");
-    if (!b) return;
-    const it = ($("#md-grid")._items || [])[+b.dataset.md];
-    if (it) useMedia(it.url);
+  $("#md-paste").onclick = async () => {
+    let url = "";
+    try { url = (await navigator.clipboard.readText() || "").trim(); } catch { /* permesso negato: si incolla a mano */ }
+    if (url) $("#md-url").value = url;
+    useMedia(url || $("#md-url").value.trim());
   };
   // la nota si salva quando si esce dal campo (change), senza ridisegnare la scheda
   $("#detail").addEventListener("change", async (e) => {
@@ -3565,10 +3612,7 @@ function bind() {
     else if (t.dataset.port) { closeDetail(); PORTS_F.open = t.dataset.port; setView({ type: "ports" }); }
     else if (t.id === "d-page") api(`/api/game/${d.id}/store-page`, { body: {} }).catch((err) => toast(err.message, true));
     else if (t.id === "d-manual-del") {
-      if (!confirm(`Rimuovere «${d.title}» dalla libreria? Il gioco sul disco non viene toccato.`)) return;
-      try { await api(`/api/manual/${encodeURIComponent(d.key)}`, { method: "DELETE" }); } catch (err) { return toast(err.message, true); }
-      closeDetail();
-      pollStores(true);
+      try { await removeManual(d); } catch (err) { toast(err.message, true); }
     } else if (t.dataset.ga) {
       const a = GS.ui.gameActions.find((x) => x.id === t.dataset.ga);
       try { await a.run(d, GS); } catch (err) { toast(err.message, true); }

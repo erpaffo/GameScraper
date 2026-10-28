@@ -390,6 +390,34 @@ def close_launcher(name: str):
             pass
 
 
+def hide_launcher_windows(name: str, seconds: float = 40):
+    """Riduce a icona le finestre del launcher (Steam, Battle.net...) comparse per avviare il gioco, cosi' non
+    coprono il gioco: il launcher resta attivo, in sottofondo. Solo Windows; non tocca un launcher gia' aperto."""
+    if sys.platform != "win32":
+        return
+    import ctypes
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    end = time.time() + seconds
+    while time.time() < end:
+        try:
+            pids = {p.pid for p in _procs_named(name)}
+        except Exception:  # funzione solo estetica: un errore non deve mai disturbare l'avvio
+            return
+
+        def visit(hwnd, _):
+            pid = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if pid.value in pids and user32.IsWindowVisible(hwnd) and not user32.IsIconic(hwnd):
+                user32.ShowWindow(hwnd, 7)  # SW_SHOWMINNOACTIVE: a icona, senza rubare il fuoco al gioco
+            return True
+
+        if pids:
+            user32.EnumWindows(proc(visit), 0)
+        time.sleep(0.5)
+
+
 class Launcher:
     def __init__(self, cfg, userdata, on_event=None, shots=None, profile_of=None, prelaunch=None):
         self.cfg = cfg
@@ -597,6 +625,9 @@ class Launcher:
     def _run_pc(self, key: str, launch: dict, install_dir: str, store_id: str = ""):
         launcher = STORE_LAUNCHERS.get(store_id) if (self.cfg.app.get("launch") or {}).get("close_launcher") else None
         launcher_was_open = bool(launcher and _procs_named(launcher))
+        # launcher dello store aperto dal gioco: finestra ridotta a icona (disattivabile: launch.hide_launcher = false)
+        lname = STORE_LAUNCHERS.get(store_id)
+        quiet = bool(lname and (self.cfg.app.get("launch") or {}).get("hide_launcher", True) and not _procs_named(lname))
         self._scripts(key, "before")
         comp = self._companion(key)
         self.on_event("game_launching", dict(self.state))  # sincrono: la copia dei salvataggi finisce prima del gioco
@@ -610,6 +641,8 @@ class Launcher:
                 if not Path(target).exists() and Path(target).name.lower() not in self.LAUNCHER_EXES:
                     raise LaunchError(f"Eseguibile non trovato: {target}")
                 proc = subprocess.Popen([target, *args], cwd=launch.get("cwd") or str(Path(target).parent))
+            if quiet:
+                threading.Thread(target=hide_launcher_windows, args=(lname,), daemon=True).start()
             self._set(status="running", message=target)
             self._proc = proc
             self._track = launch.get("track_dir") or install_dir

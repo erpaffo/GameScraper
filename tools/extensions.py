@@ -2,7 +2,9 @@
 
   python tools/extensions.py index                 # rigenera extensions/index.json (sha256 di ogni file)
   python tools/extensions.py index <cartella>      # index.json del repository di UNA estensione (base "./")
-  python tools/extensions.py link [<cartella>]     # collega le estensioni nella cartella plugin del tuo config
+  python tools/extensions.py install [<cartella>]  # copia le estensioni nella cartella plugin del tuo config (da rifare dopo
+                                                   # ogni modifica; "link" e' un alias). Niente junction: l'app installata
+                                                   # non le attraversa se puntano dentro OneDrive (WinError 448)
   python tools/extensions.py export <cartella> [utente]
         # un repository per estensione (gamescraper-ext-<id>) e quello dello store (gamescraper-extensions),
         # pronti per git init / push; lo store punta a utente/gamescraper-ext-<id> al tag v<versione>
@@ -14,7 +16,6 @@ import hashlib
 import json
 import os
 import shutil
-import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -87,14 +88,9 @@ def cmd_index(folder: str | None = None):
     print(f"{INDEX.relative_to(ROOT)}: {len(data['extensions'])} estensioni")
 
 
-def _same(a: Path, b: Path) -> bool:
-    """Copia gia' installata identica ai sorgenti: si puo' sostituire con il collegamento senza perdere nulla."""
-    return all((b / f.name).is_file() and sha(f) == sha(b / f.name) for f in files_of(a)) \
-        and {f.name for f in files_of(b)} <= {f.name for f in files_of(a)}
-
-
-def cmd_link(folder: str | None = None):
-    """Collega le estensioni di `folder` (default extensions/): una cartella di estensioni, oppure una sola estensione."""
+def cmd_install(folder: str | None = None):
+    """Copia le estensioni di `folder` (default extensions/: una cartella di estensioni, oppure una sola) nella cartella
+    plugin del config, al posto di quello che c'era. Una vecchia junction/symlink viene tolta (solo il collegamento)."""
     sys.path.insert(0, str(ROOT))
     from gamescraper import config as C
     from gamescraper.app.extensions import user_dir
@@ -104,19 +100,14 @@ def cmd_link(folder: str | None = None):
     for d in dirs:
         ext_id = manifest(d).get("id") or d.name.removeprefix(PREFIX)
         dest = plugins / ext_id
-        if dest.is_symlink() or dest.is_junction():
-            print(f"{ext_id}: gia' collegata")
-            continue
-        if dest.exists():
-            if not _same(d, dest):
-                print(f"{ext_id}: {dest} esiste ed e' diversa dai sorgenti, lasciata com'e' (rimuovila per collegarla)")
-                continue
+        if dest.is_symlink() or (hasattr(dest, "is_junction") and dest.is_junction()):
+            os.rmdir(dest) if sys.platform == "win32" else dest.unlink()   # solo il collegamento, mai la cartella a cui punta
+        elif dest.exists():
             shutil.rmtree(dest)
-        if sys.platform == "win32":  # junction: non servono i permessi da amministratore come per i symlink
-            subprocess.run(["cmd", "/c", "mklink", "/J", str(dest), str(d)], check=True, capture_output=True)
-        else:
-            os.symlink(d, dest, target_is_directory=True)
-        print(f"{ext_id}: collegata -> {dest}")
+        dest.mkdir()
+        for f in files_of(d):
+            shutil.copy2(f, dest / f.name)
+        print(f"{ext_id}: copiata in {dest}")
 
 
 def ext_readme(e: dict, repo: str) -> str:
@@ -136,7 +127,7 @@ Se non è nello store ufficiale: **Store estensioni** › *Fonti delle estension
 ## Sviluppo
 
 1. Modifica i file e prova l'estensione collegandola alla tua cartella plugin:
-   `python <GameScraper>/tools/extensions.py link .`
+   `python <GameScraper>/tools/extensions.py install .` (copia i file: rifallo dopo ogni modifica)
 2. Alza `version` in `plugin.toml` e rigenera l'indice: `python <GameScraper>/tools/extensions.py index .`
 3. Commit, tag `v<versione>` e push. Nello store, la voce di questa estensione va portata al tag nuovo.
 """
@@ -195,7 +186,7 @@ def cmd_export(out: str, owner: str = "erpaffo"):
 
 if __name__ == "__main__":
     cmd, args = (sys.argv[1] if len(sys.argv) > 1 else ""), sys.argv[2:]
-    fn = {"index": cmd_index, "link": cmd_link, "export": cmd_export}.get(cmd)
+    fn = {"index": cmd_index, "install": cmd_install, "link": cmd_install, "export": cmd_export}.get(cmd)
     if not fn or (cmd == "export" and not args):
         sys.exit(__doc__)
     fn(*args)

@@ -123,6 +123,28 @@ def main():
         assert X.list_plugins(cfg)[0]["enabled"]
         print("ok  store sempre quello incluso e sempre attivo")
 
+        # cartella di un'estensione non attraversabile (WinError 448, junction non attendibile): l'app parte lo stesso,
+        # l'estensione compare disattivata con il motivo, le altre restano
+        cfg.app["disabled_plugins"] = []
+        (plugins / "buona").mkdir()
+        (plugins / "buona" / "plugin.toml").write_text('[plugin]\nname = "Buona"\n')
+        (plugins / "rotta").mkdir()
+        real = X._manifest
+
+        def broken(d):
+            if d.name == "rotta":
+                raise OSError(448, "Impossibile attraversare il percorso perche' contiene un punto di montaggio non attendibile")
+            return real(d)
+        X._manifest = broken
+        try:
+            by = {p["id"]: p for p in X.list_plugins(cfg)}
+            assert by["buona"]["enabled"] and not by["buona"]["error"]
+            assert not by["rotta"]["enabled"] and "illeggibile" in by["rotta"]["error"] and by["rotta"]["backend"] is None
+            assert X.load_backends(None, cfg, X.Events(), log=lambda m: None) is not None     # l'avvio non si ferma
+        finally:
+            X._manifest = real
+        print("ok  cartella plugin illeggibile: l'app parte, l'estensione e' disattivata con il motivo")
+
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_fonti(Path(t))
 

@@ -173,12 +173,18 @@
           <option value="cover">Copertina</option>
           <option value="fanart">Sfondo</option>
           <option value="screenshot">Schermata</option></select></label>
-        <button class="btn" id="md-search" type="button">🖼 Cerca</button>
       </div>
-      <p class="muted small" id="md-hint">I candidati arrivano da SteamGridDB (serve la chiave in Impostazioni › SteamGridDB).</p>
-      <div id="md-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;max-height:44vh;overflow:auto"></div>
-      <label class="lbl-field">Oppure incolla l'indirizzo di un'immagine
+      <label class="lbl-field">Ricerca
+        <span class="row tight"><input id="md-q" class="field grow" autocomplete="off">
+        <a class="btn primary" id="md-google" target="_blank" rel="noopener">🔎 Cerca su Google Immagini</a></span></label>
+      <ol class="muted small" style="margin:8px 0 4px 18px;padding:0">
+        <li>Si apre Google Immagini con il titolo del gioco già scritto.</li>
+        <li>Tasto destro sull'immagine scelta › «Copia indirizzo immagine».</li>
+        <li>Torna qui e premi «Incolla e usa».</li>
+      </ol>
+      <label class="lbl-field">Indirizzo dell'immagine
         <span class="row tight"><input id="md-url" class="field grow" placeholder="https://…jpg">
+        <button class="btn" id="md-paste" type="button" title="Incolla dagli appunti e salva">📋 Incolla e usa</button>
         <button class="btn primary" id="md-use" type="button">Usa</button></span></label>
     </div>
   </dialog>
@@ -678,5 +684,6 @@
 <script src="/static/reco.js"></script>
 <script src="/static/setup.js"></script>
 <script src="/static/app.js?v={{v}}"></script>
+<script src="/static/menubar.js?v={{v}}"></script>
 </body>
 </html>

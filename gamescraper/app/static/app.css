@@ -660,3 +660,14 @@ kbd { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18);
 .srf-meta { white-space: nowrap; }
 .srf-last { margin: -2px 0 5px 22px; opacity: .75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .srf-rowlog { margin: 0 0 6px 22px; max-height: 140px; overflow: auto; font-size: 11px; }
+
+/* barra dei menu in alto */
+#menubar { display: flex; gap: 2px; padding: 2px 10px; border-bottom: 1px solid var(--line); background: var(--bg-2); font-size: 13px; }
+#menubar .mb-top { background: none; border: 0; color: var(--text); padding: 4px 10px; border-radius: 6px; cursor: pointer; font: inherit; }
+#menubar .mb-top:hover, #menubar .mb-top.on { background: var(--bg-3); }
+#mb-drop { position: fixed; z-index: 80; min-width: 240px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.4); font-size: 13px; }
+#mb-drop .ci { display: flex; gap: 6px; padding: 6px 10px; border-radius: 5px; cursor: pointer; }
+#mb-drop .ci:hover { background: var(--bg-3); }
+#mb-drop .mk { width: 14px; color: var(--accent); }
+#mb-drop .ch { padding: 6px 10px 2px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+#mb-drop hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
