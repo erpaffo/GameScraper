@@ -275,9 +275,15 @@ def _protected(cfg) -> list[Path]:
     return [p.resolve() for p in out]
 
 
+def _expand(raw: str) -> Path:
+    """%VAR% (stile Windows) e $VAR su ogni sistema: fuori da Windows expandvars conosce solo $VAR."""
+    s = re.sub(r"%([^%]+)%", lambda m: os.environ.get(m.group(1), m.group(0)), str(raw).strip().strip('"'))
+    return Path(os.path.expandvars(s)).expanduser()
+
+
 def check_path(cfg, raw: str) -> Path:
     """Percorso manuale valido (le variabili come %APPDATA% si espandono), altrimenti ValueError con il motivo."""
-    p = Path(os.path.expandvars(str(raw).strip().strip('"'))).expanduser()
+    p = _expand(raw)
     if not p.is_absolute():
         raise ValueError(f"Serve un percorso completo: {raw}")
     if not p.exists():
@@ -298,7 +304,7 @@ def resolved_manual(cfg, key: str) -> list[Path]:
     """Percorsi manuali che esistono su questo PC (gli altri si tengono, magari tornano: disco esterno, altro PC)."""
     out = []
     for raw in manual_paths(cfg, key):
-        p = Path(os.path.expandvars(raw))
+        p = _expand(raw)
         if p.exists():
             out.append(p)
     return out

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.3 (2026-10-28)
+### Corretto
+
+- Salvataggi: i percorsi manuali con %VARIABILE% funzionano anche su Linux e macOS
+
 ## 0.6.2 (2026-10-28)
 ### Aggiunto
 
