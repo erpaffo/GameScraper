@@ -1,0 +1,21 @@
+name: 💡 Proponi una funzione
+description: Un'idea per migliorare GameScraper
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Cosa vorresti fare
+      description: Il bisogno, prima della soluzione. Esempio «vorrei sapere quanto ho giocato a ogni console».
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Come te lo immagini
+  - type: dropdown
+    id: where
+    attributes:
+      label: Potrebbe essere un'estensione?
+      description: Molte funzioni possono vivere come estensione installabile dallo store, senza appesantire l'app.
+      options: [Non so, Sì, No, deve stare nell'app]

@@ -1,0 +1,52 @@
+# Test a ogni push su main e a ogni pull request: un errore si vede subito, non solo al tag della release.
+# Stessi passi di preparazione del job "build" di release.yml.
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: windows, os: windows-latest }
+          - { name: macos, os: macos-latest }
+          - { name: linux, os: ubuntu-22.04 }
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Dipendenze di sistema (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libnss3 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1
+
+      - name: Dipendenze Python
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          if [ "$RUNNER_OS" = "Linux" ]; then pip install "pywebview[qt]"; fi
+
+      - name: Test
+        env:
+          PYTHONUTF8: "1"
+          PYTHONUNBUFFERED: "1"
+        run: python packaging/run_tests.py

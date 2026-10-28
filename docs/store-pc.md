@@ -4,6 +4,8 @@ La sezione **PC** della barra laterale raccoglie i giochi degli store ufficiali 
 sia i giochi **installati** sia quelli **posseduti ma non installati**: questi compaiono in grigio con il pulsante
 **⬇ Installa**, che apre il client dello store direttamente sulla pagina del gioco.
 
+![I giochi PC degli store: installati e posseduti, con l'etichetta dello store e il pulsante Installa](images/store-pc.jpg)
+
 ## Store supportati
 
 | Store | Installati | Non installati | Cosa serve |

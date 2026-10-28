@@ -22,6 +22,7 @@ TESTS = [
     "test_policy.py",
     "test_discover.py",
     "test_frontend.py",
+    "test_apiv1.py",
     "test_pipeline.py",
     "test_stores.py",
     "test_launcher.py",

@@ -20,6 +20,8 @@ La colonna **Stato** dice cosa manca (emulatore non trovato, core assente…). L
 `config.toml` non viene mai riscritto. In `config.toml` si possono indicare gli stessi percorsi in `[emulators]` e
 sovrascrivere il comando di una console in `[launch.<console>]` (vedi [Riferimento](riferimento.md)).
 
+![Impostazioni › Emulatori: un percorso per programma e la tabella emulatore per console](images/impostazioni-emulatori.jpg)
+
 ### Profilo di avvio di un singolo gioco
 
 Nel dettaglio di un gioco, **⚙ Profilo di avvio** cambia il modo di avviare **solo quel gioco** (tutte le sue
@@ -94,6 +96,8 @@ con titolo, console e tempo di sessione. Serve solo l'**ID applicazione** — gr
 
 Usa il **canale locale** di Discord (`named pipe`): nessun dato esce dal PC, nessun server, nessuna chiave. Le immagini
 non si possono mostrare, perché Discord accetta solo asset caricati sull'applicazione e non indirizzi web.
+
+![Impostazioni › Integrazioni: avvisi di Windows e presenza su Discord](images/impostazioni-integrazioni.jpg)
 
 ## Salvataggi
 

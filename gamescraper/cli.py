@@ -207,30 +207,28 @@ def _local_server(cfg):
 
 
 def cmd_play(args):
-    """Avvia un gioco e resta aperto finche' si gioca (per Sunshine/Moonlight, scorciatoie, script)."""
-    import httpx
+    """Avvia un gioco e resta aperto finche' si gioca (per Sunshine/Moonlight, scorciatoie, script).
+
+    Usa il client dell'API pubblica (`/api/v1`), lo stesso che usano script e plugin: se il client funziona
+    qui, funziona anche fuori."""
+    from .api_client import ApiError, Client
     cfg = C.load(args.config)
     url, srv = _local_server(cfg)
-    with httpx.Client(base_url=url, timeout=30) as c:
-        r = c.post("/api/play-key", json={"key": args.key})
-        if r.status_code != 200:
-            console.print(f"[red]{r.json().get('detail', r.text)}[/]")
+    c = Client(base_url=url, cfg=cfg)
+    try:
+        g = c.find(args.key)
+        if not g:
+            console.print(f"[red]Gioco non trovato in libreria: {args.key}[/]")
             sys.exit(1)
-        console.print(f"Avviato: {r.json().get('title')}")
-        seen = False
-        while True:
-            time.sleep(1.5)
-            st = c.get("/api/running").json()
-            if st.get("status") in ("starting", "extracting", "running"):
-                seen = True
-                continue
-            if st.get("status") == "error":
-                console.print(f"[red]{st.get('message')}[/]")
-                sys.exit(1)
-            if seen or st.get("status") == "finished":
-                break
-    if srv:
-        srv.should_exit = True
+        c.play(g["id"], idem=f"play-{args.key}")
+        console.print(f"Avviato: {g['title']}")
+        c.wait_end()
+    except ApiError as e:
+        console.print(f"[red]{e.detail}[/]")
+        sys.exit(1)
+    finally:
+        if srv:
+            srv.should_exit = True
 
 
 def cmd_bigpicture(args):

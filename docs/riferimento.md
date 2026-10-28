@@ -168,3 +168,114 @@ nella stessa cartella dell'app; con il pacchetto `.deb` c'è il comando `gamescr
 Opzioni comuni dello scraping: `-c config.toml`, `-p snes,psx` (console), `-s libretro,igdb` (fonti e ordine),
 `-m cover,wheel` (media; `none` = nessuno), `--roms cartella`, `--refresh` (interroga anche i giochi già cercati),
 `--limit 50` (solo i primi N giochi, per le prove).
+
+## API locale
+
+L'app espone un'API HTTP su `127.0.0.1:8765` (la porta si sceglie con `[app] port`). Serve a script, Stream Deck,
+Home Assistant, webhook e alle estensioni.
+
+**Il server risponde solo al PC su cui gira** e non va pubblicato su Internet: fra gli endpoint ci sono avvii di
+giochi e di programmi. Per usarla da un altro dispositivo si passa da una rete privata con abbinamento (come per la
+sincronizzazione) o da un tunnel attivo solo quando serve, mai da una porta aperta sul router.
+
+### Le quattro famiglie di endpoint
+
+| Prefisso | Per chi | Regola |
+|---|---|---|
+| `/api/v1/...` | Script, Stream Deck, Home Assistant, webhook | **Stabile**: gli endpoint restano e cambiano forma solo dopo una deprecazione. Vuole il **token** |
+| `/api/...` | L'interfaccia dell'app | Interno: può cambiare a ogni versione. Non vuole token, perché risponde solo al PC (e il browser non può leggerlo da un altro sito) |
+| `/plugin-api/<id>/...` | I plugin (vedi [Temi e plugin](ESTENSIONI.md#server-backendpy)) | Definiti dal plugin |
+| `/m/api/...` | L'app del telefono e gli ospiti | Vuole il token **del dispositivo**, ottenuto con l'abbinamento (vedi [Telefono e streaming](telefono-streaming.md)) |
+
+### Il token
+
+Un segreto per PC, creato al primo avvio in `<cache>/api-token` (permessi 0600 su Linux e macOS). Si legge e si
+cambia da **Impostazioni › Info › API locale** (**Copia** e **Nuovo token**); cambiandolo, gli script che usano quello
+vecchio smettono di funzionare.
+
+Tre modi equivalenti di presentarlo:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8765/api/v1/games
+curl -H "X-Api-Token: $TOKEN"             http://127.0.0.1:8765/api/v1/games
+curl "http://127.0.0.1:8765/api/v1/games?token=$TOKEN"    # per EventSource, che non manda intestazioni
+```
+
+Non è una difesa contro altri programmi dello stesso utente, che possono leggere il file: serve a impedire che un
+programma qualsiasi, una pagina web o un tunnel aperto per sbaglio usino l'API senza permesso.
+
+### Gli endpoint stabili
+
+| Metodo | Percorso | Cosa fa |
+|---|---|---|
+| `GET` | `/api/v1/status` | L'app c'è: versione, `api`, `library_built_at`. **L'unico senza token** |
+| `GET` | `/api/v1/games` | Elenco leggero: `q`, `platform`, `store`, `status`, `key`, `favorite`, `versions`, `limit` (max 1000), `offset`, `sort` (`title`, `year`, `rating`, `playtime`, `last_played`; `-` per il contrario) |
+| `GET` | `/api/v1/games/{id}` | Un gioco con le sue versioni, i dati utente e le immagini |
+| `POST` | `/api/v1/games/{id}/play` | Avvia il gioco sul PC |
+| `POST` | `/api/v1/games/{id}/favorite` | Aggiunge o toglie dai preferiti (`{"value": true}` o `false`), per tutte le versioni |
+| `GET` | `/api/v1/running` | Gioco in esecuzione, se c'è |
+| `POST` | `/api/v1/running/stop` | Chiude il gioco in esecuzione |
+| `GET` | `/api/v1/platforms` | Console e store con quanti giochi, e i filtri disponibili |
+| `GET` | `/api/v1/collections` | Collezioni automatiche e personali, con quanti giochi |
+| `GET` | `/api/v1/collections/{slug}` | Gli id dei giochi di una collezione |
+| `GET` | `/api/v1/jobs` | Lavori in corso o appena finiti, con percentuale |
+| `POST` | `/api/v1/jobs/{azione}` | `stores`, `scan`, `rebuild`, `stop-scan`, `stop-game` |
+| `GET` | `/api/v1/events` | Eventi in tempo reale (SSE): `game_started`, `game_stopped`, `library_built`, `scrape_finished`, `stores_refreshed` |
+| `GET` | `/api/v1/saves/{id}` | Versioni dei salvataggi di un gioco |
+| `POST` | `/api/v1/saves/{id}` | Crea subito una versione |
+| `POST` | `/api/v1/saves/{id}/restore` | `{"name": "backup-..."}`; `409` se il gioco è aperto |
+| `GET` | `/api/v1/backups` | Copie di sicurezza dei dati personali |
+| `POST` | `/api/v1/backups` | Ne crea una |
+| `GET` | `/api/v1/wishlist` | Lista desideri con i prezzi |
+
+Lo schema completo e aggiornato è su `http://127.0.0.1:8765/openapi.json` (e `/docs` per provarlo dal browser).
+
+### Errori
+
+Sempre nella stessa forma, così un client non deve indovinare:
+
+```json
+{"detail": "Gioco non trovato", "code": "not_found"}
+```
+
+`404` quando la cosa non c'è, `409` quando c'è ma lo stato non permette l'operazione (gioco già in esecuzione, non
+installato, salvataggi con il gioco aperto), `422` per parametri non validi, `401` senza token. `detail` è il testo da
+mostrare alla persona, `code` il caso da gestire nel codice.
+
+Le `POST` accettano un'intestazione **`Idempotency-Key`**: ripetendo la stessa richiesta (per esempio dopo un timeout)
+entro 5 minuti si riceve la prima risposta e l'azione non viene rifatta. Consigliata su `play`, `jobs`, `saves` e
+`backups`.
+
+### Esempi
+
+Con `curl`:
+
+```bash
+# il token sta in <cartella dati>/cache/api-token, oppure si copia da Impostazioni › Info
+#   Windows: %LOCALAPPDATA%\GameScraper\cache\api-token
+#   macOS:   ~/Library/Application Support/GameScraper/cache/api-token
+#   Linux:   ~/.local/share/GameScraper/cache/api-token
+TOKEN="..."
+
+curl -s -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8765/api/v1/games?q=zelda&limit=5"
+curl -s -H "Authorization: Bearer $TOKEN" -X POST -H "Idempotency-Key: sera-1" \
+     http://127.0.0.1:8765/api/v1/games/1234/play
+curl -s -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8765/api/v1/events"   # eventi in streaming
+```
+
+In Python, con il client incluso (indirizzo e token si leggono da soli):
+
+```python
+from gamescraper import config
+from gamescraper.api_client import Client, ApiError
+
+c = Client(cfg=config.load())            # oppure Client("http://127.0.0.1:8765", token="...")
+for g in c.games(q="zelda", limit=5)["items"]:
+    print(g["id"], g["title"], g["year"])
+c.play(g["id"], idem="sera-1")           # ripetibile: non avvia due volte
+c.wait_end()                             # aspetta la fine della partita
+for kind, data in c.events():
+    print(kind, data)
+```
+
+`GAMESCRAPER_URL` e `GAMESCRAPER_API_TOKEN` impostano indirizzo e token per tutti gli script.

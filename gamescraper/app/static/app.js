@@ -2771,6 +2771,11 @@ async function loadAbout() {
     $("#about-data").textContent = `· dati in ${a.data_dir}`;
     $("#about-log").innerHTML = a.changelog ? miniMd(a.changelog) : `<p class="muted">Changelog non disponibile.</p>`;
   } catch (e) { toast(e.message, true); }
+  try {
+    const t = await api("/api/api-token");
+    $("#api-token").value = t.token;
+    $("#api-url").textContent = `Indirizzo ${t.url} · token in ${t.file}`;
+  } catch { /* niente: la scheda Info funziona lo stesso */ }
   checkUpdate(false, true);
 }
 
@@ -3542,6 +3547,15 @@ function bind() {
     const o = e.target.closest("[data-open]");
     if (o) { e.preventDefault(); api("/api/open", { body: { url: o.dataset.open } }); }
   });
+  $("#api-token-copy").onclick = async () => {
+    try { await navigator.clipboard.writeText($("#api-token").value); toast("Token copiato"); }
+    catch { toast("Copia non riuscita: selezionalo e copialo a mano", true); }
+  };
+  $("#api-token-new").onclick = async () => {
+    if (!confirm("Cambiare il token? Script, Stream Deck e webhook che usano quello vecchio smettono di funzionare.")) return;
+    try { const t = await api("/api/api-token", { body: {} }); $("#api-token").value = t.token; toast("Nuovo token creato"); }
+    catch (e) { toast(e.message, true); }
+  };
   checkUpdate(false, false); // subito all'avvio, in parallelo al caricamento dei giochi (la risposta resta in cache 12 ore)
   $("#health-list").addEventListener("click", (e) => { const b = e.target.closest(".hl-fix"); if (b) healthFix(SET.health[+b.dataset.i].fix); });
   $("#backup-list").addEventListener("click", (e) => { const b = e.target.closest(".bk-restore"); if (b) restoreBackup(b.dataset.name); });

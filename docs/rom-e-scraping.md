@@ -27,6 +27,11 @@ L'app riconosce:
 Per alcune console (Switch, PS3, PS Vita, Xbox, Xbox 360) ogni sottocartella è un gioco. L'elenco completo delle
 console riconosciute si ottiene con `python -m gamescraper platforms`.
 
+Una console nella barra laterale mostra i suoi giochi con gli stessi filtri della libreria, il pulsante **🏆 Top 100**
+e il pulsante **Store online** (vedi [Aggiungere store](store-online.md#store-online-di-una-console)):
+
+![La console Game Boy Advance: 5.013 giochi, Top 100 e Store online nella barra della console](images/console.jpg)
+
 ### Cartelle non riconosciute
 
 Nella finestra **⟳ Nuovi giochi** le cartelle non riconosciute compaiono con un menu per associarle a una console.
@@ -127,6 +132,11 @@ ancora qualcosa che lei sa fornire.
 I **Database locali** (LaunchBox, TheGamesDB) si scaricano per intero una volta a settimana o al mese: dopo, tutte
 le ricerche sono sul disco.
 
+In **Impostazioni › Fonti** ogni fonte ha il suo interruttore, l'ordine di priorità (le frecce ▲▼), il ritmo di
+richieste e i limiti giornalieri e mensili:
+
+![Impostazioni › Fonti: ordine delle fonti, ritmo di richieste e limiti per giorno e mese](images/impostazioni-fonti.jpg)
+
 ### La cascata
 
 Le fonti lavorano **contemporaneamente**, ognuna con la propria coda: un gioco passa alla fonte successiva appena la
@@ -165,6 +175,11 @@ limiti delle fonti. Se una quota finisce, riprende il giorno dopo.
 Nel dettaglio, il riquadro **Mancano: …** elenca i campi e le immagini che non si sono trovati. **⟳ Cerca dati
 mancanti** riprova le fonti per quel gioco e tutte le sue versioni. Da riga di comando:
 `python -m gamescraper scrape --missing`.
+
+La vista **? Senza dati** della barra laterale raccoglie tutti i giochi che nessuna fonte ha riconosciuto, per
+controllarli in blocco:
+
+![La vista Senza dati: i giochi per cui nessuna fonte ha trovato informazioni](images/libreria-senza-dati.jpg)
 
 ## Durate (HowLongToBeat)
 

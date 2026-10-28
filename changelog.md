@@ -1,5 +1,15 @@
 # Changelog
 
+## Non rilasciato
+
+
+### Aggiunto
+
+- API locale stabile /api/v1 con token (Impostazioni > Info), errori uniformi, eventi SSE, client incluso per script e plugin
+### In corso
+
+- Screenshot nel manuale — `docs` `mkdocs.yml`
+
 ## 0.7.3 (2026-10-28)
 ### Migliorato
 

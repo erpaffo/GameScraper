@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Manuale
+    url: https://erpaffo.github.io/GameScraper/
+    about: Come si usa ogni funzione, configurazione e comandi.
+  - name: 🔒 Problema di sicurezza
+    url: https://github.com/erpaffo/GameScraper/security/advisories/new
+    about: Segnalalo in privato, non con una segnalazione pubblica.

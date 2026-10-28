@@ -32,6 +32,11 @@ Sotto le viste ci sono le **console** (con il numero di giochi), la sezione **PC
 **collezioni** e le **collezioni intelligenti**. Gli stati dei giochi (Da giocare, In corso, Finito, Abbandonato)
 sono viste anch'essi.
 
+Ogni voce della barra laterale è un filtro della stessa griglia: per esempio **👥 Multigiocatore locale** mostra solo
+i giochi con almeno due giocatori sullo stesso schermo, con gli stessi filtri e ordinamenti di *Tutti i giochi*.
+
+![La vista Multigiocatore locale: i giochi con almeno due giocatori sullo stesso schermo](images/libreria-multigiocatore.jpg)
+
 ## Profili utente
 
 Se al PC giocano più persone, ognuna può avere il suo **profilo**: il pulsante **👤** in cima alla barra laterale
@@ -90,6 +95,8 @@ disattiva.
 
 Il pannello di dettaglio mostra copertina, sfondo, descrizione, sviluppatore, editore, generi, anno, giocatori,
 valutazioni (pubblico e critica), durata HowLongToBeat, peso, fonti dei dati e, se servono, i dati mancanti.
+
+![Il dettaglio di un gioco: copertina, valutazioni, stato, collezioni e dati scaricati](images/libreria-dettaglio.jpg)
 
 Azioni principali:
 
@@ -165,6 +172,8 @@ Il pulsante **🎲 A cosa vuoi giocare?** fa poche domande (quanto tempo hai, co
 cerchi, generi, epoca, dove vuoi giocare, se vuoi qualcosa di nuovo) e propone una dozzina di giochi adatti. Le
 risposte sui generi aiutano anche i consigli futuri.
 
+![Per te: il gioco scelto in evidenza e gli scaffali Riprendi, Giocati di recente, consigli e saghe](images/libreria-per-te.jpg)
+
 ## Migliori giochi
 
 **🏆 Migliori giochi** mostra la classifica globale **Top 100 / Top 1000**; la pagina di ogni console ha
@@ -175,6 +184,21 @@ store online.
 - Il punteggio unisce critica (Metacritic/IGDB) e giocatori.
 - Nella classifica globale lo stesso gioco su più console conta una volta, preferendo la versione posseduta.
 - **↻ Aggiorna voti online** chiede a IGDB e RAWG i voti dei candidati.
+
+![Migliori giochi: la Top 100 con il punteggio, il numero di voti e l'indicazione posseduto o scaricabile](images/libreria-migliori.jpg)
+
+## Statistiche
+
+**📊 Statistiche** riassume la tua collezione e il tuo tempo:
+
+- i **totali**: giochi in libreria, giochi giocati almeno una volta, tempo di gioco complessivo (app e store),
+  giochi finiti, in corso e da giocare, con le ore che servono per finire il backlog (HowLongToBeat);
+- **Il tuo anno**: le ore giocate mese per mese, la classifica dell'anno e il grafico per genere;
+- **Tempo per console e store**, **tempo per genere**, **i più giocati di sempre** e la completezza dei dati.
+
+I numeri arrivano dal tempo di gioco registrato dall'app più quello dichiarato dagli store.
+
+![Statistiche: totali, ore per mese, tempo per console e store e tempo per genere](images/libreria-statistiche.jpg)
 
 ## Valutazioni
 

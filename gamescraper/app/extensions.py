@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import queue
 import threading
 import tomllib
 import traceback
@@ -46,18 +47,39 @@ class Events:
 
     def __init__(self):
         self.handlers: dict[str, list] = {}
+        self.subs: set[queue.Queue] = set()  # chi ascolta in streaming (SSE di /api/v1/events)
         self.lock = threading.Lock()
 
     def on(self, name: str, fn):
         with self.lock:
             self.handlers.setdefault(name, []).append(fn)
 
+    def subscribe(self) -> queue.Queue:
+        """Coda che riceve ogni evento come {"event", "data"}. Se si riempie, gli eventi nuovi si perdono:
+        chi ascolta non deve poter bloccare l'app."""
+        q: queue.Queue = queue.Queue(maxsize=100)
+        with self.lock:
+            self.subs.add(q)
+        return q
+
+    def unsubscribe(self, q: queue.Queue):
+        with self.lock:
+            self.subs.discard(q)
+
     def emit(self, name: str, data: dict | None = None):
-        for fn in list(self.handlers.get(name, [])):
+        payload = data or {}
+        with self.lock:
+            handlers, subs = list(self.handlers.get(name, [])), list(self.subs)
+        for fn in handlers:
             try:
-                fn(data or {})
+                fn(payload)
             except Exception:
                 traceback.print_exc()
+        for q in subs:
+            try:
+                q.put_nowait({"event": name, "data": payload})
+            except queue.Full:
+                pass
 
 
 # ---------------------------------------------------------------- temi

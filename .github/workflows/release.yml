@@ -170,6 +170,10 @@ jobs:
           [ -s notes.md ] || echo "Nessuna voce per la versione $VER in changelog.md." > notes.md
           cat notes.md
 
+      # impronte SHA-256 di tutti i file: chi scarica puo' verificare che siano integri (gli eseguibili non sono firmati)
+      - name: Checksum
+        run: cd release && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+
       - uses: softprops/action-gh-release@v2
         with:
           files: release/*

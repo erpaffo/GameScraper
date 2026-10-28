@@ -41,3 +41,5 @@ docs/TODO.md
 site/
 docs/GameScraper-manuale.pdf
 release.*
+
+.agent/

@@ -1,0 +1,55 @@
+name: 🐞 Segnala un problema
+description: Qualcosa non funziona come dovrebbe
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Grazie! Prima di aprire la segnalazione, controlla il [manuale](https://erpaffo.github.io/GameScraper/) e le segnalazioni già aperte.
+        **Non incollare chiavi, password o token** (anche se compaiono nei log).
+        Per un problema di sicurezza non aprire una segnalazione pubblica: vedi [SECURITY.md](https://github.com/erpaffo/GameScraper/blob/main/SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: Versione di GameScraper
+      description: Impostazioni › Info
+      placeholder: "0.7.3"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Sistema
+      options: [Windows, macOS, Linux]
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installazione
+      options: [Installer, Portatile (zip / tar.gz), Pacchetto .deb, Dai sorgenti]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: Cosa succede
+      description: Cosa hai fatto, cosa ti aspettavi e cosa è successo invece.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Come riprodurlo
+      placeholder: |
+        1. Apri …
+        2. Clicca su …
+        3. Compare …
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: |
+        Se puoi, allega il log diagnostico: avvia con `GAMESCRAPER_LOG=1` (oppure `gamescraper app --log`),
+        riproduci il problema e prendi `<cartella dati>/cache/logs/diagnostica.log`. Togli prima eventuali dati personali.
+      render: text

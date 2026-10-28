@@ -12,6 +12,7 @@ Velocita' all'avvio:
 from __future__ import annotations
 
 import hashlib
+import http
 import json
 import os
 import sqlite3
@@ -26,9 +27,11 @@ from pathlib import Path
 
 import httpx
 from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .. import config as C
 from .. import platforms as P
@@ -185,9 +188,41 @@ def _players_label(v, platform: str = "") -> str:
     return "" if not m else "1 (solo giocatore)" if m == 1 else f"1–{m} in locale"
 
 
+# codice stabile per ogni errore: i client esterni di /api/v1 lo usano per capire il caso senza leggere il testo
+ERROR_CODES = {400: "bad_request", 401: "unauthorized", 403: "forbidden", 404: "not_found",
+               405: "method_not_allowed", 409: "conflict", 413: "too_large", 422: "invalid_request",
+               429: "too_many_requests", 500: "internal_error", 503: "unavailable"}
+
+
 def create_app(cfg) -> FastAPI:
-    app = FastAPI(title="GameScraper")
+    app = FastAPI(
+        title="GameScraper", version="1",
+        description="API locale dell'app. Gli endpoint **/api/v1** sono stabili e vogliono il token "
+                    "(`Authorization: Bearer <token>`, vedi Impostazioni › Info); quelli sotto **/api** sono "
+                    "interni all'interfaccia e possono cambiare a ogni versione.",
+        openapi_tags=[{"name": "stato", "description": "Se l'app c'e' e che versione e' (senza token)"},
+                      {"name": "libreria", "description": "Giochi, console, collezioni"},
+                      {"name": "gioco in corso", "description": "Che cosa gira e come fermarlo"},
+                      {"name": "attivita'", "description": "Lavori in corso, comandi, eventi in tempo reale"},
+                      {"name": "salvataggi", "description": "Versioni dei salvataggi dei giochi"},
+                      {"name": "dati", "description": "Copie di sicurezza dei dati personali"},
+                      {"name": "lista desideri", "description": "Prezzi dei giochi che vuoi comprare"}])
     app.add_middleware(GZipMiddleware, minimum_size=2048, compresslevel=1)  # in locale conta la velocita', non il peso
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http_error(request, exc):
+        """Tutti gli errori hanno la stessa forma: {"detail", "code"}. `detail` resta il testo per la persona."""
+        detail = exc.detail or http.HTTPStatus(exc.status_code).phrase
+        return JSONResponse({"detail": detail, "code": ERROR_CODES.get(exc.status_code, "error")},
+                            status_code=exc.status_code, headers=getattr(exc, "headers", None))
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_error(request, exc):
+        errs = [{"loc": [str(x) for x in e.get("loc", ())], "msg": str(e.get("msg", ""))} for e in exc.errors()[:8]]
+        return JSONResponse({"detail": errs[0]["msg"] if errs else "Parametri non validi",
+                             "code": "invalid_request", "errors": errs}, status_code=422)
+
+    app.state.cfg = cfg  # LocalGuard lo legge per il token dell'API
     lib = Library(cfg)
     lib.load(online=False)
     threading.Thread(target=lib.load, daemon=True).start()
@@ -203,6 +238,7 @@ def create_app(cfg) -> FastAPI:
     user = _ActiveUser(user_of(active if any(p["id"] == active for p in SY.profiles(cfg)) else "default"))
     sync = SY.Sync(cfg, user_of)
     events = X.Events()
+    app.state.events = events  # chi ascolta in streaming (/api/v1/events) e i test
     # presenza su Discord («sto giocando a …»): si aggiorna sugli eventi del launcher
     from ..discordrpc import PresenceService
 
@@ -2492,6 +2528,21 @@ def create_app(cfg) -> FastAPI:
         order = {"error": 0, "warn": 1, "ok": 2}
         return {"items": sorted(out, key=lambda x: order[x["level"]])}
 
+    @app.get("/api/api-token")
+    def api_api_token():
+        """Token dell'API locale per /api/v1, mostrato in Impostazioni › Info (solo dal PC: lo ferma LocalGuard).
+        Chi sta sul PC puo' gia' leggere il file in <cache>/api-token: non e' un segreto contro l'utente."""
+        from . import apitoken
+        return {"token": apitoken.get(cfg), "url": f"http://127.0.0.1:{int(cfg.app.get('port', 8765))}",
+                "api": 1, "file": str(apitoken.path(cfg))}
+
+    @app.post("/api/api-token")
+    def api_api_token_new():
+        """Nuovo token: chi usava quello vecchio deve essere riconfigurato."""
+        from . import apitoken
+        apitoken.rotate(cfg)
+        return api_api_token()
+
     @app.get("/api/status")
     def api_status():
         return {k: state[k] for k in ("building", "build_stats", "thumbs_total", "thumbs_done")} | {
@@ -3412,6 +3463,17 @@ def create_app(cfg) -> FastAPI:
         return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
+
+    # ------------------------------------------------------------ API pubblica (/api/v1, con token)
+    from . import apiv1
+    apiv1.register(app, {
+        "cfg": cfg, "lib": lib, "user": user, "launcher": launcher, "events": events,
+        "base_url": lambda req: str(req.base_url).rstrip("/"),
+        "view": view, "game": lambda gid: {**lib.game(gid)}, "play": api_play, "member_keys": _member_keys,
+        "jobs": _job_rows, "action": api_mobile_action,
+        "saves": api_saves, "saves_backup": api_saves_backup, "saves_restore": api_saves_restore,
+        "backups": api_backups, "backup_create": api_backup_create,
+    })
     return app
 
 
@@ -3436,13 +3498,26 @@ class LocalGuard:
     - Host diverso da 127.0.0.1/localhost -> 403 (DNS rebinding: un sito che punta il suo dominio a 127.0.0.1
       leggerebbe libreria, account e codice di abbinamento del telefono);
     - POST/PUT/DELETE e WebSocket con un Origin di un altro sito -> 403 (CSRF: un sito che avvia giochi,
-      disinstalla port o usa il controller/mouse del telefono). Senza Origin (curl, gamescraper-cli) si passa.
+      disinstalla port o usa il controller/mouse del telefono). Senza Origin (curl, gamescraper-cli) si passa;
+    - /api/v1 (tranne /api/v1/status) -> serve il token del PC in `Authorization: Bearer`, `X-Api-Token`
+      oppure `?token=`. Cosi' un programma qualsiasi sul PC - o un tunnel aperto per sbaglio - non usa
+      l'API senza il token scritto in <cache>/api-token. L'interfaccia e il telefono usano /api/... e non
+      sono toccati.
     """
+
+    V1_OPEN = ("/api/v1/status",)
 
     def __init__(self, app, port: int):
         self.app = app
         self.hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
         self.origins = {f"http://{h}" for h in self.hosts}
+        self.cfg = getattr(getattr(app, "state", None), "cfg", None)
+
+    def _token_ok(self, headers, query: bytes) -> bool:
+        if self.cfg is None:  # app senza configurazione (test con un'app finta): nessun token
+            return True
+        from . import apitoken
+        return apitoken.check(self.cfg, apitoken.presented(headers, query))
 
     async def __call__(self, scope, receive, send):
         if scope["type"] in ("http", "websocket"):
@@ -3453,6 +3528,11 @@ class LocalGuard:
                 if scope["type"] == "websocket":
                     return await send({"type": "websocket.close", "code": 4403})
                 return await Response("Richiesta non consentita", status_code=403)(scope, receive, send)
+            path = scope.get("path", "")
+            if (scope["type"] == "http" and path.startswith("/api/v1/") and path not in self.V1_OPEN
+                    and not self._token_ok(scope["headers"], scope.get("query_string", b""))):
+                return await JSONResponse({"detail": "Serve il token dell'API (Authorization: Bearer <token>)",
+                                           "code": "unauthorized"}, status_code=401)(scope, receive, send)
         return await self.app(scope, receive, send)
 
 
