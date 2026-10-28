@@ -1,7 +1,7 @@
 # Manuale di Pozzo Launcher: sito (MkDocs Material, GitHub Pages) e PDF (tools/docs_pdf.py, stesso ordine di "nav").
 site_name: Pozzo Launcher
 site_description: Manuale di Pozzo Launcher, la libreria di giochi per ROM e store PC
-repo_url: https://github.com/erpaffo/GameScraper
+repo_url: https://github.com/erpaffo/Pozzo-Launcher
 docs_dir: docs
 exclude_docs: |
   obsidian/

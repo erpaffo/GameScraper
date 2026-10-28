@@ -2,12 +2,12 @@
 
 ## Versioni supportate
 
-Le correzioni di sicurezza escono solo per l'**ultima versione** pubblicata nelle [Releases](https://github.com/erpaffo/GameScraper/releases). L'app avvisa da sola quando ce n'è una nuova (Impostazioni › Info).
+Le correzioni di sicurezza escono solo per l'**ultima versione** pubblicata nelle [Releases](https://github.com/erpaffo/Pozzo-Launcher/releases). L'app avvisa da sola quando ce n'è una nuova (Impostazioni › Info).
 
 ## Come segnalare una vulnerabilità
 
 **Non aprire una segnalazione pubblica.** Usa la segnalazione privata di GitHub:
-[Security › Report a vulnerability](https://github.com/erpaffo/GameScraper/security/advisories/new).
+[Security › Report a vulnerability](https://github.com/erpaffo/Pozzo-Launcher/security/advisories/new).
 
 Indica, se puoi: versione e sistema, cosa permette di fare la vulnerabilità, i passi per riprodurla. Riceverai una risposta appena possibile; a correzione pubblicata la segnalazione viene resa pubblica, con il tuo nome se lo desideri.
 

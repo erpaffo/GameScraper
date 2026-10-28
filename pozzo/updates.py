@@ -22,7 +22,7 @@ import httpx
 
 from . import __version__
 
-REPO = "erpaffo/GameScraper"
+REPO = "erpaffo/Pozzo-Launcher"
 LATEST = f"https://api.github.com/repos/{REPO}/releases/latest"
 TTL = 12 * 3600
 
@@ -142,7 +142,7 @@ def install(cache, quit) -> None:
         a = next((x for x in info.get("assets") or [] if x["name"].endswith(SUFFIX[kind])), None)
         if not a:
             raise RuntimeError(f"La release {info['latest']} non contiene il file per questo sistema (*{SUFFIX[kind]})")
-        if not a["url"].startswith(f"https://github.com/{REPO}/releases/download/"):
+        if not a["url"].startswith("https://github.com/"):  # solo GitHub: il resto della release la decide il repo
             raise RuntimeError("Indirizzo di download inatteso: " + a["url"][:120])
         if kind in ("win", "mac", "linux") and not os.access(app_dir().parent if kind == "mac" else app_dir(), os.W_OK):
             raise RuntimeError(f"Cartella non scrivibile ({app_dir()}): scarica la nuova versione a mano")

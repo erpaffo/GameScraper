@@ -5,9 +5,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        Grazie! Prima di aprire la segnalazione, controlla il [manuale](https://erpaffo.github.io/GameScraper/) e le segnalazioni già aperte.
+        Grazie! Prima di aprire la segnalazione, controlla il [manuale](https://erpaffo.github.io/Pozzo-Launcher/) e le segnalazioni già aperte.
         **Non incollare chiavi, password o token** (anche se compaiono nei log).
-        Per un problema di sicurezza non aprire una segnalazione pubblica: vedi [SECURITY.md](https://github.com/erpaffo/GameScraper/blob/main/SECURITY.md).
+        Per un problema di sicurezza non aprire una segnalazione pubblica: vedi [SECURITY.md](https://github.com/erpaffo/Pozzo-Launcher/blob/main/SECURITY.md).
   - type: input
     id: version
     attributes:

@@ -115,7 +115,7 @@ def ext_readme(e: dict, repo: str) -> str:
 
 {e['description']}
 
-Estensione per [Pozzo Launcher](https://github.com/erpaffo/GameScraper) (richiede la versione {e['min_app']} o successiva).
+Estensione per [Pozzo Launcher](https://github.com/erpaffo/Pozzo-Launcher) (richiede la versione {e['min_app']} o successiva).
 
 ## Installazione
 
@@ -135,7 +135,7 @@ Se non è nello store ufficiale: **Store estensioni** › *Fonti delle estension
 
 STORE_README = """# Store delle estensioni di Pozzo Launcher
 
-Elenco delle estensioni che [Pozzo Launcher](https://github.com/erpaffo/GameScraper) mostra nello **Store estensioni**.
+Elenco delle estensioni che [Pozzo Launcher](https://github.com/erpaffo/Pozzo-Launcher) mostra nello **Store estensioni**.
 Ogni estensione vive nel proprio repository; qui c'è solo `index.json`, con il repository e la versione approvata:
 
 ```json

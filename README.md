@@ -1,12 +1,12 @@
 # Pozzo Launcher
 
-[![Test](https://github.com/erpaffo/GameScraper/actions/workflows/ci.yml/badge.svg)](https://github.com/erpaffo/GameScraper/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/erpaffo/GameScraper)](https://github.com/erpaffo/GameScraper/releases/latest)
-[![Manuale](https://img.shields.io/badge/manuale-online-blue)](https://erpaffo.github.io/GameScraper/)
+[![Test](https://github.com/erpaffo/Pozzo-Launcher/actions/workflows/ci.yml/badge.svg)](https://github.com/erpaffo/Pozzo-Launcher/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/erpaffo/Pozzo-Launcher)](https://github.com/erpaffo/Pozzo-Launcher/releases/latest)
+[![Manuale](https://img.shields.io/badge/manuale-online-blue)](https://erpaffo.github.io/Pozzo-Launcher/)
 
 La tua libreria di giochi in un posto solo: ROM di ogni console e giochi PC dagli store, con copertine, descrizioni, valutazioni e durate recuperate in automatico. Si gioca dal desktop, da Big Picture con il controller, dal telefono o in streaming. È il successore moderno e molto più veloce di [Skyscraper](https://github.com/Gemba/skyscraper).
 
-📖 **[Manuale completo](https://erpaffo.github.io/GameScraper/)** · ⬇ **[Download](https://github.com/erpaffo/GameScraper/releases)** · 📝 **[Changelog](changelog.md)**
+📖 **[Manuale completo](https://erpaffo.github.io/Pozzo-Launcher/)** · ⬇ **[Download](https://github.com/erpaffo/Pozzo-Launcher/releases)** · 📝 **[Changelog](changelog.md)**
 
 <p align="center">
   <img src="docs/img/libreria.jpg" width="49%" alt="La libreria">
@@ -31,7 +31,7 @@ La tua libreria di giochi in un posto solo: ROM di ogni console e giochi PC dagl
 
 ## Download
 
-Gli eseguibili sono nella pagina **[Releases](https://github.com/erpaffo/GameScraper/releases)**:
+Gli eseguibili sono nella pagina **[Releases](https://github.com/erpaffo/Pozzo-Launcher/releases)**:
 
 | Sistema | Installer | Portatile |
 |---|---|---|
@@ -49,7 +49,7 @@ Gli eseguibili non sono firmati: su Windows SmartScreen chiede conferma (*Ulteri
 2. Avvia la ricerca: la libreria si riempie, e copertine e dati arrivano in sottofondo.
 3. Per i giochi PC, collega gli store da **Impostazioni › Store**.
 
-Configurazione, cache e libreria stanno nella cartella dell'utente (`%LOCALAPPDATA%\PozzoLauncher` su Windows, `~/Library/Application Support/PozzoLauncher` su macOS, `~/.local/share/PozzoLauncher` su Linux). Tutto il resto (credenziali delle fonti, comandi da terminale, store online, telefono, estensioni) è nel [manuale](https://erpaffo.github.io/GameScraper/).
+Configurazione, cache e libreria stanno nella cartella dell'utente (`%LOCALAPPDATA%\PozzoLauncher` su Windows, `~/Library/Application Support/PozzoLauncher` su macOS, `~/.local/share/PozzoLauncher` su Linux). Tutto il resto (credenziali delle fonti, comandi da terminale, store online, telefono, estensioni) è nel [manuale](https://erpaffo.github.io/Pozzo-Launcher/).
 
 ## Dai sorgenti
 

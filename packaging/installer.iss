@@ -15,7 +15,7 @@ AppName=Pozzo Launcher
 AppVersion={#AppVersion}
 AppVerName=Pozzo Launcher {#AppVersion}
 AppPublisher=erpaffo
-AppPublisherURL=https://github.com/erpaffo/GameScraper
+AppPublisherURL=https://github.com/erpaffo/Pozzo-Launcher
 DefaultDirName={autopf}\PozzoLauncher
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
@@ -41,9 +41,14 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [InstallDelete]
 ; librerie della versione precedente: evita file vecchi mescolati ai nuovi
 Type: filesandordirs; Name: "{app}\_internal"
+; programma da terminale con il vecchio nome (prima si chiamava GameScraper)
+Type: files; Name: "{app}\gamescraper-cli.exe"
 
 [Files]
 Source: "..\dist\PozzoLauncher\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; copia con il vecchio nome: collegamenti e script di riavvio delle versioni precedenti (GameScraper.exe) avviano
+; cosi' il programma nuovo, invece del vecchio eseguibile rimasto che non trova piu' i suoi file
+Source: "..\dist\PozzoLauncher\PozzoLauncher.exe"; DestDir: "{app}"; DestName: "GameScraper.exe"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\Pozzo Launcher"; Filename: "{app}\PozzoLauncher.exe"

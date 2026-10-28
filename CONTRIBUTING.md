@@ -2,9 +2,9 @@
 
 Grazie dell'interesse! Segnalazioni, idee e pull request sono benvenute.
 
-- **Problemi e idee**: apri una [segnalazione](https://github.com/erpaffo/GameScraper/issues/new/choose) con il modello adatto.
+- **Problemi e idee**: apri una [segnalazione](https://github.com/erpaffo/Pozzo-Launcher/issues/new/choose) con il modello adatto.
 - **Sicurezza**: mai in pubblico, vedi [SECURITY.md](SECURITY.md).
-- **Domande d'uso**: prima il [manuale](https://erpaffo.github.io/GameScraper/).
+- **Domande d'uso**: prima il [manuale](https://erpaffo.github.io/Pozzo-Launcher/).
 
 ## Preparare l'ambiente
 
@@ -45,7 +45,7 @@ Numero di versione, commit di versione e release li gestisce il manutentore.
 
 ## Estensioni
 
-Le estensioni stanno in `extensions/<id>/` e si installano dallo store dentro l'app. Guida: [Temi e plugin](https://erpaffo.github.io/GameScraper/ESTENSIONI/). Dopo averne modificata una:
+Le estensioni stanno in `extensions/<id>/` e si installano dallo store dentro l'app. Guida: [Temi e plugin](https://erpaffo.github.io/Pozzo-Launcher/ESTENSIONI/). Dopo averne modificata una:
 
 ```bash
 python tools/extensions.py index    # rigenera extensions/index.json (il test lo controlla)

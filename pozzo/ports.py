@@ -36,7 +36,7 @@ API = ("https://api.quiverlauncher.com/api/v1", "https://famous-wildebeest-660.c
 TTL = 24 * 3600
 RELEASE_TTL = 12 * 3600  # controllo aggiornamenti: al massimo ogni 12 ore per repository (come updates.py)
 MANIFEST = ".pozzo-port.json"
-UA = {"User-Agent": f"PozzoLauncher/{__version__} (+https://github.com/erpaffo/GameScraper)"}
+UA = {"User-Agent": f"PozzoLauncher/{__version__} (+https://github.com/erpaffo/Pozzo-Launcher)"}
 # id console di Quiver -> id di platforms.py (gli altri coincidono; "pc", "mobile" non hanno ROM)
 CONSOLES = {"gcn": "gc", "ps1": "psx", "og xbox": "xbox", "x360": "xbox360", "gen": "megadrive", "sms": "mastersystem",
             "gg": "gamegear", "32x": "sega32x", "vb": "virtualboy", "ami": "amiga"}

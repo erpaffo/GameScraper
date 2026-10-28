@@ -10,7 +10,7 @@ copy config.example.toml config.toml     # solo la prima volta, se non hai ancor
 
 ## Creare gli eseguibili
 
-Su GitHub li crea il workflow [`.github/workflows/release.yml`](https://github.com/erpaffo/GameScraper/blob/main/.github/workflows/release.yml) a ogni tag di versione (`git tag v0.1.0 && git push origin v0.1.0`): build su Windows, macOS e Linux e pubblicazione nella release. In locale (solo per il sistema in uso):
+Su GitHub li crea il workflow [`.github/workflows/release.yml`](https://github.com/erpaffo/Pozzo-Launcher/blob/main/.github/workflows/release.yml) a ogni tag di versione (`git tag v0.1.0 && git push origin v0.1.0`): build su Windows, macOS e Linux e pubblicazione nella release. In locale (solo per il sistema in uso):
 
 ```bash
 pip install -r requirements.txt pyinstaller
