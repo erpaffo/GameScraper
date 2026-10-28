@@ -21,8 +21,8 @@ La tua libreria di giochi in un posto solo: ROM di ogni console e giochi PC dagl
 ## Cosa fa
 
 - **Scraping veloce**: riconosce le ROM offline (CRC e nome sui DAT No-Intro/Redump) e interroga le fonti online solo per ciò che manca, rispettando i loro limiti. Riprende da dove si era fermato.
-- **Libreria in stile Playnite**: console e store insieme, versioni regionali unite, preferiti, stati, collezioni, ricerca e filtri, anche con decine di migliaia di giochi.
-- **Giochi PC**: Steam, Epic, GOG, Amazon, Battle.net, Xbox e altri, accanto alle ROM.
+- **Libreria in stile Playnite**: console e store insieme, versioni regionali unite, preferiti (anche per console), stati, collezioni, ricerca e filtri, anche con decine di migliaia di giochi. Una barra dei menu in alto dà accesso rapido alle azioni e alle impostazioni più usate.
+- **Giochi PC**: Steam, Epic, GOG, Amazon, Battle.net, Xbox e altri, accanto alle ROM. Puoi aggiungere a mano qualsiasi `.exe` (gioco o applicazione): compare subito e copertina e dati arrivano dopo. Ogni gioco può avviare con sé altre applicazioni (per esempio un deck tracker).
 - **Big Picture**: schermo intero pensato per il controller, anche da divano.
 - **Telefono e streaming**: sfoglia e avvia i giochi dal telefono, che diventa anche un controller (giroscopio compreso); streaming con Sunshine e Moonlight.
 - **Store online**: elenchi di giochi di altri siti, aggiunti come «store» di ogni console.
