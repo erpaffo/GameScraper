@@ -8,7 +8,8 @@
  * coordinate, quindi resta fluida anche con migliaia di giochi (le griglie sono virtualizzate).
  */
 
-const BP = { lib: null, stack: [], details: new Map(), pad: "xbox", sound: store.get("bpSound", true), running: null };
+const BP = { lib: null, stack: [], details: new Map(), pad: "xbox", sound: store.get("bpSound", true), running: null,
+  palette: store.get("bpPalette", "default"), text: store.get("bpText", "normal"), talk: store.get("bpTalk", false) };
 const main = $("#bp-main");
 
 /* ------------------------------------------------------------------ utilita' */
@@ -19,9 +20,62 @@ function fmtTime(sec) { if (!sec) return ""; const h = Math.floor(sec / 3600), m
 function toast(msg, err = false) {
   const t = $("#bp-toast");
   t.textContent = msg; t.className = err ? "err" : ""; t.hidden = false;
+  announce(msg);
   clearTimeout(toast.t); toast.t = setTimeout(() => (t.hidden = true), err ? 6000 : 3000);
 }
 GS.toast = toast;
+
+/* ------------------------------------------------------------------ accessibilità */
+/** Legge un messaggio con il lettore di schermo (regione aria-live, nessun effetto visivo). */
+function announce(text) {
+  if (!BP.talk || !text) return;
+  const live = $("#bp-live");
+  if (!live) return;
+  live.textContent = ""; // svuotare prima: alcuni lettori ignorano testi identici consecutivi
+  setTimeout(() => { live.textContent = String(text).slice(0, 300); }, 60);
+}
+
+/** Applica palette, dimensione dei testi e lettura vocale, ricordando le scelte sul PC. */
+function applyLook() {
+  const html = document.documentElement;
+  html.dataset.palette = BP.palette || "default";
+  html.dataset.bptext = BP.text || "normal";
+}
+
+/** Annuncia con il lettore di schermo ciò che si sposta il fuoco (card, pulsanti, schede). */
+let lastSpoken = "", lastSpokenAt = 0;
+function watchFocus() {
+  const obs = new MutationObserver(() => {
+    const el = document.querySelector("#bp-main .card.focus, #bp-main .bp-btn.focus, #bp-nav .bp-tab.focus");
+    if (!el) return;
+    const txt = (el.querySelector(".lbl")?.textContent || el.getAttribute("aria-label") || el.textContent || "")
+      .replace(/\s+/g, " ").trim();
+    if (!txt || txt === lastSpoken) return;
+    const now = Date.now();
+    if (now - lastSpokenAt < 250) return;
+    lastSpoken = txt;
+    lastSpokenAt = now;
+    const section = el.closest(".shelf")?.querySelector("h2")?.textContent?.trim() || "";
+    announce(section ? `${txt} — ${section}` : txt);
+  });
+  for (const root of ["#bp-main", "#bp-nav"]) {
+    const node = $(root);
+    if (node) obs.observe(node, { subtree: true, attributes: true, attributeFilter: ["class"] });
+  }
+}
+
+const PALETTES = [
+  { id: "default", label: "Predefinita" },
+  { id: "deuteranopia", label: "Daltonismo · verde/rosso (deuteranopia)" },
+  { id: "protanopia", label: "Daltonismo · rosso (protanopia)" },
+  { id: "tritanopia", label: "Daltonismo · blu/giallo (tritanopia)" },
+  { id: "contrast", label: "Alto contrasto (sfondo nero)" },
+];
+const TEXTS = [
+  { id: "normal", label: "Normali" },
+  { id: "large", label: "Grandi" },
+  { id: "xlarge", label: "Molto grandi" },
+];
 
 let actx = null;
 function beep(kind) {
@@ -87,7 +141,7 @@ function setBackground(id) {
 function push(screen) { BP.stack.push(screen); show(); }
 function pop() { if (BP.stack.length > 1) { BP.stack.pop(); beep("back"); show(); } }
 function cur() { return BP.stack[BP.stack.length - 1]; }
-function show() { const s = cur(); main.innerHTML = ""; s.render(main); renderNav(); renderHints(); }
+function show() { const s = cur(); main.innerHTML = ""; s.render(main); renderNav(); renderHints(); announce(s.title || ""); lastSpoken = ""; }
 
 const TABS = [
   { id: "home", label: "Home", open: () => { BP.stack = [homeScreen()]; show(); } },
@@ -100,6 +154,7 @@ const TABS = [
   { id: "free", label: "Gratis", open: () => push(freeScreen()) },
   { id: "fav", label: "Preferiti", open: () => push(gridScreen("Preferiti", sortTitle(visibleGames().filter((g) => g.grp.favorite)))) },
   { id: "search", label: "Cerca", open: () => push(searchScreen()) },
+  { id: "look", label: "Aspetto", open: () => push(lookScreen()) },
   { id: "exit", label: "Esci", open: () => exitBigPicture() },
 ];
 
@@ -326,6 +381,49 @@ function gridScreen(title, items, tab = "all", opts = {}) {
   };
   return scr;
 }
+
+/* ---- Aspetto (accessibilità): palette per il daltonismo, dimensione dei testi, suoni, lettura vocale */
+function lookScreen() {
+  const items = [];
+  const same = (a, b) => a === b;
+  for (const p of PALETTES) {
+    items.push({
+      label: `${same(BP.palette, p.id) ? "●" : "○"} ${p.label}`, sub: same(BP.palette, p.id) ? "in uso" : "",
+      key: "pal:" + p.id,
+      ok: () => {
+        BP.palette = p.id; store.set("bpPalette", p.id); applyLook(); beep("ok");
+        toast(`Palette: ${p.label}`); push(lookScreen());
+      },
+    });
+  }
+  for (const t of TEXTS) {
+    items.push({
+      label: `${same(BP.text, t.id) ? "●" : "○"} Testi ${t.label.toLowerCase()}`,
+      sub: same(BP.text, t.id) ? "in uso" : "", key: "txt:" + t.id,
+      ok: () => {
+        BP.text = t.id; store.set("bpText", t.id); applyLook(); beep("ok");
+        toast(`Testi: ${t.label}`); push(lookScreen());
+      },
+    });
+  }
+  items.push({
+    label: `${BP.sound ? "●" : "○"} Suoni dell'interfaccia`, sub: BP.sound ? "attivi" : "spenti", key: "snd",
+    ok: () => { BP.sound = !BP.sound; store.set("bpSound", BP.sound); beep("ok"); push(lookScreen()); },
+  });
+  items.push({
+    label: `${BP.talk ? "●" : "○"} Lettura vocale`, sub: BP.talk ? "attiva" : "spenta", key: "talk",
+    ok: () => {
+      BP.talk = !BP.talk; store.set("bpTalk", BP.talk);
+      toast(BP.talk ? "Lettura vocale attiva" : "Lettura vocale spenta");
+      announce(BP.talk ? "Lettura vocale attiva" : "Lettura vocale spenta");
+      push(lookScreen());
+    },
+  });
+  const scr = gridScreen("Aspetto", items, "look", { text: true, unit: "opzioni" });
+  scr.hints = [["a", "Scegli"], ["b", "Indietro"], ["lt", "Scheda"]];
+  return scr;
+}
+
 
 /* ---- Store: giochi da installare da tutti gli store; X = store, Y = ordine, LT/RT (Q/E) = dimensione/piattaforma */
 function shopScreen(f = store.get("bpShopF", { src: "", plat: "", size: "", sort: "title" }), i = 0) {
@@ -815,6 +913,8 @@ function clock() { $("#bp-clock").textContent = new Date().toLocaleTimeString("i
 
 (async function start() {
   clock(); setInterval(clock, 15000);
+  applyLook(); // palette e dimensione dei testi scelte la volta prima
+  watchFocus(); // lettura vocale di ciò che si seleziona (se attiva)
   try {
     const lib = await api("/api/library");
     BP.lib = decodeLibrary(lib);

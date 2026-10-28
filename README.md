@@ -56,6 +56,8 @@ D:/ROM/
 
 - **Controller sullo schermo**: diventa un controller Xbox virtuale sul PC (serve il driver [ViGEmBus](https://github.com/nefarius/ViGEmBus/releases)), fino a 4 telefoni = 4 giocatori.
 - **Giroscopio**: modalità *Movimento* = protocollo DSU/cemuhook su `127.0.0.1:26760` per Cemu, Ryujinx, Dolphin, Azahar/Citra (nell'emulatore scegli la sorgente di movimento DSU); modalità *Mira* = l'inclinazione muove la levetta destra, per i giochi senza giroscopio.
+- **Libreria completa dal telefono**: ricerca, filtro per console, ordinamento (titolo, anno, valutazione, tempo di gioco, ultimo avviato), scheda del gioco con copertina e descrizione, avvio sul PC o con il telefono come controller.
+- **⏳ Attività**: i lavori del PC in corso (aggiornamento store, copertine e descrizioni, durate, migliori giochi, ricostruzione della libreria) con avanzamento, più i comandi **Aggiorna store**, **Cerca nuovi giochi**, **Ricostruisci libreria** e **Chiudi gioco**. Così si governa tutto dal divano, senza tornare al PC.
 - La prima apertura mostra l'avviso "connessione non privata" (certificato del tuo PC): *Avanzate › Procedi*. Windows può chiedere di consentire l'app sulle reti private.
 
 **Streaming da remoto** con [Sunshine](https://app.lizardbyte.dev/Sunshine) (sul PC) e [Moonlight](https://moonlight-stream.org) (telefono, tablet, TV, altro PC): *Pubblica in Moonlight* aggiunge a Sunshine "GameScraper Big Picture" e i tuoi giochi principali con le copertine (le altre app di Sunshine restano). Moonlight avvia `gamescraper-cli play --key …`, che resta aperto finché giochi: lo streaming si chiude da solo a fine partita.
@@ -229,6 +231,7 @@ Pulsante **🎮 Big Picture** in alto, oppure `python -m gamescraper app --bigpi
 
 - Home a scaffali: *Continua a giocare*, *Preferiti*, *Giochi PC installati*, le collezioni più grandi e le console. Lo sfondo e il logo cambiano con il gioco selezionato.
 - Libreria, PC, Console, Collezioni e Preferiti come griglie navigabili; ricerca con tastiera a schermo; pagina del gioco con Gioca/Installa, Preferito e Versioni.
+- **Accessibilità** (scheda **Aspetto**): palette per il **daltonismo** (deuteranopia, protanopia, tritanopia), **alto contrasto**, tre **dimensioni dei testi**, suoni dell'interfaccia e **lettura vocale** di ciò che si seleziona (regione `aria-live`: funziona con l'Assistente vocale di Windows e i lettori di schermo). Le scelte restano salvate sul PC.
 - **Controller**: Xbox, PlayStation, Switch Pro e altri. Croce o stick per muoversi, A conferma, B indietro, Y cerca, X preferito, LB/RB scorrono velocemente. **Select+Start tenuti premuti per 2 secondi chiudono il gioco** in esecuzione: funziona anche mentre il gioco è in primo piano con i controller XInput (Xbox).
 - Funziona anche con la tastiera: frecce, Invio, Esc, `/` per cercare, `F` per i preferiti.
 
@@ -238,7 +241,29 @@ Da **Impostazioni › Aspetto** scegli il tema (inclusi: OLED, Chiaro, Retrò, N
 - un tema è solo CSS;
 - un plugin può aggiungere pulsanti, sezioni, pagine, store, fonti di metadati e reagire agli eventi.
 
-Guida completa con esempi: [docs/ESTENSIONI.md](docs/ESTENSIONI.md). È incluso il plugin di esempio **Statistiche**.
+Guida completa con esempi: [docs/ESTENSIONI.md](docs/ESTENSIONI.md). Sono inclusi i plugin **Statistiche**, **Link → Store** e **Store Minerva + Switch**.
+
+## Integrazioni esterne
+
+**💬 Discord** (Impostazioni › 🧩 Integrazioni): il tuo profilo mostra *«Sto giocando a …»* con titolo, console e tempo
+di sessione. Usa il **canale locale** di Discord (named pipe): nessun dato esce dal PC, nessun server, nessuna chiave.
+Serve solo l'**ID applicazione** (gratis: `discord.com/developers/applications` › *New Application* › copia
+l'*Application ID*) e il client Discord aperto. Le immagini non sono mostrabili: Discord accetta solo asset caricati
+sull'applicazione, non indirizzi web.
+
+## Esportare la libreria come pagina web
+
+`python -m gamescraper export-frontend --format html --out C:\mialibreria` (oppure Impostazioni › ▦ Libreria ›
+*Esporta per altri frontend* › **Pagina web**) produce:
+
+```
+index.html          la collezione, con ricerca, filtro per console, ordinamento e scheda del gioco
+covers/             le copertine (file locali)
+```
+
+È **un solo file più le immagini**, senza server e senza risorse esterne: si apre con doppio clic (anche da `file://`),
+da un NAS, da un disco di rete o da un sito statico. La pagina funziona anche con migliaia di giochi (le schede si
+disegnano man mano che scorri).
 
 ## Fonti dei dati e gestione dello scraping
 

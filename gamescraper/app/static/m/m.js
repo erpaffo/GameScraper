@@ -48,7 +48,8 @@ $("#pair-go").onclick = async () => {
 };
 
 /* ------------------------------------------------------------------ libreria */
-const L = { games: [], byId: new Map(), plats: new Map(), q: "", plat: store.get("plat", ""), chip: store.get("chip", "all"), shown: 0, items: [] };
+const L = { games: [], byId: new Map(), plats: new Map(), q: "", plat: store.get("plat", ""), chip: store.get("chip", "all"),
+  sort: store.get("sort", "title"), shown: 0, items: [], rated: new Map() };
 
 function decode(lib) {
   const gc = Object.fromEntries(lib.games.cols.map((c, i) => [c, i]));
@@ -60,7 +61,7 @@ function decode(lib) {
     return { id: r[gc.id], title: r[gc.title], sort: r[gc.sort], platform: r[gc.platform], year: r[gc.year], cover: r[gc.cover],
       store: r[gc.store] || null, installed: r[gc.installed], primary: g[rc.primary] === r[gc.id], fav: g[rc.favorite],
       hidden: g[rc.hidden], last: g[rc.last_played], playtime: g[rc.playtime], status: g[rc.status] || "",
-      q: fold(r[gc.title]) };
+      rating: r[gc.rating] ?? null, genre: (r[gc.genres] || "").split(",")[0].trim(), q: fold(r[gc.title]) };
   }).filter((g) => g.primary && !g.hidden && g.store !== "online");
   L.byId = new Map(L.games.map((g) => [g.id, g]));
 }
@@ -92,7 +93,16 @@ function filterLib() {
   else if (L.chip === "backlog") it = it.filter((g) => g.status === "backlog");
   else if (L.chip === "recent") it = it.filter((g) => g.last);
   if (toks.length) it = it.filter((g) => toks.every((t) => g.q.includes(t)));
-  it = it.slice().sort(L.chip === "recent" ? (a, b) => b.last - a.last : (a, b) => a.sort.localeCompare(b.sort));
+  const byTitle = (a, b) => a.sort.localeCompare(b.sort);
+  const sorters = {
+    "-year": (a, b) => (b.year || 0) - (a.year || 0) || byTitle(a, b),
+    year: (a, b) => (a.year || 9999) - (b.year || 9999) || byTitle(a, b),
+    "-rating": (a, b) => (b.rating ?? -1) - (a.rating ?? -1) || byTitle(a, b),
+    playtime: (a, b) => (b.playtime || 0) - (a.playtime || 0) || byTitle(a, b),
+    last: (a, b) => (b.last || 0) - (a.last || 0) || byTitle(a, b),
+    title: byTitle,
+  };
+  it = it.slice().sort(sorters[L.sort] || byTitle);
   L.items = it; L.shown = 0;
   $("#grid").innerHTML = it.length ? "" : `<p class="empty">Nessun gioco trovato.</p>`;
   moreLib();
@@ -111,6 +121,11 @@ function renderLibTools() {
   $("#plat").value = L.plat;
   const chips = [["all", "Tutti"], ["recent", "Recenti"], ["fav", "★ Preferiti"], ["playing", "▶ In corso"], ["backlog", "📋 Da giocare"]];
   $("#lib-chips").innerHTML = chips.map(([k, l]) => `<button data-chip="${k}" class="${L.chip === k ? "on" : ""}">${l}</button>`).join("");
+  // ordinamento: titolo, anno, voto, tempo di gioco, ultimo avviato
+  const SORTS = [["title", "Titolo A–Z"], ["-year", "Anno ↓"], ["year", "Anno ↑"], ["-rating", "Valutazione"],
+    ["playtime", "Tempo di gioco"], ["last", "Ultimo avviato"]];
+  $("#sort").innerHTML = SORTS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("");
+  $("#sort").value = L.sort;
 }
 
 /* ------------------------------------------------------------------ scheda del gioco */
@@ -255,7 +270,7 @@ const LAYOUTS = {
    motion = cosa fa il giroscopio (dsu: movimento agli emulatori, wheel: sterzo sulla levetta sinistra) */
 const SPECIAL = {
   buzz: { portrait: true }, wii: { portrait: true, motion: "dsu" }, wiis: { motion: "dsu" }, nunchuk: { motion: "dsu" },
-  wheel: { motion: "wheel" }, guitar: {}, arcade: {}, gun: {}, mic: { portrait: true },
+  wheel: { motion: "wheel" }, guitar: {}, arcade: {}, gun: {}, mic: { portrait: true }, ds: { portrait: true },
 };
 const WII = new Set(["wii", "wiis", "nunchuk"]);
 // console o titolo del gioco in corso -> aspetto (se «automatico» e' attivo e l'aspetto scelto e' un controller normale)
@@ -264,6 +279,7 @@ const AUTO_TITLE = [[/\bbuzz\b/i, "buzz"], [/guitar hero|rock band/i, "guitar"],
 function effLayout() {
   const pid = (RUN.key || "").split("/")[0];
   const active = ["starting", "extracting", "running"].includes(RUN.status);
+  if (active && RUN.dual) return "ds";  // DS/3DS: il PC ha avviato il gioco con lo schermo inferiore sul telefono
   if (!SET.autoLayout || !active || !LAYOUTS[SET.layout]) return SET.layout;
   const t = AUTO_TITLE.find(([re]) => re.test(RUN.title || ""));
   return (t && t[1]) || AUTO_LAYOUT[pid] || SET.layout;
@@ -367,6 +383,8 @@ function applyLayout() {
       if (lay === "wheel") WHEEL.base = null;
       if (prev === "mic") micStop();
     }
+    if (prev === "ds") dsStop();
+    if (lay === "ds") dsStart();
   }
   if (lay === "gun") { gunFit(); $("#gun-click").textContent = `👆 Clic al tocco: ${GUN.click ? "sì" : "no"}`; }
   if (sp) return;
@@ -430,12 +448,14 @@ async function openPad() {
   if (SET.gyro !== "off" || (sp && sp.motion)) await enableMotion();
   applyLayout();
   if (effLayout() === "wheel") WHEEL.base = null;
+  if (effLayout() === "ds") dsStart();  // riaprendo il controller: lo schermo torna sul telefono
   showSource();
   connectPad();
 }
 function closePad() {
   releaseAll();
   micStop();
+  dsStop();  // lo schermo inferiore torna sul PC
   $("#pad").hidden = true;
   $("#pad-lobby").hidden = true;
   rumble(0, 0);
@@ -516,6 +536,45 @@ function sliderMove(p, y) {
   const min = +(p.el.dataset.min || 0);
   const v = Math.max(min, Math.min(1, min + (1 - min) * (1 - (y - r.top) / r.height)));
   PAD[p.el.dataset.axis] = v; PAD.dirty = true;
+}
+
+/* ---- DS/3DS: lo schermo inferiore arriva dal PC (un JPEG per fotogramma), il dito fa da pennino */
+const DSS = { ws: null, url: null, last: 0, x: 0, y: 0 };
+function dsStart() {
+  if (DSS.ws) return;
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/m/screen`);
+  ws.binaryType = "blob";
+  DSS.ws = ws;
+  ws.onmessage = (e) => {
+    if (typeof e.data === "string") {
+      const m = JSON.parse(e.data);
+      if (m.t === "screen" && !m.on) { $("#ds-hint").hidden = false; $("#ds-img").removeAttribute("src"); }
+      return;
+    }
+    const u = URL.createObjectURL(e.data);
+    $("#ds-img").src = u;
+    if (DSS.url) URL.revokeObjectURL(DSS.url);
+    DSS.url = u;
+    $("#ds-hint").hidden = true;
+  };
+  ws.onclose = () => {  // rete o PC: si riprova finche' si e' sull'aspetto DS
+    DSS.ws = null;
+    if ($("#pad").dataset.lay === "ds" && !$("#pad").hidden) setTimeout(dsStart, 1500);
+  };
+}
+function dsStop() {
+  if (DSS.ws) { DSS.ws.onclose = null; DSS.ws.close(); DSS.ws = null; }
+}
+function dsTouch(e, down, force = false) {
+  const r = $("#ds-area").getBoundingClientRect();
+  if (e) {
+    DSS.x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    DSS.y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+  }
+  const now = performance.now();
+  if (!force && now - DSS.last < 16) return;  // al massimo ~60 al secondo
+  DSS.last = now;
+  if (DSS.ws && DSS.ws.readyState === 1) DSS.ws.send(JSON.stringify({ t: "touch", x: +DSS.x.toFixed(4), y: +DSS.y.toFixed(4), d: down ? 1 : 0 }));
 }
 
 /* ---- pistola ottica / touchpad: posizione assoluta sullo schermo del PC, il dito tiene premuto il tasto sinistro */
@@ -684,10 +743,13 @@ area.addEventListener("pointermove", editMove, { capture: true });
 for (const ev of ["pointerup", "pointercancel"]) area.addEventListener(ev, editUp, { capture: true });
 area.addEventListener("pointerdown", (e) => {
   e.preventDefault();
-  const t = e.target.closest("[data-btn], .stick, .dpad, .slider, .gun-area, .gun-r");
+  const t = e.target.closest("[data-btn], .stick, .dpad, .slider, .gun-area, .gun-r, .ds-area");
   if (!t) return;
   try { area.setPointerCapture(e.pointerId); } catch { /* non indispensabile: i movimenti arrivano comunque all'area */ }
-  if (t.classList.contains("gun-area")) {
+  if (t.classList.contains("ds-area")) {
+    PAD.pointers.set(e.pointerId, { kind: "ds", el: t });
+    dsTouch(e, true, true);
+  } else if (t.classList.contains("gun-area")) {
     PAD.pointers.set(e.pointerId, { kind: "gun", el: t });
     $("#gun-dot").classList.add("on"); $("#gun-hint").hidden = true;
     gunSend(...gunPos(e), true, true);
@@ -722,6 +784,7 @@ area.addEventListener("pointermove", (e) => {
   else if (p.kind === "dpad") setDpad(dpadDirs(p.el, e.clientX, e.clientY), p.el);
   else if (p.kind === "slider") sliderMove(p, e.clientY);
   else if (p.kind === "gun") gunSend(...gunPos(e), true);
+  else if (p.kind === "ds") dsTouch(e, true);
   else if (p.kind === "gunr") { /* tenuto */ }
   else if (p.el.matches(".fb, .gt-frets > div, .gt-strum > div, .ar-btns > div")) {
     // scivolando tra i tasti ABXY (o i tasti della chitarra) si passa da uno all'altro
@@ -740,6 +803,7 @@ function release(e) {
   else if (p.kind === "dpad") setDpad([], p.el);
   else if (p.kind === "slider") { p.el.classList.remove("down"); PAD[p.el.dataset.axis] = 0; PAD.dirty = true; }
   else if (p.kind === "gun") { $("#gun-dot").classList.remove("on"); gunSend(GUN.x, GUN.y, false, true); }
+  else if (p.kind === "ds") dsTouch(e, false, true);
   else if (p.kind === "gunr") { p.el.classList.remove("down"); GUN.right = false; gunSend(GUN.x, GUN.y, GUN.down, true); }
   else { p.el.classList.remove("down"); setBtn(p.name, false); }
 }
@@ -871,13 +935,71 @@ $("#pe-reset").onclick = () => {
 };
 $("#ps-layout").onchange = (e) => { $("#ps-nlabel-row").hidden = e.target.value !== "switch"; layoutHelp(); };
 
+/* ------------------------------------------------------------------ attività: lavori del PC e comandi */
+let actT = 0;
+const ACT_STATUS = { running: "⏳", done: "✓", error: "✕", idle: "·" };
+const ACT_ICON = { scan: "🔍", stores: "🛒", catalogs: "🌐", netmeta: "🖼", hltb: "⏱", top: "🏆", collart: "🖌", bulk: "💾", build: "▦" };
+
+function actJob(j) {
+  const pct = j.progress != null ? Math.round(j.progress * 100) : null;
+  return `<div class="act-row"><span class="act-ic">${ACT_ICON[j.id] || "•"}</span>
+    <div class="act-txt"><b>${esc(j.name)}</b><span class="muted small">${esc(j.phase || j.status)}</span>
+      ${pct != null ? `<div class="act-bar"><i style="width:${pct}%"></i></div>` : ""}</div>
+    <span class="act-st">${ACT_STATUS[j.status] || "·"}</span></div>`;
+}
+
+function renderActivity(d) {
+  const run = d.running || {};
+  const live = ["starting", "extracting", "running"].includes(run.status);
+  $("#act-run").innerHTML = live
+    ? `<div class="act-run"><div class="grow"><b>▶ ${esc(run.title || "Gioco")}</b>
+        <span class="muted small">${esc(run.emulator || "")}${run.message ? " · " + esc(run.message) : ""}</span></div>
+        <button class="btn" data-act="stop-game">⏹ Chiudi</button></div>`
+    : `<p class="muted small">Nessun gioco in esecuzione sul PC.</p>`;
+  const jobs = (d.jobs || []).filter((j) => j.status !== "idle");
+  $("#act-jobs").innerHTML = jobs.length ? jobs.map(actJob).join("")
+    : `<p class="muted small">Nessuna operazione in corso (store, copertine, libreria…).</p>`;
+  const scanning = (d.jobs || []).some((j) => j.id === "scan" && j.status === "running");
+  $("#act-btns").innerHTML = `
+    <button class="btn" data-act="stores">🌐 Aggiorna store</button>
+    <button class="btn" data-act="scan">🔍 Cerca nuovi giochi</button>
+    <button class="btn" data-act="rebuild">▦ Ricostruisci libreria</button>
+    ${scanning ? `<button class="btn" data-act="stop-scan">■ Interrompi ricerca</button>` : ""}`;
+  const c = d.counts || {};
+  $("#act-info").textContent = `${(c.groups || 0).toLocaleString("it")} giochi unici · ${(c.online || 0).toLocaleString("it")} dagli store`;
+}
+
+async function loadActivity() {
+  clearTimeout(actT);
+  let d;
+  try { d = await api("/api/mobile/state"); } catch (e) { return toast(e.message, true); }
+  renderActivity(d);
+  const busy = (d.jobs || []).some((j) => j.status === "running") || ["starting", "running"].includes((d.running || {}).status);
+  actT = setTimeout(() => { if (!$("#v-act").hidden) loadActivity(); }, busy ? 2000 : 8000);
+}
+
+$("#v-act").onclick = async (e) => {
+  const b = e.target.closest("[data-act]");
+  if (!b) return;
+  const action = b.dataset.act;
+  if (action === "stop-game" && !confirm("Chiudere il gioco sul PC?")) return;
+  b.disabled = true;
+  try { renderActivity((await api("/api/mobile/action", { body: { action } })).state); }
+  catch (err) { toast(err.message, true); }
+  b.disabled = false;
+  loadActivity();
+};
+
+
 /* ------------------------------------------------------------------ navigazione */
 function tab(name) {
   if (name === "pad") return openPad();
   document.querySelectorAll(".tabbar button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
   $("#v-home").hidden = name !== "home";
   $("#v-lib").hidden = name !== "lib";
+  $("#v-act").hidden = name !== "act";
   if (name === "lib" && !$("#grid").children.length) filterLib();
+  if (name === "act") loadActivity();
 }
 document.querySelector(".tabbar").onclick = (e) => { const b = e.target.closest("[data-tab]"); if (b) tab(b.dataset.tab); };
 document.addEventListener("click", (e) => {
@@ -887,6 +1009,7 @@ document.addEventListener("click", (e) => {
 let qT = 0;
 $("#q").oninput = (e) => { clearTimeout(qT); qT = setTimeout(() => { L.q = e.target.value; filterLib(); }, 200); };
 $("#plat").onchange = (e) => { L.plat = e.target.value; store.set("plat", L.plat); filterLib(); };
+$("#sort").onchange = (e) => { L.sort = e.target.value; store.set("sort", L.sort); filterLib(); };
 $("#lib-chips").onclick = (e) => {
   const b = e.target.closest("[data-chip]");
   if (!b) return;

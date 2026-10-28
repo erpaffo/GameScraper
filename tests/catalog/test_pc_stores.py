@@ -16,6 +16,35 @@ from gamescraper import config  # noqa: E402
 from gamescraper.cache import Cache  # noqa: E402
 from gamescraper.library import build as B  # noqa: E402
 
+# --------------------------------------------------------------- client HTTP usa-e-chiudi
+_LIVE: list = []
+
+
+def client(cfg):
+    """TestClient registrato: a fine test si chiudono i database (su Windows un file aperto resta bloccato)."""
+    from fastapi.testclient import TestClient
+
+    from gamescraper.app.server import create_app
+
+    api = TestClient(create_app(cfg))
+    _LIVE.append(api)
+    return api
+
+
+def teardown_function(_=None):
+    """Eseguito da pytest dopo ogni test: spegnimento dell'app e chiusura delle connessioni."""
+    while _LIVE:
+        api = _LIVE.pop()
+        for handler in getattr(api.app.router, "on_shutdown", []):
+            try:
+                handler()
+            except Exception:
+                pass
+        try:
+            api.close()
+        except Exception:
+            pass
+
 URL = "https://repack.example.test/giochi/"
 URL2 = "https://direct.example.test/pc/"
 
@@ -79,7 +108,7 @@ def test_api_pc_stores(tmp_path: Path):
     from fastapi.testclient import TestClient
     from gamescraper.app.server import create_app
     cfg = make_env(tmp_path)
-    api = TestClient(create_app(cfg))
+    api = client(cfg)
     d = api.get("/api/pc-stores").json()
     assert d["stores"] == [] and d["job"]["status"] == "idle", d
     d = api.post("/api/pc-stores", json={"stores": [{"url": URL, "kind": "repack"}], "refresh": False}).json()

@@ -43,13 +43,23 @@
         <select id="plat"></select>
       </div>
       <div class="chips" id="lib-chips"></div>
+      <div class="row-tools"><select id="sort" title="Ordinamento"></select></div>
       <div class="grid" id="grid"></div>
       <div id="more"></div>
+    </section>
+    <section id="v-act" class="view" hidden>
+      <h2 class="sec">Attività</h2>
+      <div id="act-run"></div>
+      <div id="act-jobs"></div>
+      <h2 class="sec">Comandi sul PC</h2>
+      <div class="act-btns" id="act-btns"></div>
+      <p class="muted small" id="act-info"></p>
     </section>
 
     <nav class="tabbar">
       <button data-tab="home" class="on"><span>🏠</span>Home</button>
       <button data-tab="lib"><span>🔍</span>Libreria</button>
+      <button data-tab="act"><span>⏳</span>Attività</button>
       <button data-tab="pad"><span>🎮</span>Controller</button>
     </nav>
   </main>
@@ -143,6 +153,15 @@
         <div class="ar-btns"><div data-btn="x">LP</div><div data-btn="y">MP</div><div data-btn="rb">HP</div>
           <div data-btn="a">LK</div><div data-btn="b">MK</div><div data-btn="rt">HK</div></div>
         <div class="wm-row ar-mid"><div data-btn="back">Select</div><div data-btn="start">Start</div><div data-btn="lb">LB</div><div data-btn="lt">LT</div></div>
+      </div>
+      <!-- DS/3DS: lo schermo inferiore arriva dal PC; i tasti nelle posizioni Nintendo (in alto X, a destra A) -->
+      <div class="sp" id="sp-ds">
+        <div class="wm-row ds-lr"><div data-btn="lb">L</div><div data-btn="rb">R</div></div>
+        <div class="ds-area" id="ds-area"><img id="ds-img" alt=""><span id="ds-hint">Lo schermo arriva dal PC…</span></div>
+        <div class="dpad ds-dpad"><span class="du">▲</span><span class="dd">▼</span><span class="dl">◀</span><span class="dr">▶</span></div>
+        <div class="ds-face"><div class="fb y" data-btn="y">X</div><div class="fb b" data-btn="b">A</div>
+          <div class="fb a" data-btn="a">B</div><div class="fb x" data-btn="x">Y</div></div>
+        <div class="wm-row ds-mid"><div data-btn="back">Select</div><div data-btn="start">Start</div></div>
       </div>
       <div class="sp" id="sp-gun">
         <div class="gun-area" id="gun-area"><span id="gun-hint">Tocca dove vuoi mirare: il dito tiene premuto il tasto sinistro del mouse</span><i id="gun-dot"></i></div>

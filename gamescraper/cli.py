@@ -160,11 +160,17 @@ def cmd_relink(args):
 
 
 def cmd_export_frontend(args):
-    """Libreria per ES-DE (gamelist.xml + downloaded_media) o Pegasus (metadata.pegasus.txt + media)."""
+    """Libreria per ES-DE (gamelist.xml), Pegasus (metadata.pegasus.txt) o pagina web statica."""
     from . import frontends
     cfg = C.load(args.config)
     out = Path(args.out) if args.out else Path(cfg.output) / args.format
     plats = [p.strip() for p in args.platform.split(",")] if args.platform else None
+    if args.format == "html":
+        summary = frontends.export_html(Path(cfg.cache), out, plats, title=args.title or "La mia libreria")
+        for pid, n in sorted(summary.items()):
+            console.print(f"  {pid}: {n} giochi")
+        console.print(f"Pagina web: {(out / 'index.html')} · {sum(summary.values())} giochi")
+        return
     fn = frontends.export_esde if args.format == "esde" else frontends.export_pegasus
     summary = fn(Path(cfg.cache), out, plats)
     for pid, n in sorted(summary.items()):
@@ -267,10 +273,11 @@ def main(argv=None):
     sub.add_parser("library", help="ricostruisce la libreria del frontend (giochi unificati + collezioni)")
     rl = sub.add_parser("relink", help="riassocia i dati dei giochi rinominati/spostati (anteprima; --apply per eseguire)")
     rl.add_argument("--apply", action="store_true")
-    xf = sub.add_parser("export-frontend", help="esporta la libreria per ES-DE o Pegasus (metadati + media)")
-    xf.add_argument("--format", choices=("esde", "pegasus"), default="esde")
+    xf = sub.add_parser("export-frontend", help="esporta la libreria per ES-DE, Pegasus o come pagina web statica")
+    xf.add_argument("--format", choices=("esde", "pegasus", "html"), default="esde")
     xf.add_argument("--out", help="cartella di destinazione (default: <output>/<formato>)")
     xf.add_argument("-p", "--platform", help="solo queste console, separate da virgola")
+    xf.add_argument("--title", help="titolo della pagina web (solo --format html)")
     ap_app = sub.add_parser("app", help="avvia il frontend")
     ap_app.add_argument("--port", type=int, default=8765)
     ap_app.add_argument("--browser", action="store_true", help="apri nel browser invece che in una finestra")

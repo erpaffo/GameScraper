@@ -1,5 +1,24 @@
 # Changelog
 
+## Non rilasciato
+
+
+### Aggiunto
+
+- Salvataggi nel formato di Ludusavi: scegliendo la stessa cartella (Impostazioni › Libreria › Salvataggi dei giochi) l'app e Ludusavi vedono e ripristinano le stesse copie; le copie già fatte vengono convertite da sole
+- Salvataggi dei giochi PC trovati da soli con il manifest di Ludusavi (oltre 50.000 giochi, aggiornato ogni settimana), con le copie automatiche prima e dopo ogni partita
+- Presenza su Discord (Impostazioni > Integrazioni): mostra «Sto giocando a ...» con titolo, console e tempo di sessione tramite il canale locale di Discord, senza server ne' dati inviati fuori dal PC
+- Esportazione della libreria come pagina web statica (index.html + copertine): ricerca, filtro per console, ordinamento e scheda del gioco, senza server ne' risorse esterne
+- Big Picture accessibile: palette per il daltonismo, alto contrasto, tre dimensioni dei testi e lettura vocale di cio' che si seleziona
+- Telefono come telecomando completo: nuova scheda Attivita' con i lavori in corso del PC (store, copertine, libreria) e i comandi Aggiorna store, Cerca nuovi giochi, Ricostruisci libreria e Chiudi gioco; in libreria ordinamento per anno, valutazione, tempo di gioco e ultimo avviato
+
+### Corretto
+
+- I database dell'app si chiudono all'uscita (su Windows un file ancora aperto bloccava la cartella dati), quindi backup e spostamenti della cartella dati non trovano piu' file in uso
+### In corso
+
+- Telefono come schermo touch per DS e 3DS — `gamescraper/remote/dualscreen.py` `tests/test_dualscreen.py`
+
 ## 0.6.3 (2026-10-28)
 ### Corretto
 

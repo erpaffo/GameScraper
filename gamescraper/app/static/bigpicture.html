@@ -19,7 +19,8 @@
   <main id="bp-main"></main>
   <footer id="bp-hints"></footer>
   <div id="bp-running" hidden></div>
-  <div id="bp-toast" hidden></div>
+  <div id="bp-toast" role="status" aria-live="polite" hidden></div>
+  <div id="bp-live" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
   <div id="bp-loading"><div class="logo big">◆</div><p>Caricamento della libreria…</p></div>
 </div>
 <script src="/static/core.js?v={{v}}"></script>

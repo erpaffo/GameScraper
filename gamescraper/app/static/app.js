@@ -846,7 +846,7 @@ async function loadSwitchContents(d) {
 
 /* ---- salvataggi del gioco: versioni prima e dopo ogni partita, rollback, percorsi manuali e rilevati */
 const SV_REASON = { "prima-della-partita": "prima della partita", "dopo-partita": "dopo la partita", manuale: "manuale",
-  "prima-del-ripristino": "prima del ripristino" };
+  "prima-del-ripristino": "prima del ripristino", ludusavi: "fatta da Ludusavi" };
 async function loadSaves(d) {
   let r;
   try { r = await api(`/api/game/${d.id}/saves`); } catch { return; }
@@ -1963,6 +1963,8 @@ async function loadRemote() {
     <div class="row wrap small">
       <label class="chk"><input type="checkbox" id="ph-mouse" ${ph.mouse ? "checked" : ""}> Il telefono può muovere il mouse del PC
         <span class="muted">(pistola ottica / touchpad: dà il controllo del mouse a chi ha un telefono abbinato)</span></label>
+      <label class="chk"><input type="checkbox" id="ph-touch" ${ph.touchscreen ? "checked" : ""}> Il telefono fa da schermo touch nei giochi DS e 3DS
+        <span class="muted">(se all'avvio è aperto sul controller: sul PC solo lo schermo superiore; con melonDS, Citra, Azahar, Lime3DS)</span></label>
     </div>
     <div class="row wrap small">
       <label>Microfono del telefono (SingStar) → uscita del PC
@@ -2530,12 +2532,35 @@ function showTab(tab) {
   else if (tab === "remote") loadRemote();
   else if (tab === "acc") { loadAccounts(); loadPcStores(); }
   else if (tab === "src") loadSources();
+  else if (tab === "integ") loadIntegrations();
   else if (tab === "look") loadAppearance();
   else if (tab.startsWith("ext:")) {
     const t = GS.ui.settingsTabs.find((x) => "ext:" + x.id === tab);
     const pane = document.querySelector(`[data-pane="${CSS.escape(tab)}"]`);
     if (t && pane) { pane.innerHTML = ""; Promise.resolve(t.render(pane, GS)).catch((e) => { pane.textContent = e.message; }); }
-  } else { api("/api/status").then(showStatus); loadBackups(); loadSync(); }
+  } else { api("/api/status").then(showStatus); loadBackups(); loadSync(); loadSaveDir(); }
+}
+
+/* ---- impostazioni › integrazioni (Discord) */
+function renderIntegrations(d) {
+  const dc = (d && d.discord) || {};
+  $("#dc-on").checked = !!dc.enabled;
+  $("#dc-time").checked = dc.show_time !== false;
+  if (dc.client_id) $("#dc-id").value = dc.client_id;
+  let html;
+  if (!dc.enabled) html = `<span class="muted">Presenza spenta.</span>`;
+  else if (!dc.client_id) html = `<span class="status-bad">Manca l'ID applicazione: senza, Discord non accetta la presenza.</span>`;
+  else if (dc.connected) html = `✅ <b>Collegato a Discord</b>${dc.playing ? ` · in onda: ${esc(dc.playing)}` : ""}`;
+  else {
+    html = `<span class="status-bad">Non collegato: ${esc(dc.error || "Discord non risponde")}</span>`
+      + ` <span class="muted small">(apri il client Discord sul PC e premi Salva)</span>`;
+  }
+  if (d && d.log_file) html += `<br><span class="muted small">Log su file: ${esc(d.log_file)}</span>`;
+  $("#dc-state").innerHTML = html;
+}
+
+async function loadIntegrations() {
+  try { renderIntegrations(await api("/api/integrations")); } catch (e) { toast(e.message, true); }
 }
 
 /* ---- info: versione, aggiornamenti, novita' */
@@ -2770,6 +2795,13 @@ function bindSync() {
     $("#sync-last").textContent = "Sincronizzazione in corso…";
     try { await loadSync(await api("/api/sync/now", { body: {} })); await reload(true); } catch (e) { toast(e.message, true); } finally { btn.disabled = false; }
   };
+}
+
+/** Cartella delle copie dei salvataggi dei giochi (formato Ludusavi). */
+async function loadSaveDir(r) {
+  try { r = r || await api("/api/app/save-dir"); } catch { return; }
+  $("#save-dir").value = r.save_dir;
+  $("#save-dir").placeholder = `Predefinita: ${r.default}`;
 }
 
 async function backupNow() {
@@ -3100,6 +3132,15 @@ function bind() {
     catch (err) { return toast(err.message, true); }
     pollStoreRefresh();
   });
+  // integrazioni: presenza su Discord
+  $("#dc-save").onclick = async () => {
+    const body = { enabled: $("#dc-on").checked, client_id: $("#dc-id").value.trim(), show_time: $("#dc-time").checked };
+    let d;
+    try { d = await api("/api/integrations/discord", { body }); } catch (e) { return toast(e.message, true); }
+    $("#dc-state").textContent = "";
+    renderIntegrations({ discord: d.discord });
+    toast(body.enabled ? "Presenza su Discord aggiornata" : "Presenza su Discord spenta");
+  };
   $("#pcst-refresh").onclick = async () => {
     try { await api("/api/pc-stores/refresh", { body: {} }); } catch (e) { return toast(e.message, true); }
     pollStoreRefresh(); // la coda unica mostra l'avanzamento nel blocco «Aggiornamento degli store»
@@ -3288,6 +3329,9 @@ function bind() {
   $("#scan-btn").onclick = () => openSettings("scan");
   $("#rebuild-btn").onclick = rebuild;
   $("#backup-now").onclick = backupNow;
+  $("#save-dir-pick").onclick = async () => { const p = await pickPath("folder"); if (p) $("#save-dir").value = p; };
+  $("#save-dir-save").onclick = () => api("/api/app/save-dir", { body: { save_dir: $("#save-dir").value } })
+    .then((r) => { loadSaveDir(r); toast("Cartella dei salvataggi salvata"); }, (e) => toast(e.message, true));
   bindSync();
   $("#profile-btn").onclick = (e) => profileMenu(e.currentTarget);
   $("#ra-save").onclick = async () => {
@@ -3301,12 +3345,18 @@ function bind() {
     if (o) { e.preventDefault(); api("/api/open", { body: { url: o.dataset.open } }); }
   });
   $("#xf-pick").onclick = async () => { const p = window.pywebview?.api ? await pickPath("folder") : null; if (p) $("#xf-out").value = p; };
+  // la pagina web ha un titolo proprio: il campo compare solo per quel formato
+  $("#xf-format").onchange = () => { $("#xf-title-row").hidden = $("#xf-format").value !== "html"; };
+  $("#xf-title-row").hidden = $("#xf-format").value !== "html";
   $("#xf-go").onclick = async (e) => {
     e.target.disabled = true;
     $("#xf-info").textContent = "Esportazione in corso (copia anche le immagini, può richiedere qualche minuto)…";
     try {
-      const r = await api("/api/export/frontend", { body: { format: $("#xf-format").value, out_dir: $("#xf-out").value } });
-      $("#xf-info").textContent = `Esportati ${r.games.toLocaleString("it")} giochi di ${Object.keys(r.summary).length} console in ${r.out_dir}`;
+      const r = await api("/api/export/frontend", {
+        body: { format: $("#xf-format").value, out_dir: $("#xf-out").value, title: $("#xf-title").value.trim() },
+      });
+      $("#xf-info").textContent = `Esportati ${r.games.toLocaleString("it")} giochi di ${Object.keys(r.summary).length} console in ${r.out_dir}`
+        + (r.index ? ` · apri ${r.index}` : "");
     } catch (err) { $("#xf-info").textContent = ""; toast(err.message, true); }
     e.target.disabled = false;
   };
@@ -3434,6 +3484,7 @@ function bind() {
   $('[data-pane="remote"]').addEventListener("change", async (e) => {
     const t = e.target;
     if (t.id === "ph-mouse") phoneSet({ mouse: t.checked });
+    if (t.id === "ph-touch") phoneSet({ touchscreen: t.checked });
     else if (t.id === "ph-mic") phoneSet({ mic_device: t.value });
     else if (t.dataset.swap && t.value !== "") {
       try { await api("/api/phone/swap", { body: { a: +t.dataset.swap, b: +t.value } }); } catch (err) { toast(err.message, true); }

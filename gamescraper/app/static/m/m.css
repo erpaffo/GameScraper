@@ -222,6 +222,17 @@ h2.sec { font-size: 17px; margin: 18px 0 8px; }
 .gt-mid { left: 58vw; right: 3vw; bottom: 3vh; height: 11vh; }
 /* arcade */
 .ar-dpad { left: 6vw; top: 22vh; width: 46vh; height: 46vh; }
+/* DS/3DS in verticale: L/R, schermo inferiore 4:3, croce e tasti, Select/Start */
+.ds-lr { left: 3vw; right: 3vw; top: 1.5vh; height: 6vh; justify-content: space-between !important; }
+.ds-lr > [data-btn] { flex: 0 0 30vw !important; }
+.ds-area { left: 50%; top: 9vh; width: min(96vw, 66vh); aspect-ratio: 4 / 3; transform: translateX(-50%); background: #000;
+  border-radius: 6px; overflow: hidden; touch-action: none; }
+.ds-area img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; -webkit-user-drag: none; user-select: none; }
+.ds-area #ds-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #9aa;
+  font-size: 14px; text-align: center; padding: 0 8vw; }
+.ds-dpad { left: 5vw; bottom: 13vh; width: 38vw; height: 38vw; max-height: 26vh; max-width: 26vh; }
+.ds-face { right: 5vw; bottom: 13vh; width: 40vw; height: 40vw; max-height: 27vh; max-width: 27vh; }
+.ds-mid { left: 22vw; right: 22vw; bottom: 3vh; height: 6.5vh; }
 .ar-btns { right: 4vw; top: 20vh; width: 48vw; height: 56vh; display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.5vh 2vw; }
 .ar-btns > div { position: static; border-radius: 50% !important; font-size: 15px; aspect-ratio: 1; max-height: 26vh; justify-self: center; width: 26vh; }
 .ar-btns > div:nth-child(-n+3) { color: #4aa3ff; } .ar-btns > div:nth-child(n+4) { color: #ff5f5f; }
@@ -257,3 +268,24 @@ h2.sec { font-size: 17px; margin: 18px 0 8px; }
 #toast { position: fixed; left: 50%; bottom: calc(80px + var(--safe-b)); transform: translateX(-50%); z-index: 50;
   background: #2a2f42; padding: 10px 16px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.5); max-width: 90%; }
 #toast.err { background: #5a2430; }
+
+/* libreria: riga con l'ordinamento */
+.row-tools { padding: 0 14px 8px; display: flex; gap: 8px; }
+.row-tools select { flex: 1; background: #141821; color: var(--text); border: 1px solid #23273a; border-radius: 10px;
+  padding: 9px 10px; font: inherit; }
+
+/* attivit?: gioco in corso, lavori del PC, comandi */
+.act-run { display: flex; align-items: center; gap: 10px; background: #141821; border: 1px solid #23273a;
+  border-radius: 12px; padding: 12px 14px; margin: 0 14px 12px; }
+.act-run .grow { display: flex; flex-direction: column; min-width: 0; }
+.act-run b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.act-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #1c2030; }
+.act-ic { width: 22px; text-align: center; opacity: .85; }
+.act-txt { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.act-txt b { font-size: 14px; font-weight: 650; }
+.act-txt .small { font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.act-st { font-size: 15px; opacity: .85; }
+.act-bar { height: 5px; background: #23273a; border-radius: 99px; overflow: hidden; margin-top: 4px; }
+.act-bar i { display: block; height: 100%; background: var(--accent, #5b8cff); transition: width .3s ease; }
+.act-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 14px; }
+.act-btns .btn { padding: 12px 10px; font-size: 14px; }

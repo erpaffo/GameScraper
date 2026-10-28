@@ -199,13 +199,81 @@ def create_app(cfg) -> FastAPI:
     user = _ActiveUser(user_of(active if any(p["id"] == active for p in SY.profiles(cfg)) else "default"))
     sync = SY.Sync(cfg, user_of)
     events = X.Events()
+    # presenza su Discord («sto giocando a …»): si aggiorna sugli eventi del launcher
+    from ..discordrpc import PresenceService
+
+    discord = PresenceService(cfg, save=lambda values: C.save_settings(cfg, app=values))
+    events.on("game_started", discord.game_started)
+    events.on("game_stopped", discord.game_stopped)
     from ..library import screens as SC
     shots = SC.Shots(cfg.cache, Path(cfg.cache) / "userdata.db")
-    launcher = L.Launcher(cfg, user, on_event=events.emit, shots=shots, profile_of=user.profile)
+    launcher = L.Launcher(cfg, user, on_event=events.emit, shots=shots, profile_of=user.profile,
+                          prelaunch=lambda st: _ds_prelaunch(st))
     from ..remote import phone as PH
     phone_hub = PH.PhoneHub(cfg, C.save_settings)
     PH.register(app, phone_hub, STATIC)
     app.state.phone_hub = phone_hub  # per i test (vibrazioni verso il telefono)
+    app.state.launcher = launcher  # per i test (avvio dei giochi DS/3DS con il telefono)
+
+    # ------------------------------------------------------------ DS/3DS: il telefono come schermo touch
+    from ..remote import dualscreen as DSC
+    ds = {"state": None}
+
+    def _ds_restore(*_):
+        """Fine partita (o avvio dopo una chiusura a meta'): la configurazione dell'emulatore torna com'era."""
+        st = ds["state"] or cfg.app.get("dualscreen")
+        ds["state"], phone_hub.screen = None, None
+        if st:
+            try:
+                DSC.restore(st)
+            except OSError as e:
+                print(f"configurazione dell'emulatore non ripristinata: {e}", file=sys.stderr)
+            cfg.app.pop("dualscreen", None)
+            C.save_settings(cfg, app={"dualscreen": None})
+
+    def _ds_prelaunch(st: dict) -> list[str]:
+        """Prima dell'avvio: con il telefono collegato, emulatore a finestre separate e schermo superiore a tutto schermo."""
+        platform = (st.get("key") or "").split("/")[0]
+        if not DSC.wanted(platform, st.get("emulator_id"), bool(phone_hub.conf.get("touchscreen")), bool(phone_hub.slots)):
+            return []
+        try:
+            ds["state"] = DSC.apply(st["emulator_id"], st["exe"])
+        except OSError as e:  # file dell'emulatore non scrivibile: si gioca come sempre, con i due schermi sul PC
+            print(f"schermo touch sul telefono non attivato: {e}", file=sys.stderr)
+            return []
+        C.save_settings(cfg, app={"dualscreen": ds["state"]})  # per il ripristino anche se l'app si chiude a meta'
+        threading.Thread(target=_ds_session, args=(getattr(launcher, "_proc", None),), daemon=True).start()
+        return [DSC.FULLSCREEN_ARG]
+
+    def _ds_session(old):
+        """Trova la finestra dello schermo inferiore del processo appena avviato e la passa al telefono."""
+        for _ in range(100):
+            proc = getattr(launcher, "_proc", None)
+            if proc is not None and proc is not old:
+                break
+            time.sleep(0.1)
+        else:
+            return
+        s = DSC.Session(proc.pid)
+        for _ in range(120):
+            if proc.poll() is not None or not ds["state"]:
+                return
+            if s.find():
+                break
+            time.sleep(0.5)
+        else:
+            return
+        time.sleep(2)  # le finestre prendono la loro dimensione: serve a misurare la barra dei menu
+        s.find()
+        s.hide()
+        phone_hub.screen = s
+        time.sleep(10)
+        if phone_hub.screen is s and not phone_hub.screen_clients:
+            s.pip()  # il telefono non ha aperto lo schermo: resta usabile sul PC
+
+    events.on("game_stopped", _ds_restore)
+    if cfg.app.get("dualscreen"):
+        _ds_restore()
     plugin_errors = X.load_backends(app, cfg, events)
     thumbs_dir = Path(cfg.cache) / "thumbs"
     state = {"building": False, "build_log": [], "build_stats": None, "thumbs_total": 0, "thumbs_done": 0}
@@ -730,7 +798,7 @@ def create_app(cfg) -> FastAPI:
 
     @app.get("/api/running")
     def api_running():
-        return launcher.running()
+        return {**launcher.running(), "dual": bool(ds["state"])}  # dual: il telefono fa da schermo inferiore
 
     @app.post("/api/running/stop")
     def api_running_stop():
@@ -1903,8 +1971,8 @@ def create_app(cfg) -> FastAPI:
     def api_export_frontend(body: dict = Body(...)):
         from .. import frontends
         fmt = body.get("format")
-        if fmt not in ("esde", "pegasus"):
-            raise HTTPException(400, "formato non valido (esde o pegasus)")
+        if fmt not in ("esde", "pegasus", "html"):
+            raise HTTPException(400, "formato non valido (esde, pegasus o html)")
         raw = str(body.get("out_dir") or "").strip().strip('"')
         out = Path(os.path.expandvars(os.path.expanduser(raw))) if raw else Path(cfg.output) / fmt
         if export_state["running"]:
@@ -1912,13 +1980,19 @@ def create_app(cfg) -> FastAPI:
         export_state["running"] = True
         try:
             out.mkdir(parents=True, exist_ok=True)
-            fn = frontends.export_esde if fmt == "esde" else frontends.export_pegasus
-            summary = fn(Path(cfg.cache), out, [p for p in body.get("platforms") or [] if p in P.PLATFORMS] or None)
+            plats = [p for p in body.get("platforms") or [] if p in P.PLATFORMS] or None
+            if fmt == "html":
+                summary = frontends.export_html(Path(cfg.cache), out, plats,
+                                               title=str(body.get("title") or "La mia libreria"))
+            else:
+                fn = frontends.export_esde if fmt == "esde" else frontends.export_pegasus
+                summary = fn(Path(cfg.cache), out, plats)
         except OSError as e:
             raise HTTPException(400, f"Cartella non scrivibile: {e}")
         finally:
             export_state["running"] = False
-        return {"ok": True, "summary": summary, "games": sum(summary.values()), "out_dir": str(out)}
+        return {"ok": True, "summary": summary, "games": sum(summary.values()), "out_dir": str(out),
+                "index": str(out / "index.html") if fmt == "html" else None}
 
     # ------------------------------------------------------------ Switch: aggiornamento e DLC presenti nella cartella
     switch_keys: dict = {}
@@ -1952,18 +2026,30 @@ def create_app(cfg) -> FastAPI:
 
     # ------------------------------------------------------------ salvataggi dei giochi (versioni e rollback)
     from ..library import saves as SV
+    from ..library import ludusavi as LM
 
     def _saves_of(g: dict) -> dict:
         """Salvataggi del gioco con l'emulatore che lo avvierebbe adesso: trovati (paths), condivisi con altri giochi
         (shared), e le cartelle dove cercarli se non ce ne sono (roots). all = quelli da copiare, manuali compresi."""
         manual = SV.resolved_manual(cfg, g["key"])
-        r = {"emulator": "", "paths": [], "shared": [], "roots": []}
+        # nome del gioco nella cartella delle copie (come in Ludusavi); per le console con la console, contro gli omonimi
+        r = {"emulator": "", "paths": [], "shared": [], "roots": [],
+             "name": g["title"] if g.get("store") else f"{g['title']} ({P.PLATFORMS[g['platform']].name if g['platform'] in P.PLATFORMS else g['platform']})"}
         if g.get("store") == "ports":  # port PC: con portable.txt i salvataggi stanno nella sua cartella
             m = PT.all_installed(cfg).get(g["key"].split(":", 1)[1])
             r.update(emulator="Port PC", paths=PT.user_files(Path(m["folder"]), m) if m else [],
                      roots=[Path(m["folder"])] if m else [])
-        elif g.get("store"):  # gioco PC: solo percorsi manuali o rilevati dalla partita
+        elif g.get("store"):  # gioco PC: percorsi dal manifest di Ludusavi, manuali o rilevati dalla partita
             r.update(emulator=g["store"], roots=[Path(g["install_dir"])] if g.get("install_dir") else [])
+            man = LM.load(cfg)
+            sid = g["key"].split(":", 1)[-1]
+            name = man and LM.find(man, g["store"], sid, g["title"], g.get("install_dir") or "")
+            if name:
+                root = ""
+                if g["store"] == "steam":
+                    from ..stores.steam import Steam
+                    root = str(Steam(cfg, None, None, print).path() or "")
+                r.update(name=name, emulator="Ludusavi", paths=LM.save_paths(man, name, g["store"], sid, g.get("install_dir") or "", root))
         else:
             p = P.PLATFORMS.get(g["platform"])
             try:
@@ -2005,7 +2091,7 @@ def create_app(cfg) -> FastAPI:
         g = lib.get(gid)
         s = _saves_of(g)
         before = (SV.list_backups(cfg, g["key"])[:1] or [{}])[0].get("name")
-        out = SV.backup(cfg, g["key"], g["title"], s["all"]) if s["all"] else None
+        out = SV.backup(cfg, g["key"], g["title"], s["all"], name=s["name"]) if s["all"] else None
         if not out:
             raise HTTPException(404, "Nessun salvataggio trovato per questo gioco: aggiungi a mano la cartella dove "
                                      f"li tiene ({s['emulator'] or 'emulatore non configurato'})")
@@ -2042,6 +2128,29 @@ def create_app(cfg) -> FastAPI:
         SV.delete(cfg, lib.get(gid)["key"], body.get("name") or "")
         return {"ok": True}
 
+    @app.get("/api/app/save-dir")
+    def api_save_dir():
+        return {"save_dir": cfg.app.get("save_dir") or "", "default": str(Path(cfg.cache) / "saves"),
+                "manifest": LM.path(cfg).is_file()}
+
+    @app.post("/api/app/save-dir")
+    def api_save_dir_set(body: dict = Body(...)):
+        """Cartella delle copie dei salvataggi (es. quella di Ludusavi, per condividere le copie). Vuota = predefinita.
+        Le copie gia' fatte restano dove sono: l'indice di ogni gioco ricorda solo il nome della sua cartella."""
+        raw = str(body.get("save_dir") or "").strip().strip('"')
+        if raw:
+            p = Path(raw)
+            if not p.is_absolute():
+                raise HTTPException(400, "Serve un percorso completo")
+            try:
+                p.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                raise HTTPException(400, f"Cartella non utilizzabile: {e}")
+        C.save_settings(cfg, app={"save_dir": raw})
+        if raw:
+            cfg.app["save_dir"] = raw
+        return api_save_dir()
+
     @app.post("/api/game/{gid}/saves/paths")
     def api_saves_paths(gid: int, body: dict = Body(...)):
         try:
@@ -2065,7 +2174,7 @@ def create_app(cfg) -> FastAPI:
             return None
         s = _saves_of(g)
         if s["all"] and _size(s["all"]) <= 1 << 30:  # oltre 1 GB solo a mano: non si riempie il disco in silenzio
-            SV.backup(cfg, g["key"], g["title"], s["all"], reason)
+            SV.backup(cfg, g["key"], g["title"], s["all"], reason, name=s["name"])
         return s
 
     def _saves_before_game(st: dict):
@@ -2089,7 +2198,7 @@ def create_app(cfg) -> FastAPI:
                 roots += [Path.home() / "Saved Games", SV._docs(), *(Path(x) for x in env if x)]
                 if env[1]:
                     roots.append(Path(env[1]).parent / "LocalLow")
-            found = SV.changed_since(roots, t0, exclude=[Path(cfg.cache)])
+            found = SV.changed_since(roots, t0, exclude=[Path(cfg.cache), SV.backup_root(cfg)])
             if found:
                 SV.suggest(cfg, st["key"], found)
         except Exception as e:  # una copia mancata non deve disturbare
@@ -2485,6 +2594,14 @@ def create_app(cfg) -> FastAPI:
     @app.on_event("shutdown")
     def _phone_shutdown():
         phone_hub.stop()
+        # chiude i database aperti dall'app: su Windows un file ancora aperto impedisce di spostare
+        # o cancellare la cartella dati (e nei test il file temporaneo resterebbe bloccato)
+        for closer in (getattr(user, "close", None), getattr(shots, "close", None)):
+            try:
+                if callable(closer):
+                    closer()
+            except Exception:
+                pass
 
     @app.on_event("startup")
     def _startup():
@@ -2496,6 +2613,79 @@ def create_app(cfg) -> FastAPI:
             threading.Thread(target=_rebuild, daemon=True).start()
         else:
             threading.Thread(target=_pregen_thumbs, daemon=True).start()
+
+    # ------------------------------------------------------------ integrazioni (Discord)
+    @app.get("/api/integrations")
+    def api_integrations():
+        """Stato delle integrazioni esterne. Discord usa l'IPC locale (nessuna chiave, nessun server)."""
+        from .. import applog
+        return {"discord": discord.state(), "log_file": str(applog.current()) if applog.enabled() else None}
+
+    @app.post("/api/integrations/discord")
+    def api_integrations_discord(body: dict = Body(default={})):
+        """Salva {enabled, client_id, show_time} e riallinea subito la presenza."""
+        return {"discord": discord.apply(body)}
+
+    # ------------------------------------------------------------ telefono: attività e comandi remoti
+    def _job_rows() -> list[dict]:
+        """Lavori in corso o appena finiti, in forma compatta per il telefono."""
+        def row(jid, name, state: dict, kind: str = "job") -> dict | None:
+            if not state or state.get("status") in (None, "idle"):
+                return None
+            prog = None
+            tasks = state.get("tasks") or []
+            if tasks:
+                tot = sum(t.get("total") or 0 for t in tasks)
+                done = sum(t.get("done") or 0 for t in tasks)
+                prog = (done / tot) if tot else None
+            elif state.get("total"):
+                prog = (state.get("done") or 0) / state["total"]
+            return {"id": jid, "name": name, "kind": kind, "status": state.get("status"),
+                    "phase": state.get("phase") or state.get("message") or "",
+                    "progress": round(prog, 3) if prog is not None else None}
+
+        rows = [
+            row("scan", "Ricerca nuovi giochi", job["current"].state()),
+            row("stores", "Store ufficiali", job["stores"].state()),
+            row("catalogs", "Store online", job["store_refresh"].state()),
+            row("netmeta", "Copertine e descrizioni", job["netmeta"].state()),
+            row("hltb", "Durate (HowLongToBeat)", job["hltb"].state()),
+            row("top", "Migliori giochi", job["top"].state()),
+            row("collart", "Immagini delle collezioni", job["collart"].state()),
+            row("bulk", "Database locali", bulk_job),
+        ]
+        if state["building"]:
+            rows.append({"id": "build", "name": "Libreria", "kind": "build", "status": "running",
+                         "phase": "Ricostruzione della libreria", "progress": None})
+        return [r for r in rows if r]
+
+    @app.get("/api/mobile/state")
+    def api_mobile_state():
+        """Stato compatto per l'app del telefono: gioco in corso, lavori attivi, comandi disponibili."""
+        run = launcher.running()
+        return {"running": run, "jobs": _job_rows(),
+                "counts": {"games": len(lib.games), "groups": len(lib.groups),
+                           "online": sum(1 for g in lib.games if g.get("store") == "online")}}
+
+    @app.post("/api/mobile/action")
+    def api_mobile_action(body: dict = Body(...)):
+        """Comandi dal telefono: aggiorna store, cerca nuovi giochi, ricostruisci, chiudi il gioco."""
+        action = str(body.get("action") or "")
+        if action == "stores":
+            added = _start_store_refresh(manual=True)
+            return {"ok": True, "queued": added, "state": api_mobile_state()}
+        if action == "scan":
+            api_scan_start({"mode": "missing"})
+            return {"ok": True, "state": api_mobile_state()}
+        if action == "rebuild":
+            threading.Thread(target=_rebuild, daemon=True).start()
+            return {"ok": True, "state": api_mobile_state()}
+        if action == "stop-game":
+            return {"ok": launcher.stop(), "state": api_mobile_state()}
+        if action == "stop-scan":
+            job["current"].cancel()
+            return {"ok": True, "state": api_mobile_state()}
+        raise HTTPException(400, "Comando sconosciuto")
 
     # ------------------------------------------------------------ temi, plugin, link esterni
     @app.get("/api/extensions")

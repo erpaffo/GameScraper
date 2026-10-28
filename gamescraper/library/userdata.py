@@ -69,6 +69,14 @@ class UserData:
         self.lock = threading.Lock()
         self.rev = 0  # cresce a ogni modifica: chi mostra i dati (app sul PC) sa quando ricaricarli
 
+    def close(self):
+        """Chiude la connessione (all'uscita dall'app: su Windows un file aperto blocca la cartella dati)."""
+        with self.lock:
+            try:
+                self.db.close()
+            except sqlite3.Error:
+                pass
+
     def _q(self, sql, args=()) -> list[tuple]:
         """Lettura protetta dal lock: la connessione e' condivisa tra i thread del server."""
         with self.lock:

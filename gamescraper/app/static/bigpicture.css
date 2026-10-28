@@ -170,3 +170,42 @@ html, body { font-size: clamp(15px, 1.15vw, 24px); overflow: hidden; background:
 .bp-shots img { max-width: 92vw; max-height: calc(100vh - 13rem); object-fit: contain; border-radius: 10px; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
 .bp-shots-bar { position: absolute; bottom: -2.6rem; left: 50%; transform: translateX(-50%); display: flex; gap: 1.6rem; color: var(--muted); white-space: nowrap; }
 .bp-shots-bar b { color: var(--text); }
+
+/* ------------------------------------------------------------------ accessibilit? (TV e divano)
+
+   Palette pensate per il daltonismo: cambiano solo i colori di accento e di stato (non le forme),
+   cos? il focus resta riconoscibile anche senza distinguere rosso/verde.
+   Testi: tre livelli, applicati a tutta l'interfaccia (le card si ingrandiscono di conseguenza). */
+
+.sr-only { position: absolute !important; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+html[data-palette="deuteranopia"] { --accent: #4f9dff; --ok: #f2b134; --text: #f2f4f8; --muted: #a8b0c2; }
+html[data-palette="deuteranopia"] .card.focus .cv,
+html[data-palette="deuteranopia"] .focus-ring { box-shadow: 0 0 0 4px #7fb2ff, 0 14px 40px rgba(0,0,0,.6) !important; }
+
+html[data-palette="protanopia"] { --accent: #3f8cff; --ok: #ffd166; --text: #f4f6fa; --muted: #aab2c4; }
+html[data-palette="protanopia"] .card.focus .cv,
+html[data-palette="protanopia"] .focus-ring { box-shadow: 0 0 0 4px #9cc4ff, 0 14px 40px rgba(0,0,0,.6) !important; }
+
+html[data-palette="tritanopia"] { --accent: #ff6b9d; --ok: #ffd166; --text: #f6f4f8; --muted: #b6aec4; }
+html[data-palette="tritanopia"] .card.focus .cv,
+html[data-palette="tritanopia"] .focus-ring { box-shadow: 0 0 0 4px #ff9dc0, 0 14px 40px rgba(0,0,0,.6) !important; }
+
+html[data-palette="contrast"] { --bg: #000; --bg-2: #07080a; --bg-3: #101216; --text: #fff; --muted: #d8dde8;
+  --accent: #ffe01b; --ok: #7dffb0; --line: #ffffff; }
+html[data-palette="contrast"] #bp-bg .bg-img { display: none; }
+html[data-palette="contrast"] .card.focus .cv,
+html[data-palette="contrast"] .focus-ring { box-shadow: 0 0 0 6px #ffe01b, 0 0 0 10px #000 !important; }
+html[data-palette="contrast"] .card .lbl,
+html[data-palette="contrast"] .bp-hero .meta,
+html[data-palette="contrast"] .shelf h2 { color: #fff; text-shadow: 0 2px 0 #000, 0 0 6px #000; }
+html[data-palette="contrast"] .card .ph { background: #000; border: 2px solid #fff; }
+
+html[data-bptext="large"] body { font-size: clamp(18px, 1.4vw, 28px); }
+html[data-bptext="large"] .bp-hero h1 { font-size: 2.9rem; }
+html[data-bptext="xlarge"] body { font-size: clamp(21px, 1.7vw, 33px); }
+html[data-bptext="xlarge"] .bp-hero h1 { font-size: 3.2rem; }
+html[data-bptext="xlarge"] .card { width: 12.5rem; }
+html[data-bptext="xlarge"] .card.tile-text { width: 17rem; }
+html[data-bptext="xlarge"] .shelf h2 { font-size: 1.3rem; }
