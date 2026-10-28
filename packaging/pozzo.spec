@@ -1,7 +1,7 @@
 # PyInstaller: due eseguibili nella stessa cartella (stesse librerie, nessun doppione).
-#   Pozzo Launcher        -> l'app con finestra (doppio clic)
+#   PozzoLauncher -> l'app con finestra (doppio clic)
 #   pozzo-cli    -> i comandi da terminale (scrape, export, library, ...)
-# Su macOS in piu' viene creato Pozzo Launcher.app.
+# Su macOS in piu' viene creato PozzoLauncher.app.
 #
 # Uso:  pyinstaller packaging/pozzo.spec --noconfirm      (dalla cartella del progetto)
 
@@ -41,15 +41,15 @@ def analysis(script):
 a_app = analysis("entry_app.py")
 a_cli = analysis("entry_cli.py")
 
-exe_app = EXE(PYZ(a_app.pure), a_app.scripts, [], exclude_binaries=True, name="Pozzo Launcher",  # noqa: F821
+exe_app = EXE(PYZ(a_app.pure), a_app.scripts, [], exclude_binaries=True, name="PozzoLauncher",  # noqa: F821
               console=False, icon=icon, upx=False)
 exe_cli = EXE(PYZ(a_cli.pure), a_cli.scripts, [], exclude_binaries=True, name="pozzo-cli",  # noqa: F821
               console=True, icon=icon, upx=False)
 
 coll = COLLECT(exe_app, a_app.binaries, a_app.datas, exe_cli, a_cli.binaries, a_cli.datas,  # noqa: F821
-               name="Pozzo Launcher", upx=False)
+               name="PozzoLauncher", upx=False)
 
 if sys.platform == "darwin":
-    app = BUNDLE(coll, name="Pozzo Launcher.app", icon=icon_png, bundle_identifier="io.github.pozzo",  # noqa: F821
+    app = BUNDLE(coll, name="PozzoLauncher.app", icon=icon_png, bundle_identifier="io.github.pozzo",  # noqa: F821
                  version=__version__, info_plist={"NSHighResolutionCapable": True, "LSMinimumSystemVersion": "11.0",
                                                    "CFBundleDisplayName": "Pozzo Launcher"})

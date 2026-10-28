@@ -28,6 +28,12 @@ PRESETS: dict[str, list[str]] = {
         "https://www.ziperto.com/nintendo-switch-nsp/",  # archivio paginato (type_c)
         "https://www.ziperto.com/nintendo-switch-xci/",  # elenco XCI su una pagina (type_d)
     ],
+    "ps4": [
+        "https://www.superpsx.com/category/ps4/",
+    ],
+    "ps5": [
+        "https://www.superpsx.com/category/ps5/",
+    ],
 }
 
 
