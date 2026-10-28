@@ -93,7 +93,11 @@ def js(path: str, code: str) -> str | None:
     if not node:
         return None
     src = f"import * as m from {json.dumps((ROOT / path).as_uri())};\n{code}"
-    r = subprocess.run([node, "--input-type=module", "-e", src], capture_output=True, text=True, timeout=60)
+    # file .mjs e stdin chiuso: `node -e` con stdin ereditato resta appeso su alcuni runner (macOS della CI)
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
+        f = Path(d) / "prova.mjs"
+        f.write_text(src, encoding="utf-8")
+        r = subprocess.run([node, str(f)], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
     assert r.returncode == 0, r.stderr
     return r.stdout.strip()
 
