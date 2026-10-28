@@ -1,0 +1,8 @@
+# estensioni: lo store verifica lo sha256 dei file serviti da GitHub raw, quindi in locale devono essere identici (LF)
+extensions/**/*.py text eol=lf
+extensions/**/*.js text eol=lf
+extensions/**/*.css text eol=lf
+extensions/**/*.toml text eol=lf
+extensions/**/*.json text eol=lf
+extensions/**/*.md text eol=lf
+extensions/*.json text eol=lf

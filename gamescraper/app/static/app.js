@@ -2521,7 +2521,7 @@ async function loadAppearance() {
       <span class="sw" style="background:${esc(t.preview || "#1c2030")}"></span>
       <b>${esc(t.name)}</b><span class="muted small">${esc(t.description || "")}${t.author ? " · " + esc(t.author) : ""}</span></label>`).join("");
   $("#plugin-list").innerHTML = ext.plugins.length ? ext.plugins.map((p) => `<div class="plugin-row">
-      <label class="chk"><input type="checkbox" data-plugin="${esc(p.id)}" ${p.enabled ? "checked" : ""}> <b>${esc(p.name)}</b></label>
+      <label class="chk"><input type="checkbox" data-plugin="${esc(p.id)}" ${p.enabled ? "checked" : ""} ${p.locked ? "disabled" : ""}> <b>${esc(p.name)}</b></label>
       <span class="muted small">v${esc(p.version || "?")}${p.author ? " · " + esc(p.author) : ""} — ${esc(p.description || "")}
       ${p.error ? `<span class="status-bad">${esc(p.error)}</span>` : ""}</span></div>`).join("")
     : `<p class="muted">Nessun plugin installato.</p>`;
@@ -3468,7 +3468,7 @@ function bind() {
     const o = e.target.closest("[data-open]");
     if (o) { e.preventDefault(); api("/api/open", { body: { url: o.dataset.open } }); }
   });
-  setTimeout(() => checkUpdate(false, false), 15000); // all'avvio, in sottofondo (la risposta resta in cache 12 ore)
+  checkUpdate(false, false); // subito all'avvio, in parallelo al caricamento dei giochi (la risposta resta in cache 12 ore)
   $("#health-list").addEventListener("click", (e) => { const b = e.target.closest(".hl-fix"); if (b) healthFix(SET.health[+b.dataset.i].fix); });
   $("#backup-list").addEventListener("click", (e) => { const b = e.target.closest(".bk-restore"); if (b) restoreBackup(b.dataset.name); });
   $("#tabs").addEventListener("click", (e) => { const b = e.target.closest(".tab"); if (b) showTab(b.dataset.tab); });

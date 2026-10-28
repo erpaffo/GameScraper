@@ -2805,6 +2805,8 @@ def create_app(cfg) -> FastAPI:
 
     @app.post("/api/app/plugin")
     def api_plugin_toggle(body: dict = Body(...)):
+        if body.get("id") == X.STORE_ID:
+            raise HTTPException(400, "Lo store delle estensioni resta sempre attivo")
         disabled = set(cfg.app.get("disabled_plugins", []))
         (disabled.discard if body.get("enabled") else disabled.add)(body.get("id"))
         C.save_settings(cfg, app={"disabled_plugins": sorted(disabled)})

@@ -37,6 +37,7 @@ TESTS = [
     "test_guests.py",
     "test_phone_extras.py",
     "test_guests.py",
+    "test_extstore.py",
 ]
 
 

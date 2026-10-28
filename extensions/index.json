@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "extensions": [
+    {
+      "id": "linkstores",
+      "name": "Link → Store",
+      "version": "1.0",
+      "author": "GameScraper",
+      "description": "Legge una pagina che raccoglie altri siti, raggruppa i link per intestazione (h2/h3) e aggiunge ciascuno come store di una console o come store PC (repack / download diretto).",
+      "min_app": "0.7.1",
+      "base": "linkstores/",
+      "files": {
+        "backend.py": "413ab340377ea4ca43c67e25f674e9ff2520659fd5086eee0be3b3bb92faed96",
+        "frontend.js": "b421a17688c16e1953405313ef373056f135ca4f66bc82646f5cd20ce24d3179",
+        "plugin.toml": "88f9cf9b26802c3f1b26988baeeb93d1ab5740d5daa9f67a4e4298c3f8ff510c",
+        "style.css": "3f947fa5c51631cdf3b26718698a0f74975817c907435dee3d2758f1e7e930b9"
+      }
+    },
+    {
+      "id": "minerva",
+      "name": "Store Minerva + Switch",
+      "version": "1.1",
+      "author": "GameScraper",
+      "description": "Riempie lo «Store online» di ogni console con le cartelle di minerva-archive.org elencate su r-roms.github.io e aggiunge gli store Switch preimpostati (NXBrew, Ziperto NSP e XCI).",
+      "min_app": "0.7.1",
+      "base": "minerva/",
+      "files": {
+        "backend.py": "2d867441cdc940943437299a0e5909fb01adf0a8e64e5efff370004e7948c10f",
+        "frontend.js": "31844804e69cba619a494ab3d8840cb02dba5b65495043963b9dffe692684a2f",
+        "plugin.toml": "4855e76d1919c95a26dbcecb974accb0c5d65eaed2591c1114281349c6ac90d1"
+      }
+    },
+    {
+      "id": "statistiche",
+      "name": "Statistiche di gioco",
+      "version": "1.0",
+      "author": "GameScraper",
+      "description": "Pagina con tempo di gioco per console e store, giochi piu' giocati e completezza della libreria. Aggiunge anche «Video su YouTube» nel dettaglio dei giochi.",
+      "min_app": "0.7.1",
+      "base": "statistiche/",
+      "files": {
+        "backend.py": "8654834d1f0ee5e851c38f3644960feddf73ed7327c7b9c378ed0112217085dc",
+        "frontend.js": "37ed36554079dd9f7c5d94d9c20ba35e8d9e403f3dc43f2d030320b850a11ff7",
+        "plugin.toml": "27c2df976c550b0c13cc35baf89274e81c4ff797b318011dd6e880abb6759426",
+        "style.css": "5f206414809d5571487e96aa8a50bf763609f9939778a61004cc1ac5d3c9c595"
+      }
+    }
+  ]
+}

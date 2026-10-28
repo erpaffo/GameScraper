@@ -70,6 +70,9 @@ function decode(lib) {
       rating: r[gc.rating] ?? null, genre: (r[gc.genres] || "").split(",")[0].trim(), q: fold(r[gc.title]) };
   }).filter((g) => g.primary && !g.hidden && g.store !== "online");
   L.byId = new Map(L.games.map((g) => [g.id, g]));
+  // copia minuscola per la Home della prossima apertura: i giochi recenti, in gioco e preferiti (vedi start)
+  const top = L.games.filter((g) => g.last).sort((a, b) => b.last - a.last).slice(0, 60);
+  store.set("home", [...new Set([...top, ...L.games.filter((g) => g.fav || g.status === "playing")])]);
 }
 
 function card(g) {
@@ -1116,7 +1119,11 @@ function shownLibrary() {
 
 async function start() {
   $("#pair").hidden = true; $("#main").hidden = false;
-  $("#v-home").innerHTML = skeleton();  // subito visibile: la libreria arriva dalla copia locale o dalla rete
+  const snap = store.get("home", []);
+  if (snap.length) {  // Home subito dall'ultima copia locale: la libreria completa arriva dopo e la sostituisce
+    L.games = snap; L.byId = new Map(snap.map((g) => [g.id, g]));
+    renderHome();
+  } else $("#v-home").innerHTML = skeleton();
   tab("home");
   try { decode(await api("/api/library?part=owned")); }
   catch (e) {  // senza rete e senza cache: la Home lo dice, invece di restare vuota
@@ -1183,6 +1190,15 @@ async function registerSW() {
   installUI();
   if (!window.isSecureContext) {  // pagina aperta in chiaro: niente service worker, niente installazione
     setTimeout(() => toast("Apri l'indirizzo https del PC: senza HTTPS l'app non si installa e il giroscopio non funziona", true), 1500);
+  }
+  if (store.get("paired", false) && !/code=\d{6}/.test(location.hash)) {
+    // gia' abbinato: si parte subito, senza aspettare la rete; l'esito dell'abbinamento si verifica dopo
+    start();
+    fetch("/m/api/hello", { credentials: "same-origin" }).then((r) => r.json()).then((h) => {
+      if (h.guest) startGuest();
+      else if (!h.paired) { store.set("paired", false); showPair(); }
+    }).catch(() => {});
+    return;
   }
   let h = null;
   try { h = await (await fetch("/m/api/hello", { credentials: "same-origin" })).json(); } catch { h = null; }

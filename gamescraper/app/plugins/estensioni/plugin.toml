@@ -1,0 +1,6 @@
+[plugin]
+name = "Store estensioni"
+version = "1.0"
+author = "GameScraper"
+description = "Elenca le estensioni disponibili e le installa, aggiorna o rimuove. È incluso nell'app e resta sempre attivo."
+api = 1

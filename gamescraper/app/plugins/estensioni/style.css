@@ -1,0 +1,4 @@
+.es-list { display: flex; flex-direction: column; gap: 10px; max-width: 900px; }
+.es-row { display: flex; gap: 16px; align-items: center; justify-content: space-between; padding: 12px 14px;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; }
+.es-btns { display: flex; gap: 8px; flex-shrink: 0; }

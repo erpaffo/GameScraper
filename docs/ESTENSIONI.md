@@ -173,12 +173,43 @@ def register(gs):
 
 ### Esempio completo
 
-Il plugin incluso **Statistiche** (`gamescraper/app/plugins/statistiche/`) usa tutte le parti:
+Il plugin **Statistiche** (`extensions/statistiche/`) usa tutte le parti:
 - un backend con un endpoint e un evento;
 - un frontend con una pagina, una voce nella barra laterale e un'azione nel dettaglio;
 - un foglio di stile.
 
-### Plugin inclusi
+### Store delle estensioni
+
+L'app include un solo plugin: lo **Store estensioni** (`gamescraper/app/plugins/estensioni/`). È sempre il primo
+della barra laterale e di **Impostazioni › Aspetto**, e non si può disattivare. Tutte le altre estensioni si
+installano da lì, nella cartella `plugins/` accanto a `config.toml`. Dopo un'installazione o una rimozione, riavvia l'app.
+
+Lo store legge l'indice `extensions/index.json` del repository (da GitHub raw). Per ogni estensione l'indice
+elenca i file con il loro sha256. L'installazione scarica i file uno per uno e scrive su disco solo se **tutti**
+corrispondono. Rifiuta anche nomi di file con percorsi, sottocartelle e versioni dell'app più vecchie di `min_app`.
+Un'estensione collegata alla cartella di sviluppo (vedi sotto) non viene mai aggiornata né cancellata dallo store.
+
+Per provare un indice diverso, per esempio quello locale prima del push, imposta in `settings.json`:
+`"app": {"extensions_index": "C:/percorso/GameScraper/extensions/index.json"}`.
+
+### Pubblicare un'estensione
+
+1. L'estensione sta in `extensions/<id>/`, con i file in cima alla cartella (niente sottocartelle).
+2. In `plugin.toml` alza `version` e, se usa funzioni nuove dell'app, `min_app = "x.y.z"`.
+3. Rigenera l'indice: `python tools/extensions.py index`. Il test `tests/test_extstore.py` fallisce se ti dimentichi.
+4. Commit e push: dopo il push lo store la vede subito, senza una nuova release dell'app.
+
+Un'estensione può vivere anche in un repository a parte: nell'indice basta un `base` con l'URL assoluto della
+sua cartella raw (per esempio `https://raw.githubusercontent.com/<utente>/<repo>/main/`).
+
+I fine riga di `extensions/` sono fissati a LF (`.gitattributes`): lo sha256 nell'indice è quello dei file
+come li serve GitHub.
+
+Per lo sviluppo, `python tools/extensions.py link` collega ogni `extensions/<id>` alla tua cartella `plugins/`
+(junction su Windows, symlink altrove). Così la tua copia dell'app le ha già installate e usa i sorgenti del
+repository. La release, invece, contiene solo lo store.
+
+### Estensioni disponibili
 
 | Plugin | Cosa fa |
 |---|---|

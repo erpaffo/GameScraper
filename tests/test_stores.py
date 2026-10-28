@@ -69,12 +69,16 @@ def test_library_and_api(tmp: Path):
         "    def ciao():\n"
         "        return {'ciao': gs.id, 'eventi': EVENTS}\n"
         "    gs.on('game_stopped', lambda d: EVENTS.append(d.get('title')))\n", encoding="utf-8")
+    # Statistiche non e' piu' inclusa: installata come farebbe lo store
+    import shutil
+    shutil.copytree(Path(__file__).resolve().parent.parent / "extensions" / "statistiche", tmp / "plugins" / "statistiche")
     app = create_app(cfg)
     with TestClient(app) as c:
         ext = c.get("/api/extensions").json()
         assert {"default", "oled", "chiaro", "retro", "notte-blu"} <= {t["id"] for t in ext["themes"]}
         ids = {p["id"]: p for p in ext["plugins"]}
         assert "prova" in ids and "statistiche" in ids and ids["prova"]["enabled"]
+        assert ext["plugins"][0]["id"] == "estensioni" and ext["plugins"][0]["locked"]  # lo store per primo
         assert c.get("/plugins/prova/frontend.js").status_code == 200
         assert c.get("/themes/oled/theme.css").status_code == 200
         assert c.get("/themes/oled/../../server.py").status_code == 404  # niente uscita dalla cartella del tema

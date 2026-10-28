@@ -29,7 +29,8 @@ from pathlib import Path
 from .. import config as C
 
 BUILTIN_THEMES = Path(__file__).parent / "themes"
-BUILTIN_PLUGINS = Path(__file__).parent / "plugins"
+BUILTIN_PLUGINS = Path(__file__).parent / "plugins"  # solo lo store: le altre estensioni si installano da li'
+STORE_ID = "estensioni"
 API_VERSION = 1
 
 
@@ -122,19 +123,23 @@ def list_plugins(cfg, errors: dict | None = None) -> list[dict]:
             continue
         for d in sorted(base.iterdir()):
             m = _manifest(d)
-            if m is None or d.name in seen:
+            if m is None or d.name in seen or d.name.startswith("."):  # .<id>.tmp/.old: installazione dello store a meta'
+                continue
+            if d.name == STORE_ID and base != BUILTIN_PLUGINS:  # lo store e' sempre quello incluso nell'app
                 continue
             seen.add(d.name)
             out.append({
                 "id": d.name, "name": m.get("name", d.name), "version": str(m.get("version", "")),
                 "author": m.get("author", ""), "description": m.get("description", ""),
-                "enabled": d.name not in disabled and int(m.get("api", 1)) <= API_VERSION,
+                "enabled": (d.name not in disabled or d.name == STORE_ID) and int(m.get("api", 1)) <= API_VERSION,
+                "locked": d.name == STORE_ID,
                 "frontend": f"/plugins/{d.name}/frontend.js" if (d / "frontend.js").exists() else None,
                 "style": f"/plugins/{d.name}/style.css" if (d / "style.css").exists() else None,
                 "backend": str(d / "backend.py") if (d / "backend.py").exists() else None,
                 "settings": settings.get(d.name, {}), "error": (errors or {}).get(d.name),
                 "dir": str(d),
             })
+    out.sort(key=lambda p: p["id"] != STORE_ID)  # lo store per primo: in Impostazioni e nella barra laterale
     return out
 
 

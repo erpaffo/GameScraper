@@ -9,6 +9,16 @@
 
 - Telefono: casella «ho gia' installato il certificato» che nasconde il QR della CA
 - Telefono: l'app si apre subito. La pagina e la libreria arrivano dalla copia locale del service worker e i dati nuovi scendono in sottofondo; il PC tiene pronta l'ultima risposta della libreria, che non viene piu' ricostruita a ogni apertura (con 40.000 giochi da ~1 s a poche decine di ms)
+- Telefono: la Home parte subito dagli ultimi giochi salvati sul telefono, senza aspettare il PC; il resto della libreria si carica in sottofondo
+- Il controllo degli aggiornamenti parte subito all'avvio, in parallelo al caricamento dei giochi
+
+### Aggiunto
+
+- Store estensioni: nuova voce in cima alla barra laterale (e alle estensioni in Impostazioni › Aspetto) da cui installare, aggiornare e rimuovere le estensioni. Ogni file scaricato viene verificato con lo sha256 dell'indice; un'estensione che richiede una versione dell'app più recente non si installa
+
+### Cambiato
+
+- Le estensioni Statistiche di gioco, Link → Store e Store Minerva + Switch non sono più incluse nell'app: si installano dallo Store estensioni. Le loro impostazioni restano; dopo l'installazione riavvia l'app
 
 ## 0.7.0 (2026-10-28)
 ### Corretto

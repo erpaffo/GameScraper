@@ -9,7 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from gamescraper import config as C  # noqa: E402
 from gamescraper.app import extensions  # noqa: E402
 
-BACKEND = Path(extensions.BUILTIN_PLUGINS) / "linkstores" / "backend.py"
+SRC = Path(__file__).resolve().parents[1] / "extensions" / "linkstores"  # non piu' inclusa: si installa dallo store
+BACKEND = SRC / "backend.py"
 
 
 class FakeGS:
@@ -44,6 +45,8 @@ def _cfg(tmp_path: Path) -> C.Config:
 
 def test_plugin_riconosciuto(tmp_path):
     cfg = _cfg(tmp_path)
+    import shutil
+    shutil.copytree(SRC, extensions.user_dir(cfg, "plugins") / "linkstores")  # come dopo l'installazione dallo store
     found = {p["id"]: p for p in extensions.list_plugins(cfg)}
     assert "linkstores" in found
     p = found["linkstores"]
