@@ -32,7 +32,7 @@ function drawCard(d, css) {
   if (d.console) line("Console preferita", `${d.console} · ${num(d.console_ore)} h`);
   if (d.mese) line("Mese più attivo", `${d.mese} · ${num(d.mese_ore)} h`);
   if (d.finiti) line("Giochi finiti", String(d.finiti));
-  text("GameScraper", 1000, 1300, 30, 700, css.muted, "right");
+  text("Pozzo Launcher", 1000, 1300, 30, 700, css.muted, "right");
   return c;
 }
 

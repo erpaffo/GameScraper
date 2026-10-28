@@ -1,12 +1,12 @@
 # Introduzione
 
-GameScraper è una libreria di giochi per il PC: raccoglie in un'unica finestra le **ROM delle console** che hai sul
+Pozzo Launcher è una libreria di giochi per il PC: raccoglie in un'unica finestra le **ROM delle console** che hai sul
 disco e i **giochi PC** dei tuoi store (Steam, Epic, GOG, Amazon, Battle.net, Xbox, Minecraft), li completa con
 copertine, descrizioni, valutazioni e durate, e li avvia con un doppio clic.
 
 ![La libreria: copertine delle ROM delle console e dei giochi PC in un'unica griglia, con ricerca, filtri e barra laterale](images/libreria-griglia.jpg)
 
-> Il manuale è disponibile anche in PDF: [GameScraper-manuale.pdf](GameScraper-manuale.pdf), lo stesso testo di
+> Il manuale è disponibile anche in PDF: [PozzoLauncher-manuale.pdf](PozzoLauncher-manuale.pdf), lo stesso testo di
 > queste pagine con un indice completo. Si trova anche tra i file di ogni release su GitHub.
 
 ## Cosa fa
@@ -28,7 +28,7 @@ copertine, descrizioni, valutazioni e durate, e li avvia con un doppio clic.
 
 ## Come è fatta l'app
 
-GameScraper è un piccolo **server locale** (Python, FastAPI) con un'interfaccia web mostrata in una finestra nativa.
+Pozzo Launcher è un piccolo **server locale** (Python, FastAPI) con un'interfaccia web mostrata in una finestra nativa.
 Il server risponde solo al PC su cui gira; il telefono può collegarsi solo dopo un abbinamento esplicito
 (vedi [Telefono e streaming](telefono-streaming.md)).
 

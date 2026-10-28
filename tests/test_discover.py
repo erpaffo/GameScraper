@@ -7,9 +7,9 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from gamescraper import freegames, hltb  # noqa: E402
-from gamescraper.library.userdata import UserData  # noqa: E402
-from gamescraper.wishlist import _alert  # noqa: E402
+from pozzo import freegames, hltb  # noqa: E402
+from pozzo.library.userdata import UserData  # noqa: E402
+from pozzo.wishlist import _alert  # noqa: E402
 
 HERE = Path(__file__).parent
 
@@ -131,10 +131,10 @@ def test_status_and_wishlist(tmp):
 def test_profiles_and_shots(tmp):
     from PIL import Image
 
-    from gamescraper import config as C
-    from gamescraper import platforms as P
-    from gamescraper.library import launcher as L
-    from gamescraper.library.screens import Shots, parse_hotkey
+    from pozzo import config as C
+    from pozzo import platforms as P
+    from pozzo.library import launcher as L
+    from pozzo.library.screens import Shots, parse_hotkey
     d = Path(tmp)
     for n in ("pcsx2.exe", "pcsx2-old.exe"):
         (d / n).write_text("x")
@@ -165,8 +165,8 @@ def test_remote():
     import struct
     import zlib
 
-    from gamescraper.remote import phone, sunshine
-    from gamescraper.remote.dsu import DSUServer
+    from pozzo.remote import phone, sunshine
+    from pozzo.remote.dsu import DSUServer
     # cancello del telefono: solo le funzioni previste
     ok = lambda m, p: any(mm == m and r.match(p) for mm, r in phone._ALLOWED)  # noqa: E731
     assert ok("GET", "/api/library") and ok("POST", "/api/game/12/play") and ok("WS", "/m/ws")
@@ -184,7 +184,7 @@ def test_remote():
     assert r[:4] == b"DSUS" and zlib.crc32(chk) == crc and struct.unpack_from("<H", r, 20)[0] == 1001
     pk[-1] ^= 1  # CRC sbagliato: ignorato
     assert srv.handle(bytes(pk), ("127.0.0.1", 1)) == []
-    # Sunshine: si riconoscono solo le app di GameScraper
+    # Sunshine: si riconoscono solo le app di PozzoLauncher
     assert sunshine.ours({"cmd": '"x.exe" play --key "snes/a"'}) and sunshine.ours({"cmd": '"x.exe" bigpicture'})
     assert not sunshine.ours({"cmd": "steam://open/bigpicture"}) and not sunshine.ours({"name": "Desktop"})
 

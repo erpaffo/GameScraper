@@ -55,7 +55,7 @@ def register(gs):
 
     @gs.route("anno")
     def anno(anno: int = 0):
-        from gamescraper.sync import profile_path
+        from pozzo.sync import profile_path
         lib = sqlite3.connect(cache / "library.db")
         user = sqlite3.connect(profile_path(gs.cfg, gs.cfg.app.get("profile") or "default"))
         try:
@@ -70,7 +70,7 @@ def register(gs):
                     lib.execute("SELECT key, grp, title, store, platform FROM games")}
             names = {}
             try:
-                from gamescraper import platforms as P
+                from pozzo import platforms as P
                 names = {pid: p.name for pid, p in P.PLATFORMS.items()}
             except Exception:
                 pass

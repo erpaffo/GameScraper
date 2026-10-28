@@ -8,8 +8,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from gamescraper import config  # noqa: E402
-from gamescraper.app.server import create_app  # noqa: E402
+from pozzo import config  # noqa: E402
+from pozzo.app.server import create_app  # noqa: E402
 
 _LIVE: list = []
 
@@ -58,7 +58,7 @@ class Patch:
 
 def paired_gate(cfg):
     """Cancello del telefono come in produzione, con un telefono gia' abbinato (cookie)."""
-    from gamescraper.remote.phone import PhoneGate
+    from pozzo.remote.phone import PhoneGate
 
     app = create_app(cfg)
     hub = app.state.phone_hub
@@ -109,7 +109,7 @@ def test_certificato_firmato_dalla_ca(tmp_path):
     from cryptography import x509
     from cryptography.x509.oid import ExtendedKeyUsageOID
 
-    from gamescraper.remote import certs
+    from pozzo.remote import certs
 
     folder = tmp_path / "certs"
     crt, key, ca = certs.ensure(folder)
@@ -168,7 +168,7 @@ def test_libreria_pronta_in_cache(tmp_path):
     import json
     import sqlite3
 
-    from gamescraper.library.build import SCHEMA
+    from pozzo.library.build import SCHEMA
 
     cache = tmp_path / "cache"
     cache.mkdir()
@@ -239,7 +239,7 @@ def test_ca_installata_nasconde_il_qr(tmp_path):
 
 def test_telecomando(tmp_path, monkeypatch=None):
     """Volume, play/pausa, Esc, Invio, Alt+Tab: solo i tasti dell'elenco arrivano al PC."""
-    from gamescraper.remote import keyboard
+    from pozzo.remote import keyboard
 
     mp = monkeypatch or Patch()
     try:
@@ -282,7 +282,7 @@ def test_prova_controller(tmp_path):
 
 
 def test_power_a_fine_lavori(tmp_path):
-    from gamescraper import power
+    from pozzo import power
 
     api = client(make_cfg(tmp_path))
     assert api.get("/api/app/power").json()["after_jobs"] == "none"
@@ -299,7 +299,7 @@ def test_power_a_fine_lavori(tmp_path):
 
 
 def test_notifiche(tmp_path, monkeypatch=None):
-    from gamescraper import notify
+    from pozzo import notify
 
     mp = monkeypatch or Patch()
     try:
@@ -321,7 +321,7 @@ def test_notifiche(tmp_path, monkeypatch=None):
 
 def test_avvisi_giochi_gratis_e_port(tmp_path, monkeypatch=None):
     """Gli avvisi in sottofondo: una volta per offerta e per versione, mai ripetuti a ogni controllo."""
-    from gamescraper import freegames, notify, ports
+    from pozzo import freegames, notify, ports
 
     mp = monkeypatch or Patch()
     try:

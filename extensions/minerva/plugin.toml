@@ -1,7 +1,7 @@
 [plugin]
 name = "Store Minerva + Switch"
 version = "1.1"
-author = "GameScraper"
+author = "Pozzo Launcher"
 description = "Riempie lo «Store online» di ogni console con le cartelle di minerva-archive.org elencate su r-roms.github.io e aggiunge gli store Switch preimpostati (NXBrew, Ziperto NSP e XCI)."
 api = 1
 min_app = "0.7.1"

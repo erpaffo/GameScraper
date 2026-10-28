@@ -1,8 +1,0 @@
-{
- "name": "OLED",
- "description": "Nero puro, ideale per schermi OLED e TV",
- "author": "GameScraper",
- "preview": "#000000",
- "desktop": "theme.css",
- "bigpicture": "theme.css"
-}

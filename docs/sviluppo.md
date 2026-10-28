@@ -1,6 +1,6 @@
 # Sviluppo e dettagli tecnici
 
-Per chi usa i sorgenti, vuole creare gli eseguibili o è curioso di come lavora GameScraper rispetto a [Skyscraper](https://github.com/Gemba/skyscraper).
+Per chi usa i sorgenti, vuole creare gli eseguibili o è curioso di come lavora Pozzo Launcher rispetto a [Skyscraper](https://github.com/Gemba/skyscraper).
 
 ## Avvio rapido dai sorgenti (Windows)
 
@@ -14,13 +14,13 @@ Su GitHub li crea il workflow [`.github/workflows/release.yml`](https://github.c
 
 ```bash
 pip install -r requirements.txt pyinstaller
-pyinstaller packaging/gamescraper.spec --noconfirm     # risultato in dist/GameScraper/
+pyinstaller packaging/pozzo.spec --noconfirm     # risultato in dist/PozzoLauncher/
 ```
 
 ## Struttura del codice
 
 ```
-gamescraper/
+pozzo/
   cli.py          comandi e barre di avanzamento
   config.py       caricamento di config.toml
   platforms.py    piattaforme: estensioni, id ScreenScraper/IGDB/TGDB, sistemi libretro, alias
@@ -30,7 +30,7 @@ gamescraper/
   matching.py     confronto titoli (rapidfuzz)
   pipeline.py     orchestrazione a cascata e priorità per campo
   export.py       JSON/CSV/media per console
-  api_client.py   client dell'API locale /api/v1 (usato da gamescraper-cli e dagli script)
+  api_client.py   client dell'API locale /api/v1 (usato da pozzo-cli e dagli script)
   sources/        libretro, arcadedb, igdb, screenscraper, thegamesdb
   app/            server FastAPI: server.py (endpoint interni /api), apiv1.py (API stabile /api/v1),
                   apitoken.py (token dell'API), static/ (interfaccia, Big Picture, app del telefono)
@@ -42,7 +42,7 @@ gli endpoint `/api/v1` non cambiano a sorpresa, quelli sotto `/api` sono interni
 
 ## Esportare la libreria come pagina web
 
-`python -m gamescraper export-frontend --format html --out C:\mialibreria` (oppure Impostazioni › ▦ Libreria ›
+`python -m pozzo export-frontend --format html --out C:\mialibreria` (oppure Impostazioni › ▦ Libreria ›
 *Esporta per altri frontend* › **Pagina web**) produce:
 
 ```
@@ -56,7 +56,7 @@ disegnano man mano che scorri).
 
 ## Perché è molto più veloce di Skyscraper
 
-| | Skyscraper 3.7.7 | GameScraper |
+| | Skyscraper 3.7.7 | Pozzo Launcher |
 |---|---|---|
 | Identificazione | Una chiamata API per gioco | **Offline**: CRC e nome confrontati con i DAT No-Intro/Redump di libretro |
 | Hash delle ROM | MD5, SHA1 e CRC a blocchi da 1 KB, per thread | **Prima si prova il nome esatto sui DAT**: se corrisponde, CRC/MD5/SHA1 arrivano dal DAT e il file non viene letto. Gli altri: CRC degli ZIP letto dall'indice, blocchi da 8 MB, strategia HDD/SSD, risultati in cache |
@@ -88,4 +88,4 @@ Ogni sorgente riceve **solo** i giochi a cui manca qualcosa che lei sa fornire. 
 - Il compositing delle immagini (`artwork.xml`, effetti `fx*`): vengono salvate le immagini originali.
 - I moduli MobyGames (API ora a pagamento), OpenRetro, WorldOfSpectrum, import ed esgamelist.
 
-Se servono, si possono aggiungere come nuovi moduli in `gamescraper/sources/` o in `export.py`.
+Se servono, si possono aggiungere come nuovi moduli in `pozzo/sources/` o in `export.py`.

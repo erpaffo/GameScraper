@@ -1,8 +1,8 @@
-"""Punto d'ingresso dell'eseguibile da terminale (gamescraper-cli): stessi comandi di `python -m gamescraper`."""
+"""Punto d'ingresso dell'eseguibile da terminale (pozzo-cli): stessi comandi di `python -m pozzo`."""
 
 import multiprocessing
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
-    from gamescraper.cli import main
+    from pozzo.cli import main
     main()

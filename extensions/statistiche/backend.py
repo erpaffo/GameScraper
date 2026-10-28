@@ -14,7 +14,7 @@ def register(gs):
     @gs.route("riepilogo")
     def riepilogo():
         lib = sqlite3.connect(cache / "library.db")
-        from gamescraper.sync import profile_path  # statistiche del profilo utente attivo
+        from pozzo.sync import profile_path  # statistiche del profilo utente attivo
         user = sqlite3.connect(profile_path(gs.cfg, gs.cfg.app.get("profile") or "default"))
         try:
             games = {k: (p, t, s, grp) for k, p, t, s, grp in

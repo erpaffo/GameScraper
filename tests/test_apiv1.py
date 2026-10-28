@@ -16,12 +16,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from gamescraper import config  # noqa: E402
-from gamescraper.app import apitoken  # noqa: E402
-from gamescraper.app.apiv1 import sse  # noqa: E402
-from gamescraper.app.extensions import Events  # noqa: E402
-from gamescraper.app.server import LocalGuard, create_app  # noqa: E402
-from gamescraper.library.build import SCHEMA  # noqa: E402
+from pozzo import config  # noqa: E402
+from pozzo.app import apitoken  # noqa: E402
+from pozzo.app.apiv1 import sse  # noqa: E402
+from pozzo.app.extensions import Events  # noqa: E402
+from pozzo.app.server import LocalGuard, create_app  # noqa: E402
+from pozzo.library.build import SCHEMA  # noqa: E402
 
 BASE = "http://127.0.0.1:8765"
 
@@ -75,7 +75,7 @@ def test_v1(tmp: Path, cfg):
     with TestClient(app, base_url=BASE) as c:
         # senza guardia il token non e' richiesto (e' LocalGuard a chiederlo): qui si prova la logica degli endpoint
         st = c.get("/api/v1/status").json()
-        assert st["app"] == "gamescraper" and st["api"] == 1 and st["games"] == 5, st
+        assert st["app"] == "pozzo" and st["api"] == 1 and st["games"] == 5, st
         schema = c.get("/openapi.json").json()
         assert any(p.startswith("/api/v1/") for p in schema["paths"]), "lo schema deve documentare /api/v1"
         print("ok  schema OpenAPI con gli endpoint /api/v1")

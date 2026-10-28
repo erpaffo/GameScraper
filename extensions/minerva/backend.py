@@ -12,8 +12,8 @@ import re
 import threading
 from urllib.parse import unquote, urljoin
 
-from gamescraper import config as C
-from gamescraper import platforms as P
+from pozzo import config as C
+from pozzo import platforms as P
 
 RROMS = "https://r-roms.github.io/"
 _PAGE = re.compile(r'href="(\./[^"#]+)"')
@@ -99,9 +99,9 @@ def register(gs):
     def run():
         import httpx
 
-        from gamescraper import catalog
-        from gamescraper.cache import Cache
-        from gamescraper.net import make_client
+        from pozzo import catalog
+        from pozzo.cache import Cache
+        from pozzo.net import make_client
         say = lambda m: job["log"].append(str(m))  # noqa: E731
         try:
             say("Lettura di r-roms.github.io…")

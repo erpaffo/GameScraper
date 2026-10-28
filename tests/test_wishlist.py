@@ -13,9 +13,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import httpx  # noqa: E402
 
-from gamescraper import config as C  # noqa: E402
-from gamescraper import wishlist as W  # noqa: E402
-from gamescraper.library.userdata import UserData  # noqa: E402
+from pozzo import config as C  # noqa: E402
+from pozzo import wishlist as W  # noqa: E402
+from pozzo.library.userdata import UserData  # noqa: E402
 
 HERE = Path(__file__).parent
 FIXTURE = json.loads((HERE / "fixtures" / "ggdeals_prices.json").read_text(encoding="utf-8"))

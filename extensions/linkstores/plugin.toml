@@ -1,7 +1,7 @@
 [plugin]
 name = "Link → Store"
 version = "1.0"
-author = "GameScraper"
+author = "Pozzo Launcher"
 description = "Legge una pagina che raccoglie altri siti, raggruppa i link per intestazione (h2/h3) e aggiunge ciascuno come store di una console o come store PC (repack / download diretto)."
 api = 1
 min_app = "0.7.1"

@@ -5,7 +5,7 @@ che il server locale risponda 200 su GET /api/status, poi chiude il processo (e 
 processi figli) e restituisce codice 0 in caso di successo o 1 in caso di errore.
 
 Uso:
-    python packaging/smoke_test.py dist/GameScraper/GameScraper.exe
+    python packaging/smoke_test.py dist/PozzoLauncher/PozzoLauncher.exe
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ def _kill_tree(proc: subprocess.Popen) -> None:
 
 def _read_logs(tmp: Path, out_file: Path) -> str:
     parts = []
-    for candidate in (out_file, tmp / "GameScraper" / "logs" / "gamescraper.log"):
+    for candidate in (out_file, tmp / "PozzoLauncher" / "logs" / "pozzo.log"):
         if candidate.is_file():
             try:
                 txt = candidate.read_text(encoding="utf-8", errors="replace").strip()
@@ -79,7 +79,7 @@ def run_smoke(exe_path: str, port: int = 8765, timeout: float = 60.0) -> int:
         cfg_file.write_text('[paths]\ncache = "cache"\noutput = "output"\n', encoding="utf-8")
 
         env = os.environ.copy()
-        env["GAMESCRAPER_CONFIG"] = str(cfg_file)
+        env["POZZO_CONFIG"] = str(cfg_file)
         env["LOCALAPPDATA"] = str(tmp)
         env["APPDATA"] = str(tmp)
         env["XDG_DATA_HOME"] = str(tmp)
@@ -130,8 +130,8 @@ def run_smoke(exe_path: str, port: int = 8765, timeout: float = 60.0) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="Smoke test di avvio per l'eseguibile GameScraper")
-    ap.add_argument("exe", help="Percorso dell'eseguibile (es. dist/GameScraper/GameScraper.exe)")
+    ap = argparse.ArgumentParser(description="Smoke test di avvio per l'eseguibile PozzoLauncher")
+    ap.add_argument("exe", help="Percorso dell'eseguibile (es. dist/PozzoLauncher/PozzoLauncher.exe)")
     ap.add_argument("--port", type=int, default=8765, help="Porta del server locale (default: 8765)")
     ap.add_argument("--timeout", type=float, default=60.0, help="Secondi massimi di attesa (default: 60)")
     args = ap.parse_args(argv)

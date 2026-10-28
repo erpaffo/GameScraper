@@ -12,10 +12,10 @@ Serve Python 3.12 (lo stesso della CI e delle release).
 
 ```bash
 python -m pip install -r requirements.txt
-python -m gamescraper app        # avvia l'app dai sorgenti
+python -m pozzo app        # avvia l'app dai sorgenti
 ```
 
-I sorgenti usano la stessa cartella dati dell'eseguibile installato. Per non toccare la tua libreria mentre sviluppi, usa una configurazione separata: `GAMESCRAPER_CONFIG=/percorso/prova/config.toml`.
+I sorgenti usano la stessa cartella dati dell'eseguibile installato. Per non toccare la tua libreria mentre sviluppi, usa una configurazione separata: `POZZO_CONFIG=/percorso/prova/config.toml`.
 
 ## Test
 

@@ -7,8 +7,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from gamescraper import config  # noqa: E402
-from gamescraper import storerefresh as SR  # noqa: E402
+from pozzo import config  # noqa: E402
+from pozzo import storerefresh as SR  # noqa: E402
 
 # --------------------------------------------------------------- client HTTP usa-e-chiudi
 _LIVE: list = []
@@ -18,7 +18,7 @@ def client(cfg):
     """TestClient registrato: a fine test si chiudono i database (su Windows un file aperto resta bloccato)."""
     from fastapi.testclient import TestClient
 
-    from gamescraper.app.server import create_app
+    from pozzo.app.server import create_app
 
     api = TestClient(create_app(cfg))
     _LIVE.append(api)
@@ -115,9 +115,9 @@ def test_parallelismo_limitato(tmp_path):
 
 
 def test_job_in_parallelo(tmp_path, monkeypatch):
-    from gamescraper import catalog
-    from gamescraper.app import jobs as J
-    from gamescraper.library import build as BUILD
+    from pozzo import catalog
+    from pozzo.app import jobs as J
+    from pozzo.library import build as BUILD
 
     cfg = make_env(tmp_path)
     seen: set[str] = set()
@@ -150,9 +150,9 @@ def test_job_in_parallelo(tmp_path, monkeypatch):
 
 
 def test_job_errore_non_ferma_gli_altri(tmp_path, monkeypatch):
-    from gamescraper import catalog
-    from gamescraper.app import jobs as J
-    from gamescraper.library import build as BUILD
+    from pozzo import catalog
+    from pozzo.app import jobs as J
+    from pozzo.library import build as BUILD
 
     cfg = make_env(tmp_path)
 
@@ -175,9 +175,9 @@ def test_job_errore_non_ferma_gli_altri(tmp_path, monkeypatch):
 
 
 def test_job_interrotto(tmp_path, monkeypatch):
-    from gamescraper import catalog
-    from gamescraper.app import jobs as J
-    from gamescraper.library import build as BUILD
+    from pozzo import catalog
+    from pozzo.app import jobs as J
+    from pozzo.library import build as BUILD
 
     cfg = make_env(tmp_path)
     job = J.StoreRefreshJob()
@@ -195,9 +195,9 @@ def test_job_interrotto(tmp_path, monkeypatch):
 
 
 def test_log_e_pagine_per_store(tmp_path, monkeypatch):
-    from gamescraper import catalog
-    from gamescraper.app import jobs as J
-    from gamescraper.library import build as BUILD
+    from pozzo import catalog
+    from pozzo.app import jobs as J
+    from pozzo.library import build as BUILD
 
     cfg = make_env(tmp_path)
     cfg.pc_stores, cfg.catalogs = [{"url": PC1, "kind": "repack"}], {}
@@ -222,8 +222,8 @@ def test_log_e_pagine_per_store(tmp_path, monkeypatch):
 def test_fetch_segnala_la_pagina(tmp_path, monkeypatch):
     import asyncio
 
-    from gamescraper import catalog, platforms as P
-    from gamescraper.cache import Cache
+    from pozzo import catalog, platforms as P
+    from pozzo.cache import Cache
 
     cfg = make_env(tmp_path)
     cache = Cache(cfg.cache)
@@ -240,9 +240,9 @@ def test_fetch_segnala_la_pagina(tmp_path, monkeypatch):
 
 
 def test_avvio_di_un_solo_store(tmp_path, monkeypatch):
-    from gamescraper import catalog
-    from gamescraper.app import jobs as J
-    from gamescraper.library import build as BUILD
+    from pozzo import catalog
+    from pozzo.app import jobs as J
+    from pozzo.library import build as BUILD
 
     cfg = make_env(tmp_path)
     seen: list[str] = []
@@ -263,8 +263,8 @@ def test_avvio_di_un_solo_store(tmp_path, monkeypatch):
 def test_interruzione_durante_le_pagine(tmp_path, monkeypatch):
     import asyncio
 
-    from gamescraper import catalog, platforms as P
-    from gamescraper.cache import Cache
+    from pozzo import catalog, platforms as P
+    from pozzo.cache import Cache
 
     cfg = make_env(tmp_path)
     cfg.catalog_options["switch"] = {"type": "type_c"}
@@ -293,8 +293,8 @@ def test_interruzione_durante_le_pagine(tmp_path, monkeypatch):
 def test_api_avvia_un_solo_store(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
 
-    from gamescraper import catalog
-    from gamescraper.app.server import create_app
+    from pozzo import catalog
+    from pozzo.app.server import create_app
 
     cfg = make_env(tmp_path)
 
@@ -323,9 +323,9 @@ def _sample(job, stop_evt, seen):
 
 
 def test_coda_rispetta_il_limite(tmp_path, monkeypatch):
-    from gamescraper import catalog
-    from gamescraper.app import jobs as J
-    from gamescraper.library import build as BUILD
+    from pozzo import catalog
+    from pozzo.app import jobs as J
+    from pozzo.library import build as BUILD
 
     cfg = make_env(tmp_path)
     cfg.pc_stores = [{"url": f"https://s{i}.example.test/list/", "kind": "direct"} for i in range(5)]
@@ -351,9 +351,9 @@ def test_coda_rispetta_il_limite(tmp_path, monkeypatch):
 
 
 def test_stesso_sito_mai_insieme(tmp_path, monkeypatch):
-    from gamescraper import catalog
-    from gamescraper.app import jobs as J
-    from gamescraper.library import build as BUILD
+    from pozzo import catalog
+    from pozzo.app import jobs as J
+    from pozzo.library import build as BUILD
 
     cfg = make_env(tmp_path)
     cfg.pc_stores = [{"url": "https://uno.test/a/", "kind": "direct"},
@@ -379,10 +379,10 @@ def test_stesso_sito_mai_insieme(tmp_path, monkeypatch):
 
 
 def test_aggiunta_alla_coda_mentre_gira(tmp_path, monkeypatch):
-    from gamescraper import catalog
-    from gamescraper.app import jobs as J
-    from gamescraper.library import build as BUILD
-    from gamescraper.storerefresh import targets as collect
+    from pozzo import catalog
+    from pozzo.app import jobs as J
+    from pozzo.library import build as BUILD
+    from pozzo.storerefresh import targets as collect
 
     cfg = make_env(tmp_path)
     cfg.pc_stores = [{"url": "https://uno.test/a/", "kind": "direct"},
@@ -414,7 +414,7 @@ def test_aggiunta_alla_coda_mentre_gira(tmp_path, monkeypatch):
 
 def test_api_store_refresh(tmp_path):
     from fastapi.testclient import TestClient
-    from gamescraper.app.server import create_app
+    from pozzo.app.server import create_app
 
     cfg = make_env(tmp_path)
     api = client(cfg)
@@ -435,7 +435,7 @@ def test_api_store_refresh(tmp_path):
 
 def test_api_senza_store(tmp_path):
     from fastapi.testclient import TestClient
-    from gamescraper.app.server import create_app
+    from pozzo.app.server import create_app
 
     cfg = make_env(tmp_path)
     cfg.pc_stores, cfg.catalogs = [], {}

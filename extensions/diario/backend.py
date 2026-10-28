@@ -36,7 +36,7 @@ def register(gs):
     lock = threading.Lock()
 
     def open_dbs():
-        from gamescraper.sync import profile_path
+        from pozzo.sync import profile_path
         return sqlite3.connect(cache / "library.db"), sqlite3.connect(profile_path(gs.cfg, gs.cfg.app.get("profile") or "default"))
 
     def voci(grp: str) -> list[dict]:

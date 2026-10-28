@@ -10,11 +10,11 @@ from fastapi import Body, HTTPException
 
 
 def register(gs):
-    from gamescraper import catalog, platforms as P
-    from gamescraper.cache import Cache
-    from gamescraper.config import read_settings
-    from gamescraper.linklist import add_store, scan_page
-    from gamescraper.net import make_client
+    from pozzo import catalog, platforms as P
+    from pozzo.cache import Cache
+    from pozzo.config import read_settings
+    from pozzo.linklist import add_store, scan_page
+    from pozzo.net import make_client
 
     def platforms_list() -> list[dict]:
         out = [{"id": pid, "name": getattr(pl, "name", pid), "pc": pid == "windows"}

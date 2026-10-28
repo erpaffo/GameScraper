@@ -1,7 +1,7 @@
 [plugin]
 name = "Obiettivi personali"
 version = "1.0"
-author = "GameScraper"
+author = "Pozzo Launcher"
 description = "Obiettivi tuoi («finisci 3 giochi a marzo», «20 ore questa settimana»), serie di giorni consecutivi e distintivi che si sbloccano giocando."
 api = 1
 min_app = "0.7.1"

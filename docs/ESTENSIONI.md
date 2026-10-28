@@ -1,6 +1,6 @@
-# Temi e plugin di GameScraper
+# Temi e plugin di Pozzo Launcher
 
-GameScraper si personalizza in due modi:
+Pozzo Launcher si personalizza in due modi:
 
 | | Per chi | Cosa cambia | Linguaggio |
 |---|---|---|---|
@@ -10,7 +10,7 @@ GameScraper si personalizza in due modi:
 Le cartelle si trovano accanto a `config.toml`:
 
 ```
-GameScraper/
+PozzoLauncher/
   config.toml
   themes/<id-tema>/
   plugins/<id-plugin>/
@@ -67,7 +67,7 @@ Sulla pagina sono disponibili due attributi utili:
 | `<html data-mode>` | `desktop` / `bigpicture` |
 | `<html data-theme>` | id del tema attivo |
 
-I temi inclusi (`gamescraper/app/themes/`: OLED, Chiaro, Retrò, Notte blu) sono buoni esempi da copiare.
+I temi inclusi (`pozzo/app/themes/`: OLED, Chiaro, Retrò, Notte blu) sono buoni esempi da copiare.
 
 In **Impostazioni › Aspetto** si sceglie il tema e si vede l'anteprima del colore di ciascuno:
 
@@ -168,8 +168,8 @@ def register(gs):
 | Membro | Cosa fa |
 |---|---|
 | `gs.route(path, methods=("GET",))` | Espone una funzione su `/plugin-api/<id>/<path>` (FastAPI) |
-| `gs.add_store(ClasseStore)` | Aggiunge un **fornitore di libreria**, cioè uno store nuovo: sottoclasse di `gamescraper.stores.base.StoreProvider`, con un metodo `fetch()` che restituisce `StoreGame` (installati o da installare, con `launch` e `install_uri`) |
-| `gs.add_source(ClasseFonte)` | Aggiunge una **fonte di metadati** per lo scraping: sottoclasse di `gamescraper.sources.base.Source`, con `lookup(game)` |
+| `gs.add_store(ClasseStore)` | Aggiunge un **fornitore di libreria**, cioè uno store nuovo: sottoclasse di `pozzo.stores.base.StoreProvider`, con un metodo `fetch()` che restituisce `StoreGame` (installati o da installare, con `launch` e `install_uri`) |
+| `gs.add_source(ClasseFonte)` | Aggiunge una **fonte di metadati** per lo scraping: sottoclasse di `pozzo.sources.base.Source`, con `lookup(game)` |
 | `gs.on(evento, funzione)` | Reagisce agli eventi del server |
 | `gs.cfg` | Configurazione (sola lettura) |
 | `gs.settings`, `gs.save_settings(dict)` | Impostazioni del plugin |
@@ -184,13 +184,13 @@ Il plugin **Statistiche** (`extensions/statistiche/`) usa tutte le parti:
 
 ### Store delle estensioni
 
-L'app include un solo plugin: lo **Store estensioni** (`gamescraper/app/plugins/estensioni/`). È sempre il primo
+L'app include un solo plugin: lo **Store estensioni** (`pozzo/app/plugins/estensioni/`). È sempre il primo
 della barra laterale e di **Impostazioni › Aspetto**, e non si può disattivare. Tutte le altre estensioni si
 installano da lì, nella cartella `plugins/` accanto a `config.toml`. Dopo un'installazione o una rimozione, riavvia l'app.
 
 Le estensioni arrivano dalle **fonti**, elencate in *Fonti delle estensioni* in cima alla pagina:
 
-- la prima è sempre lo **store ufficiale** ([gamescraper-extensions](https://github.com/erpaffo/gamescraper-extensions)) e non si toglie;
+- la prima è sempre lo **store ufficiale** ([pozzo-extensions](https://github.com/erpaffo/gamescraper-extensions)) e non si toglie;
 - **Aggiungi** accetta il link di un repository GitHub (`https://github.com/utente/repo`, anche `/tree/<tag>`) o
   l'indirizzo https di un `index.json`. Se il link è il repository di un'estensione si aggiunge quell'estensione,
   se è un altro store si aggiunge tutto il suo elenco. L'app controlla che il link risponda e contenga estensioni;
@@ -209,7 +209,7 @@ Per provare uno store diverso al posto di quello ufficiale, anche da disco prima
 
 ### Pubblicare un'estensione
 
-Ogni estensione vive nel **proprio repository** (per esempio `gamescraper-ext-stasera`): in cima ci sono
+Ogni estensione vive nel **proprio repository** (per esempio `pozzo-ext-stasera`): in cima ci sono
 `plugin.toml`, i file dell'estensione (niente sottocartelle) e `index.json`. Lo store ufficiale è un altro repository
 con un solo `index.json`, che elenca i repository e la versione approvata di ciascuno:
 
@@ -223,7 +223,7 @@ L'app legge l'`index.json` di ogni repository a quel tag. Una voce può anche in
 Per pubblicare una versione:
 
 1. In `plugin.toml` alza `version` e, se usa funzioni nuove dell'app, `min_app = "x.y.z"`.
-2. Rigenera l'indice dal repository dell'estensione: `python <GameScraper>/tools/extensions.py index .`
+2. Rigenera l'indice dal repository dell'estensione: `python <Pozzo Launcher>/tools/extensions.py index .`
 3. Commit, tag `v<versione>` e push.
 4. Nello store porta `ref` al tag nuovo (una pull request sul repository dello store). Chi ha aggiunto il repository
    dell'estensione come fonte la vede invece subito, perché quel link segue il ramo principale.
@@ -232,7 +232,7 @@ I repository hanno i fine riga fissati a LF (`.gitattributes`): lo sha256 nell'i
 
 **Dal repository dell'app ai repository separati**: `python tools/extensions.py export <cartella> <utente>` crea in
 `<cartella>` un repository pronto per ogni estensione di `extensions/` (file, `index.json`, README, licenza) e quello
-dello store, che punta a `<utente>/gamescraper-ext-<id>` al tag `v<versione>`.
+dello store, che punta a `<utente>/pozzo-ext-<id>` al tag `v<versione>`.
 
 Per provare un'estensione nell'app, `python tools/extensions.py install [<cartella>]` la **copia** nella tua cartella
 `plugins/`: senza argomento quelle di `extensions/`, altrimenti quelle della cartella indicata (una cartella con i
@@ -264,7 +264,7 @@ ogni pagina viene riconosciuta da sola da `catalog.detect_kind`.
 
 **Link → Store** è anche un esempio di plugin che **scrive nelle impostazioni**: usa le stesse funzioni
 dell'interfaccia (`config.set_setting`) e quindi le modifiche valgono subito, senza riavviare l'app.
-La logica di lettura della pagina sta in `gamescraper/linklist.py` (`scan_page`, `add_store`), fuori dal
+La logica di lettura della pagina sta in `pozzo/linklist.py` (`scan_page`, `add_store`), fuori dal
 plugin, così è testabile senza avviare il server.
 
 ### Sicurezza

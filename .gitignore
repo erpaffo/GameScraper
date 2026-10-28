@@ -39,7 +39,7 @@ docs/obsidian/
 docs/TODO.md
 # manuale generato (sito MkDocs e PDF)
 site/
-docs/GameScraper-manuale.pdf
+docs/PozzoLauncher-manuale.pdf
 release.*
 
 .agent/

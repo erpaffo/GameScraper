@@ -19,9 +19,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from gamescraper import config  # noqa: E402
-from gamescraper.app.server import create_app  # noqa: E402
-from gamescraper.library.build import SCHEMA  # noqa: E402
+from pozzo import config  # noqa: E402
+from pozzo.app.server import create_app  # noqa: E402
+from pozzo.library.build import SCHEMA  # noqa: E402
 
 
 def make_library(cache: Path, rom: Path):
@@ -141,7 +141,7 @@ def main():
                 print("ok  nota e voto personali")
 
                 # giochi gratis: nuovi / visti / riscattati (senza rete: elenco gia' in cache)
-                from gamescraper.cache import Cache
+                from pozzo.cache import Cache
                 import time as _t
                 cc = Cache(cfg.cache)
                 cc.kv_set("freegames", {"time": _t.time(), "errors": [], "items": [
@@ -162,7 +162,7 @@ def main():
                 # RetroAchievements: non configurato -> niente sezione; poi catalogo + progresso (risposte finte, in cache)
                 assert c2.get(f"/api/game/{emerald[0]}/ra").json() == {"configured": False}
                 import httpx
-                from gamescraper import retroachievements as RA
+                from pozzo import retroachievements as RA
                 calls = []
 
                 def ra_handler(req):
@@ -251,9 +251,9 @@ def main():
 
 
 def test_names_settings_emulators():
-    from gamescraper import platforms as P
-    from gamescraper.library import launcher as L
-    from gamescraper.scanner import clean_title, scene_serial
+    from pozzo import platforms as P
+    from pozzo.library import launcher as L
+    from pozzo.scanner import clean_title, scene_serial
 
     cases = {
         "Sekiro.Shadows.Die.Twice.PS4-CUSA12047": "Sekiro Shadows Die Twice",
@@ -293,7 +293,7 @@ def test_names_settings_emulators():
 
 def test_relink_apply():
     """Riassociazione: i dati passano dalla vecchia chiave alla nuova (anche con le tabelle di userdata) e resta una copia .bak."""
-    from gamescraper import relink
+    from pozzo import relink
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         tmp = Path(t)
         c = sqlite3.connect(tmp / "cache.db")
@@ -321,8 +321,8 @@ def test_relink_apply():
 
 def test_backup_restore():
     """Copia dei dati utente e ripristino con il database aperto dall'app (nessun riavvio)."""
-    from gamescraper import backup
-    from gamescraper.library.userdata import UserData
+    from pozzo import backup
+    from pozzo.library.userdata import UserData
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         tmp = Path(t)
         (tmp / "config.toml").write_text("[paths]", encoding="utf-8")
@@ -353,8 +353,8 @@ def test_backup_restore():
 def test_extra_rom_roots():
     """Piu' cartelle ROM: la principale con le console dentro, una aggiuntiva che e' essa stessa una console,
     una non raggiungibile (saltata, non blocca le altre)."""
-    from gamescraper.app import jobs as J
-    from gamescraper.scanner import find_platform_dirs
+    from pozzo.app import jobs as J
+    from pozzo.scanner import find_platform_dirs
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         tmp = Path(t).resolve()  # macOS: /var -> /private/var, e config.load risolve i percorsi
         (tmp / "Roms" / "snes").mkdir(parents=True)
@@ -378,8 +378,8 @@ def test_extra_rom_roots():
 def test_updates():
     """Confronto delle versioni, changelog trovato, controllo su GitHub con una risposta finta (niente rete)."""
     import httpx
-    from gamescraper import __version__, updates
-    from gamescraper.cache import Cache
+    from pozzo import __version__, updates
+    from pozzo.cache import Cache
     assert updates.parse("v0.2.10") > updates.parse("0.2.9") > updates.parse("0.2") and updates.parse("dev-abc") == (0,)
     assert "## " in updates.changelog()
     calls = []
@@ -407,11 +407,11 @@ def test_updates():
     import zipfile
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
-        z.writestr("GameScraper/GameScraper.exe", "nuovo")
+        z.writestr("PozzoLauncher/PozzoLauncher.exe", "nuovo")
     data = buf.getvalue()
     base = f"https://github.com/{updates.REPO}/releases/download/v99.0.0/"
-    assets = [{"name": "GameScraper-99.0.0-windows-x64-setup.exe", "browser_download_url": base + "setup.exe", "size": 1},
-              {"name": "GameScraper-99.0.0-windows-x64.zip", "browser_download_url": base + "w.zip", "size": len(data),
+    assets = [{"name": "PozzoLauncher-99.0.0-windows-x64-setup.exe", "browser_download_url": base + "setup.exe", "size": 1},
+              {"name": "PozzoLauncher-99.0.0-windows-x64.zip", "browser_download_url": base + "w.zip", "size": len(data),
                "digest": "sha256:" + hashlib.sha256(data).hexdigest()}]
 
     class Stream:
@@ -445,7 +445,7 @@ def test_updates():
             script = Path(launched[-1][-1])
             body = script.read_text(encoding="utf-8")
             assert str(Path(t) / "app") in body and "/MIR" not in body and "/PURGE" not in body, body
-            new = script.parent / "new" / "GameScraper" / "GameScraper.exe"
+            new = script.parent / "new" / "PozzoLauncher" / "PozzoLauncher.exe"
             assert new.read_text() == "nuovo", "lo zip va estratto prima di sostituire l'app"
             assets[1]["digest"] = "sha256:0"  # file manomesso: niente installazione
             launched.clear()
@@ -461,8 +461,8 @@ def test_wishlist_keyshops():
     """Lista desideri: prezzo ufficiale (Steam) + prezzo dei negozi di key (GG.deals); la soglia vale anche per le key.
     Risposte finte, nessuna richiesta online."""
     import httpx
-    from gamescraper import wishlist as W
-    from gamescraper.library.userdata import UserData
+    from pozzo import wishlist as W
+    from pozzo.library.userdata import UserData
     seen = []
 
     def handler(req: httpx.Request):
@@ -519,7 +519,7 @@ def test_wishlist_keyshops():
 def test_eden_screenshot_dirs():
     """Schermate di Eden: cartella predefinita in APPDATA e percorso personalizzato letto da qt-config.ini."""
     import os
-    from gamescraper.library import screens
+    from pozzo.library import screens
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         tmp = Path(t)
         (tmp / "eden" / "screenshots").mkdir(parents=True)
@@ -547,7 +547,7 @@ def test_game_saves():
     import os
     import struct
     import zipfile
-    from gamescraper.library import saves as SV
+    from pozzo.library import saves as SV
     tid = "0100ABCD12340000"
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         tmp = Path(t)
@@ -618,7 +618,7 @@ def test_saves_versions():
     fissate che sopravvivono, rollback esatto, confronto, percorsi manuali e proposte dai file cambiati giocando."""
     import os
     import struct
-    from gamescraper.library import saves as SV
+    from pozzo.library import saves as SV
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         tmp = Path(t)
         # ID dalle ROM: disco GameCube, ISO PS2 con SYSTEM.CNF, ISO PSP con UMD_DATA.BIN, cartuccia 3DS (NCSD)
@@ -771,7 +771,7 @@ def test_ludusavi_manifest():
     """Manifest di Ludusavi: ridotto ai salvataggi Windows, gioco trovato per ID Steam/GOG, titolo o cartella,
     segnaposto risolti; quelli non risolvibili (Linux, <root> ignoto) saltati."""
     import os
-    from gamescraper.library import ludusavi as LM
+    from pozzo.library import ludusavi as LM
     full = {
         "Gioco Uno": {"steam": {"id": 10}, "id": {"steamExtra": [11]}, "installDir": {"GiocoUno": {}}, "files": {
             "<base>/Saves": {"tags": ["save"], "when": [{"os": "windows"}]},
@@ -820,7 +820,7 @@ def test_ludusavi_manifest():
 
 def test_mark_started():
     """Partita avviata (anche dal telefono): subito in «Giocati di recente» e «In corso», senza toccare «Finito»."""
-    from gamescraper.library.userdata import UserData
+    from pozzo.library.userdata import UserData
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         u = UserData(Path(t) / "userdata.db")
         r0 = u.rev
@@ -837,7 +837,7 @@ def test_mark_started():
 
 def test_stream_optimize():
     """Ottimizza lo streaming: impostazioni lente di Sunshine e Wi-Fi segnalati; app «Gioco in corso» riconosciuta come nostra."""
-    from gamescraper.remote import sunshine as SUN
+    from pozzo.remote import sunshine as SUN
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         d = Path(t)
         (d / "config").mkdir()
@@ -858,7 +858,7 @@ def test_stream_optimize():
 
 
 def test_single_data_dir():
-    """exe e sorgenti usano la stessa cartella dati: GAMESCRAPER_CONFIG > accanto all'exe > cartella dati dell'utente."""
+    """exe e sorgenti usano la stessa cartella dati: POZZO_CONFIG > accanto all'exe > cartella dati dell'utente."""
     import os
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         tmp = Path(t).resolve()  # macOS: /var/folders e' un link a /private/var/folders, e config.load risolve i percorsi
@@ -867,22 +867,22 @@ def test_single_data_dir():
         other.mkdir()
         (shared / "config.toml").write_text("[paths]", encoding="utf-8")
         (other / "config.toml").write_text("[paths]", encoding="utf-8")
-        saved = config.app_data_dir, os.environ.get("GAMESCRAPER_CONFIG"), os.getcwd()
+        saved = config.app_data_dir, os.environ.get("POZZO_CONFIG"), os.getcwd()
         config.app_data_dir = lambda: shared
-        os.environ.pop("GAMESCRAPER_CONFIG", None)
+        os.environ.pop("POZZO_CONFIG", None)
         try:
             os.chdir(other)  # un config.toml nella cartella corrente NON deve spostare i dati altrove
             assert config._default_config_path() == shared / "config.toml"
             assert config.load(None).cache == shared / "cache"
-            os.environ["GAMESCRAPER_CONFIG"] = str(other / "config.toml")
+            os.environ["POZZO_CONFIG"] = str(other / "config.toml")
             assert config._default_config_path() == other / "config.toml"
         finally:
             config.app_data_dir = saved[0]
             os.chdir(saved[2])
             if saved[1] is None:
-                os.environ.pop("GAMESCRAPER_CONFIG", None)
+                os.environ.pop("POZZO_CONFIG", None)
             else:
-                os.environ["GAMESCRAPER_CONFIG"] = saved[1]
+                os.environ["POZZO_CONFIG"] = saved[1]
     print("ok  una sola cartella dati per exe e sorgenti")
 
 

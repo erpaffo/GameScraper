@@ -4,6 +4,7 @@
 ### Corretto
 
 - Se la cartella di un'estensione non è leggibile (per esempio un collegamento non attendibile di Windows, errore 448) l'app parte lo stesso: l'estensione compare disattivata, con il motivo, invece di bloccare l'avvio
+- Aggiunta di un gioco a mano: non ricostruisce più tutta la libreria (la finestra restava aperta senza mostrare nulla)
 
 ### Aggiunto
 
@@ -15,10 +16,12 @@
 ### Cambiato
 
 - Immagini del gioco: la ricerca passa da SteamGridDB a Google Immagini, con il titolo già scritto
+- Il progetto si chiama Pozzo Launcher: comando pozzo, eseguibile PozzoLauncher.exe, cartella dati PozzoLauncher. Al primo avvio i dati della vecchia cartella GameScraper vengono copiati (la vecchia resta)
 
 ### Migliorato
 
 - Giochi PC avviati da un launcher (Steam, Battle.net…): la finestra del launcher viene ridotta a icona se l'ha aperto il gioco
+- Aggiungi gioco o applicazione: il titolo diventa il nome del file .exe, la finestra si chiude subito e il gioco entra in libreria all'istante; copertina e metadati si cercano dopo, in background, solo per quel gioco
 
 ## 0.8.0 (2026-10-28)
 ### Aggiunto
@@ -183,7 +186,7 @@
 
 - Script prima e dopo il gioco: per tutti i giochi (Impostazioni › Emulatori › Avvio dei giochi) e per singolo gioco, anche PC (⚙ Profilo di avvio)
 - Chiusura automatica del launcher dello store (Steam, Epic, GOG Galaxy, Battle.net, Amazon) a fine partita, se l'aveva aperto il gioco
-- Collegamento sul desktop per ogni gioco, con l'icona del gioco: avvia il gioco tramite GameScraper e ne registra il tempo
+- Collegamento sul desktop per ogni gioco, con l'icona del gioco: avvia il gioco tramite Pozzo Launcher e ne registra il tempo
 - Store Minerva + Switch: l'estensione aggiunge anche gli store Switch preimpostati (NXBrew game-index, Ziperto NSP e Ziperto XCI) e toglie il tipo fisso quando una console ha piu' elenchi, cosi' ogni pagina viene riconosciuta da sola
 
 ## 0.5.4 (2026-10-27)
@@ -242,7 +245,7 @@
 - Estensione «Link -> Store»: legge una pagina che raccoglie altri siti, raggruppa i link per intestazione (h2/h3) e li aggiunge come store di una console o come store PC (repack / download diretto)
 - **Aggiornamento automatico degli store** (console e PC): all'avvio dell'app, ogni giorno all'ora scelta oppure solo
   manualmente, con il pulsante «⟳ Aggiorna tutti» e più store in parallelo.
-- **Log su file** con `--log` (o `GAMESCRAPER_LOG`): ora, decisioni del pianificatore, apertura di ogni elenco, **ogni
+- **Log su file** con `--log` (o `POZZO_LOG`): ora, decisioni del pianificatore, apertura di ogni elenco, **ogni
   pagina letta** ed errori completi — serve a capire perché un sito è lento o non risponde. Il percorso del file è
   indicato nelle impostazioni degli store.
 
@@ -304,7 +307,7 @@
 - **Sala giocatori**: numero e colore del giocatore sul telefono e sul PC; i telefoni si scambiano il posto senza ricollegarsi.
   Il numero è quello che vedono giochi ed emulatori (indice XInput).
 - **Configurazione automatica degli emulatori** (Impostazioni › Telefono e streaming): PCSX2 per Buzz! o per la chitarra,
-  Dolphin per il Wii Remote (server DSU, profili «GameScraper Telefono N», Wii Remote 1..N), con copia dei file e «Annulla».
+  Dolphin per il Wii Remote (server DSU, profili «Pozzo Launcher Telefono N», Wii Remote 1..N), con copia dei file e «Annulla».
 - **Lista desideri: storico dei prezzi** (un punto al giorno, store e negozi di key) con grafichino e avviso quando il prezzo
   è il più basso da quando segui il gioco.
 - **Layout del controller sul telefono**: oltre a Xbox, **PlayStation** (croce in alto a sinistra, levette in basso e
@@ -342,11 +345,11 @@
 ## 0.2.2 (2026-10-26)
 
 ### Cambiato
-- **Una sola cartella dati per exe e sorgenti.** Prima l'exe usava `%LOCALAPPDATA%\GameScraper\` e i sorgenti il
+- **Una sola cartella dati per exe e sorgenti.** Prima l'exe usava `%LOCALAPPDATA%\Pozzo Launcher\` e i sorgenti il
   `config.toml` del progetto: libreria, cache, preferiti e impostazioni si dividevano in due copie. Ora `config.toml`
-  si cerca in quest'ordine: `GAMESCRAPER_CONFIG`, accanto all'exe (versione portatile), cartella dati dell'utente;
+  si cerca in quest'ordine: `POZZO_CONFIG`, accanto all'exe (versione portatile), cartella dati dell'utente;
   solo se questa non esiste ancora, da sorgenti, quello del progetto o della cartella corrente. Una copia nel progetto
-  non viene più letta e il programma lo segnala sulla console; per usarla: `GAMESCRAPER_CONFIG=<percorso>`.
+  non viene più letta e il programma lo segnala sulla console; per usarla: `POZZO_CONFIG=<percorso>`.
   La copia vecchia nel progetto (`cache\`, `settings.json`) non è stata toccata né cancellata.
 
 ### Aggiunto
@@ -406,7 +409,7 @@
   pulsante 🎮 per scegliere *Auto* / *A schermo* / *Il mio*. I tasti a schermo restano disponibili come prima.
 - **Switch: aggiornamento e DLC** nella scheda del gioco («Aggiornamento 1.2.0», «3 DLC»), letti dalle intestazioni dei
   pacchetti nella cartella. Sulla tua libreria: 178 giochi con aggiornamento e 81 con DLC (670 in tutto). *(lettura: Gemini)*
-- **Esportazione per ES-DE e Pegasus** (Impostazioni › Libreria, oppure `gamescraper export-frontend --format esde|pegasus`):
+- **Esportazione per ES-DE e Pegasus** (Impostazioni › Libreria, oppure `pozzo export-frontend --format esde|pegasus`):
   `gamelist.xml` + `downloaded_media`, oppure `metadata.pegasus.txt` + media. Sulla tua libreria: Saturn e Switch
   (476 giochi) in circa un secondo. *(formati: Gemini)*
 - **RetroAchievements** (Impostazioni › Account: utente e Web API key): nella scheda dei giochi retro, obiettivi
@@ -438,7 +441,7 @@
 - Un test scriveva lo stato dei giochi gratis nel `settings.json` della cartella corrente; ora usa una cartella temporanea.
 - **GitHub Actions**: gli artifact scaricati dal workflow erano uno zip contenente un altro zip (`upload-artifact`
   impacchetta sempre quello che carica). Ora si usa `upload-artifact@v7` con `archive: false`: si scarica direttamente
-  `GameScraper-<versione>-<sistema>.zip` (o `.tar.gz` su Linux). Il job di release usa `download-artifact@v8`.
+  `Pozzo Launcher-<versione>-<sistema>.zip` (o `.tar.gz` su Linux). Il job di release usa `download-artifact@v8`.
 
 ## 0.2.0 (2026-10-25)
 
@@ -495,8 +498,8 @@
 - **Istanza unica**: una seconda copia dell'app riporta in primo piano la finestra già aperta (`/api/focus`)
   invece di aprire una pagina nel browser.
 - `release.bat`: aumenta la versione di 0.0.1, compila con PyInstaller e crea
-  `release\GameScraper-<versione>-windows-x64.zip`. Nessuna operazione git.
-- Note di progetto per Obsidian in `docs/obsidian/GameScraper/` (18 note: architettura, pipeline, fonti, cache,
+  `release\Pozzo Launcher-<versione>-windows-x64.zip`. Nessuna operazione git.
+- Note di progetto per Obsidian in `docs/obsidian/Pozzo Launcher/` (18 note: architettura, pipeline, fonti, cache,
   frontend, avvio giochi, store, Big Picture, telefono, plugin, packaging, test, cronologia).
 
 ### Corretto
@@ -507,7 +510,7 @@
   fino a un livello.
 
 ### Note
-- Esistono due copie dei dati: `cache\` nel progetto e `%LOCALAPPDATA%\GameScraper\cache` per l'exe.
+- Esistono due copie dei dati: `cache\` nel progetto e `%LOCALAPPDATA%\Pozzo Launcher\cache` per l'exe.
   Vanno tenute allineate a mano.
 
 ## 0.1.1 e precedenti

@@ -17,9 +17,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 
-from gamescraper import config as C  # noqa: E402
-from gamescraper.app import extensions as X  # noqa: E402
-from gamescraper.app import extstore as S  # noqa: E402
+from pozzo import config as C  # noqa: E402
+from pozzo.app import extensions as X  # noqa: E402
+from pozzo.app import extstore as S  # noqa: E402
 import extensions as T  # noqa: E402  (tools/extensions.py)
 
 
@@ -88,7 +88,7 @@ def main():
         idx["extensions"].append({"id": S.STORE_ID, "files": {"plugin.toml": "0"}})
         (repo / "index.json").write_text(json.dumps(idx), encoding="utf-8")
         expect(lambda: S.install(cfg, "minerva"), "nomi di file")
-        expect(lambda: S.install(cfg, "linkstores"), "richiede GameScraper 99.0.0")
+        expect(lambda: S.install(cfg, "linkstores"), "richiede PozzoLauncher 99.0.0")
         assert {x["id"]: x for x in S.catalog(cfg)["items"]}["linkstores"]["state"] == "incompatible"
         expect(lambda: S.install(cfg, S.STORE_ID), "non trovata")
         expect(lambda: S.remove(cfg, S.STORE_ID), "non si puo' rimuovere")
@@ -188,7 +188,7 @@ def test_fonti(t: Path):
     assert len(idx) == 1 and idx[0]["id"] == "statistiche" and idx[0]["base"] == "./"
     assert {"README.md", "LICENSE", "index.json"}.isdisjoint(idx[0]["files"])      # file del repository, non dell'estensione
     assert (one / "README.md").exists() and (one / ".gitattributes").exists()
-    # index <cartella> rigenera lo stesso indice dal repository separato (la cartella si chiama gamescraper-ext-<id>)
+    # index <cartella> rigenera lo stesso indice dal repository separato (la cartella si chiama pozzo-ext-<id>)
     before = (one / "index.json").read_text(encoding="utf-8")
     T.cmd_index(str(one))
     assert (one / "index.json").read_text(encoding="utf-8") == before

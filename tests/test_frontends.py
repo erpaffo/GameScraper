@@ -13,8 +13,8 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from gamescraper import frontends  # noqa: E402
-from gamescraper.library.build import SCHEMA  # noqa: E402
+from pozzo import frontends  # noqa: E402
+from pozzo.library.build import SCHEMA  # noqa: E402
 
 
 def _make_sample_library(cache_dir: Path, roms_dir: Path) -> None:

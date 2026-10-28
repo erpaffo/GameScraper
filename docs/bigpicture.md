@@ -7,9 +7,9 @@ Big Picture è l'interfaccia a **schermo intero per il controller**, pensata per
 ## Aprirla
 
 - il pulsante **🎮 Big Picture** in alto nella finestra principale;
-- `python -m gamescraper app --bigpicture` per avviare l'app direttamente a schermo intero;
-- `gamescraper bigpicture`, che usa l'app già aperta se c'è;
-- da Moonlight, con l'app «GameScraper Big Picture» pubblicata in Sunshine (vedi
+- `python -m pozzo app --bigpicture` per avviare l'app direttamente a schermo intero;
+- `pozzo bigpicture`, che usa l'app già aperta se c'è;
+- da Moonlight, con l'app «Pozzo Launcher Big Picture» pubblicata in Sunshine (vedi
   [Telefono e streaming](telefono-streaming.md#streaming-con-sunshine-e-moonlight)).
 
 ## Le schermate

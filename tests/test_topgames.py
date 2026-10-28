@@ -11,9 +11,9 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from gamescraper import platforms as P
-from gamescraper import topgames as T
-from gamescraper.cache import Cache
+from pozzo import platforms as P
+from pozzo import topgames as T
+from pozzo.cache import Cache
 
 
 def g(i, title, pid, rating=None, votes=0, critics=None, sources=1, store=None, primary=1):
@@ -91,8 +91,8 @@ def test_save_and_fresh():
 
 
 def test_build_uses_online():
-    from gamescraper.library.build import _apply_online
-    from gamescraper.library.ratings import combine
+    from pozzo.library.build import _apply_online
+    from pozzo.library.ratings import combine
     with tempfile.TemporaryDirectory() as d:
         c = Cache(Path(d))
         try:

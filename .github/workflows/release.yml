@@ -55,7 +55,7 @@ jobs:
         run: python packaging/run_tests.py
 
       - name: Build
-        run: pyinstaller packaging/gamescraper.spec --noconfirm --distpath dist --workpath build
+        run: pyinstaller packaging/pozzo.spec --noconfirm --distpath dist --workpath build
 
       - name: Prova di avvio (smoke test)
         shell: bash
@@ -64,9 +64,9 @@ jobs:
         run: |
           # Verifica che l'eseguibile compilato si avvii e risponda su GET /api/status (su Linux serve Xvfb per la GUI Qt).
           case "$RUNNER_OS" in
-            Windows) python packaging/smoke_test.py dist/GameScraper/GameScraper.exe ;;
-            macOS)   python packaging/smoke_test.py dist/GameScraper.app ;;
-            Linux)   xvfb-run -a python packaging/smoke_test.py dist/GameScraper/GameScraper ;;
+            Windows) python packaging/smoke_test.py dist/PozzoLauncher/PozzoLauncher.exe ;;
+            macOS)   python packaging/smoke_test.py dist/PozzoLauncher.app ;;
+            Linux)   xvfb-run -a python packaging/smoke_test.py dist/PozzoLauncher/PozzoLauncher ;;
           esac
 
       - name: Pacchetto
@@ -75,20 +75,20 @@ jobs:
         run: |
           VER="${GITHUB_REF_NAME#v}"
           # avvio a mano da un branch: la versione scritta nel codice
-          [ "$GITHUB_REF_TYPE" = "tag" ] || VER=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' gamescraper/__init__.py | tr -d '\r')
-          OUT="GameScraper-${VER}-${{ matrix.name }}"
+          [ "$GITHUB_REF_TYPE" = "tag" ] || VER=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' pozzo/__init__.py | tr -d '\r')
+          OUT="PozzoLauncher-${VER}-${{ matrix.name }}"
           mkdir -p release
           case "$RUNNER_OS" in
-            Windows) FILE="release/${OUT}.zip";    7z a -tzip "$FILE" ./dist/GameScraper >/dev/null ;;
-            macOS)   FILE="release/${OUT}.zip";    ditto -c -k --keepParent dist/GameScraper.app "$FILE" ;;
-            Linux)   FILE="release/${OUT}.tar.gz"; tar -czf "$FILE" -C dist GameScraper ;;
+            Windows) FILE="release/${OUT}.zip";    7z a -tzip "$FILE" ./dist/PozzoLauncher >/dev/null ;;
+            macOS)   FILE="release/${OUT}.zip";    ditto -c -k --keepParent dist/PozzoLauncher.app "$FILE" ;;
+            Linux)   FILE="release/${OUT}.tar.gz"; tar -czf "$FILE" -C dist PozzoLauncher ;;
           esac
           echo "file=$FILE" >> "$GITHUB_OUTPUT"
           echo "ver=$VER" >> "$GITHUB_OUTPUT"
           ls -la release
 
       # Installer accanto alla versione portatile: Windows .exe (Inno Setup), macOS .dmg, Linux .deb.
-      # I nomi dei file sono quelli che cerca l'aggiornamento dall'app (gamescraper/updates.py, SUFFIX).
+      # I nomi dei file sono quelli che cerca l'aggiornamento dall'app (pozzo/updates.py, SUFFIX).
       - name: Installer
         id: inst
         shell: bash
@@ -98,25 +98,25 @@ jobs:
             Windows)
               choco install innosetup -y --no-progress >/dev/null
               "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" -Q "-DAppVersion=$VER" packaging/installer.iss
-              FILE="release/GameScraper-${VER}-windows-x64-setup.exe" ;;
+              FILE="release/PozzoLauncher-${VER}-windows-x64-setup.exe" ;;
             macOS)
-              mkdir dmg && cp -R dist/GameScraper.app dmg/ && ln -s /Applications dmg/Applications
-              FILE="release/GameScraper-${VER}-macos-arm64.dmg"
-              hdiutil create -volname GameScraper -srcfolder dmg -ov -format UDZO "$FILE" ;;
+              mkdir dmg && cp -R dist/PozzoLauncher.app dmg/ && ln -s /Applications dmg/Applications
+              FILE="release/PozzoLauncher-${VER}-macos-arm64.dmg"
+              hdiutil create -volname PozzoLauncher -srcfolder dmg -ov -format UDZO "$FILE" ;;
             Linux)
               DEBVER="$VER"; [[ "$VER" =~ ^[0-9] ]] || DEBVER="0.0.0~$VER"  # dpkg vuole un numero all'inizio
               P=pkg
               mkdir -p $P/DEBIAN $P/opt $P/usr/bin $P/usr/share/applications $P/usr/share/pixmaps
-              cp -r dist/GameScraper $P/opt/GameScraper
-              ln -s /opt/GameScraper/GameScraper $P/usr/bin/gamescraper
-              cp packaging/icon.png $P/usr/share/pixmaps/gamescraper.png
-              printf '%s\n' "[Desktop Entry]" "Type=Application" "Name=GameScraper" \
-                "Comment=Libreria di giochi: ROM e store PC" "Exec=/opt/GameScraper/GameScraper" \
-                "Icon=gamescraper" "Categories=Game;" > $P/usr/share/applications/gamescraper.desktop
-              printf '%s\n' "Package: gamescraper" "Version: $DEBVER" "Architecture: amd64" "Maintainer: erpaffo" \
+              cp -r dist/PozzoLauncher $P/opt/PozzoLauncher
+              ln -s /opt/PozzoLauncher/PozzoLauncher $P/usr/bin/pozzo
+              cp packaging/icon.png $P/usr/share/pixmaps/pozzo.png
+              printf '%s\n' "[Desktop Entry]" "Type=Application" "Name=Pozzo Launcher" \
+                "Comment=Libreria di giochi: ROM e store PC" "Exec=/opt/PozzoLauncher/PozzoLauncher" \
+                "Icon=pozzo" "Categories=Game;" > $P/usr/share/applications/pozzo.desktop
+              printf '%s\n' "Package: pozzo" "Version: $DEBVER" "Architecture: amd64" "Maintainer: erpaffo" \
                 "Depends: libegl1, libnss3, libxkbcommon-x11-0, libxcb-cursor0, libxcb-icccm4, libxcb-image0, libxcb-keysyms1, libxcb-randr0, libxcb-render-util0, libxcb-shape0, libxcb-xfixes0, libxcb-xinerama0, libxcb-xkb1" \
-                "Description: GameScraper - libreria di giochi con copertine e metadati" > $P/DEBIAN/control
-              FILE="release/gamescraper_${DEBVER}_amd64.deb"
+                "Description: Pozzo Launcher - libreria di giochi con copertine e metadati" > $P/DEBIAN/control
+              FILE="release/pozzo_${DEBVER}_amd64.deb"
               dpkg-deb --root-owner-group --build $P "$FILE" ;;
           esac
           echo "file=$FILE" >> "$GITHUB_OUTPUT"
@@ -160,7 +160,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y pandoc texlive-xetex texlive-latex-recommended texlive-latex-extra \
             texlive-fonts-recommended texlive-lang-italian fonts-dejavu-core
-          python tools/docs_pdf.py "release/GameScraper-${GITHUB_REF_NAME#v}-manuale.pdf"
+          python tools/docs_pdf.py "release/PozzoLauncher-${GITHUB_REF_NAME#v}-manuale.pdf"
 
       # testo della release: la sezione "## <versione>" di changelog.md (fino alla sezione seguente)
       - name: Novità della versione

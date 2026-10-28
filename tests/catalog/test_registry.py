@@ -13,8 +13,8 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from gamescraper import catalog  # noqa: E402
-from gamescraper.cache import Cache  # noqa: E402
+from pozzo import catalog  # noqa: E402
+from pozzo.cache import Cache  # noqa: E402
 
 # Indice Apache classico, il formato storico di "filelist"
 HTML_APACHE = """<html><body><h1>Index of /nds</h1><pre>

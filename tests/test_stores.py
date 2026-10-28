@@ -14,11 +14,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from gamescraper import config  # noqa: E402
-from gamescraper.app.server import create_app  # noqa: E402
-from gamescraper.cache import Cache  # noqa: E402
-from gamescraper.library.build import build  # noqa: E402
-from gamescraper.stores.base import parse_vdf  # noqa: E402
+from pozzo import config  # noqa: E402
+from pozzo.app.server import create_app  # noqa: E402
+from pozzo.cache import Cache  # noqa: E402
+from pozzo.library.build import build  # noqa: E402
+from pozzo.stores.base import parse_vdf  # noqa: E402
 
 
 def test_vdf():

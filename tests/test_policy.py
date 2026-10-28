@@ -13,10 +13,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import httpx  # noqa: E402
 
-from gamescraper import config, net  # noqa: E402
-from gamescraper.library.ratings import combine  # noqa: E402
-from gamescraper.net import RateLimiter, Stop, request  # noqa: E402
-from gamescraper.policy import Ledger, Policy, policy_for  # noqa: E402
+from pozzo import config, net  # noqa: E402
+from pozzo.library.ratings import combine  # noqa: E402
+from pozzo.net import RateLimiter, Stop, request  # noqa: E402
+from pozzo.policy import Ledger, Policy, policy_for  # noqa: E402
 
 
 def test_budget(tmp: Path):
@@ -95,7 +95,7 @@ def test_http_cache(tmp: Path):
             return a, b
     try:
         a, b = asyncio.run(go())
-        assert calls["n"] == 1 and b.json() == {"ok": True} and b.headers.get("x-gamescraper-cache") == "hit"
+        assert calls["n"] == 1 and b.json() == {"ok": True} and b.headers.get("x-pozzo-cache") == "hit"
         raw = (tmp / "c.db").read_bytes()
         assert b"SEGRETO" not in raw, "le chiavi API non devono finire nella cache"
     finally:

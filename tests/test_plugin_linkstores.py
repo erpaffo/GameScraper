@@ -6,8 +6,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from gamescraper import config as C  # noqa: E402
-from gamescraper.app import extensions  # noqa: E402
+from pozzo import config as C  # noqa: E402
+from pozzo.app import extensions  # noqa: E402
 
 SRC = Path(__file__).resolve().parents[1] / "extensions" / "linkstores"  # non piu' inclusa: si installa dallo store
 BACKEND = SRC / "backend.py"

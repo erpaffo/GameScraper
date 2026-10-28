@@ -10,9 +10,9 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from gamescraper import config as C  # noqa: E402
-from gamescraper import platforms as P  # noqa: E402
-from gamescraper.library import launcher as L  # noqa: E402
+from pozzo import config as C  # noqa: E402
+from pozzo import platforms as P  # noqa: E402
+from pozzo.library import launcher as L  # noqa: E402
 
 
 def test_eden_plan_and_command(tmp: Path):
@@ -73,7 +73,7 @@ def test_scripts_and_close_launcher(tmp: Path):
     import time
     log = tmp / "log.txt"
     hook = tmp / "hook.py"
-    hook.write_text("import os, sys\nopen(sys.argv[1], 'a').write(sys.argv[2] + ':' + os.environ['GAMESCRAPER_TITLE'] + '\\n')\n")
+    hook.write_text("import os, sys\nopen(sys.argv[1], 'a').write(sys.argv[2] + ':' + os.environ['POZZO_TITLE'] + '\\n')\n")
     run = lambda tag: f'"{sys.executable}" "{hook}" "{log}" {tag}'  # noqa: E731
     cfg = C.Config()
     cfg.app["launch"] = {"before": run("all-before"), "after": run("all-after"), "close_launcher": True}
@@ -106,14 +106,14 @@ def test_scripts_and_close_launcher(tmp: Path):
 
 
 def test_shortcut(tmp: Path):
-    from gamescraper.library import shortcut as SC
+    from pozzo.library import shortcut as SC
     assert SC.file_name('Zelda: Ocarina of Time? "3D"') == "Zelda Ocarina of Time 3D"
     assert SC.split_cmd('"C:\\a b\\cli.exe" -c "x y"') == ("C:\\a b\\cli.exe", '-c "x y"')
     if sys.platform == "win32":
         saved = SC.desktop_dir
         SC.desktop_dir = lambda: tmp
         try:
-            lnk = SC.create("Mario & Luigi: 'Test'", f'"{sys.executable}" -m gamescraper', str(tmp), "snes/x.sfc", None)
+            lnk = SC.create("Mario & Luigi: 'Test'", f'"{sys.executable}" -m pozzo', str(tmp), "snes/x.sfc", None)
             assert lnk == tmp / "Mario & Luigi 'Test'.lnk" and lnk.stat().st_size > 0
         finally:
             SC.desktop_dir = saved

@@ -13,7 +13,7 @@
 | `cache/backups/` | Copie di sicurezza dei tuoi dati | L'app |
 | `cache/saves/` | Copie dei salvataggi dei giochi | L'app |
 | `cache/logs/diagnostica.log` | Log diagnostico (con `--log`) | L'app |
-| `output/` | Risultato dello scraping da terminale (JSON, CSV, immagini) | `gamescraper run` / `export` |
+| `output/` | Risultato dello scraping da terminale (JSON, CSV, immagini) | `pozzo run` / `export` |
 | `themes/`, `plugins/` | Temi e plugin tuoi | Tu |
 
 La cartella che contiene `config.toml` si trova come descritto in
@@ -117,8 +117,8 @@ args = ["-L", "{core}", "{rom}", "-f"]
 
 | Variabile | Significato |
 |---|---|
-| `GAMESCRAPER_CONFIG` | Percorso del `config.toml` da usare |
-| `GAMESCRAPER_LOG` | Attiva il log diagnostico (`1` o un percorso) |
+| `POZZO_CONFIG` | Percorso del `config.toml` da usare |
+| `POZZO_LOG` | Attiva il log diagnostico (`1` o un percorso) |
 | `SS_USER`, `SS_PASSWORD`, `SS_DEVID`, `SS_DEVPASSWORD` | Credenziali ScreenScraper |
 | `IGDB_CLIENT_ID`, `IGDB_CLIENT_SECRET` | Credenziali IGDB |
 | `TGDB_API_KEY` | Chiave TheGamesDB |
@@ -147,8 +147,8 @@ Lo scrive l'app; si può modificare a mano con l'app chiusa. Le sezioni più uti
 
 ## Comandi da terminale
 
-Dai sorgenti si usa `python -m gamescraper <comando>`. Con l'eseguibile si usa `gamescraper-cli <comando>`, che sta
-nella stessa cartella dell'app; con il pacchetto `.deb` c'è il comando `gamescraper <comando>`.
+Dai sorgenti si usa `python -m pozzo <comando>`. Con l'eseguibile si usa `pozzo-cli <comando>`, che sta
+nella stessa cartella dell'app; con il pacchetto `.deb` c'è il comando `pozzo <comando>`.
 
 | Comando | Cosa fa |
 |---|---|
@@ -252,9 +252,9 @@ Con `curl`:
 
 ```bash
 # il token sta in <cartella dati>/cache/api-token, oppure si copia da Impostazioni › Info
-#   Windows: %LOCALAPPDATA%\GameScraper\cache\api-token
-#   macOS:   ~/Library/Application Support/GameScraper/cache/api-token
-#   Linux:   ~/.local/share/GameScraper/cache/api-token
+#   Windows: %LOCALAPPDATA%\PozzoLauncher\cache\api-token
+#   macOS:   ~/Library/Application Support/PozzoLauncher/cache/api-token
+#   Linux:   ~/.local/share/PozzoLauncher/cache/api-token
 TOKEN="..."
 
 curl -s -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8765/api/v1/games?q=zelda&limit=5"
@@ -266,8 +266,8 @@ curl -s -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8765/api/v1/events" 
 In Python, con il client incluso (indirizzo e token si leggono da soli):
 
 ```python
-from gamescraper import config
-from gamescraper.api_client import Client, ApiError
+from pozzo import config
+from pozzo.api_client import Client, ApiError
 
 c = Client(cfg=config.load())            # oppure Client("http://127.0.0.1:8765", token="...")
 for g in c.games(q="zelda", limit=5)["items"]:
@@ -278,4 +278,4 @@ for kind, data in c.events():
     print(kind, data)
 ```
 
-`GAMESCRAPER_URL` e `GAMESCRAPER_API_TOKEN` impostano indirizzo e token per tutti gli script.
+`POZZO_URL` e `POZZO_API_TOKEN` impostano indirizzo e token per tutti gli script.

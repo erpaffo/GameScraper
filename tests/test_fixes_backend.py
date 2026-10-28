@@ -10,9 +10,9 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from gamescraper.catalog import parse_listing  # noqa: E402
-from gamescraper.library.build import NOT_A_GAME  # noqa: E402
-from gamescraper.library.userdata import UserData  # noqa: E402
+from pozzo.catalog import parse_listing  # noqa: E402
+from pozzo.library.build import NOT_A_GAME  # noqa: E402
+from pozzo.library.userdata import UserData  # noqa: E402
 
 
 def test_not_a_game():
@@ -56,6 +56,31 @@ def test_media_override(tmp: Path):
     print("ok  immagini scelte dall'utente")
 
 
+def test_update_manual(tmp: Path):
+    import sqlite3
+
+    from pozzo import config as C
+    from pozzo.cache import Cache
+    from pozzo.library import build as B
+    from pozzo.stores.base import StoreGame
+    cfg = C.Config()
+    cfg.cache = tmp
+    assert B.update_manual(cfg) is False  # libreria non ancora costruita
+    con = sqlite3.connect(tmp / "library.db")
+    con.executescript(B.SCHEMA)
+    con.close()
+    cache = Cache(tmp)
+    cache.kv_set("store:manual", [{**StoreGame(store="manual", id="7", title="Mio Gioco", installed=True,
+                                               launch={"type": "exe", "target": "C:/g/mio.exe"}).to_dict(), "media": {}}])
+    cache.close()
+    assert B.update_manual(cfg) and B.update_manual(cfg)  # due volte: nessun doppione
+    db = sqlite3.connect(tmp / "library.db")
+    rows = db.execute("SELECT key, title, store, is_primary FROM games").fetchall()
+    db.close()
+    assert rows == [("windows/manual:7", "Mio Gioco", "manual", 1)], rows
+    print("ok  aggiornamento rapido dei soli giochi manuali")
+
+
 if __name__ == "__main__":
     test_not_a_game()
     test_magnet_per_file()
@@ -63,4 +88,6 @@ if __name__ == "__main__":
         test_manual(Path(d))
     with tempfile.TemporaryDirectory() as d:
         test_media_override(Path(d))
+    with tempfile.TemporaryDirectory() as d:
+        test_update_manual(Path(d))
     print("test_fixes_backend: OK")

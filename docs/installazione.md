@@ -7,37 +7,37 @@ un **installer** e una versione **portatile**.
 
 | Sistema | Installer | Portatile |
 |---|---|---|
-| Windows 10/11 (64 bit) | `GameScraper-<versione>-windows-x64-setup.exe` | `GameScraper-<versione>-windows-x64.zip` |
-| macOS 11+ (Apple Silicon) | `GameScraper-<versione>-macos-arm64.dmg` | `GameScraper-<versione>-macos-arm64.zip` |
-| Linux (64 bit) | `gamescraper_<versione>_amd64.deb` | `GameScraper-<versione>-linux-x64.tar.gz` |
+| Windows 10/11 (64 bit) | `PozzoLauncher-<versione>-windows-x64-setup.exe` | `PozzoLauncher-<versione>-windows-x64.zip` |
+| macOS 11+ (Apple Silicon) | `PozzoLauncher-<versione>-macos-arm64.dmg` | `PozzoLauncher-<versione>-macos-arm64.zip` |
+| Linux (64 bit) | `pozzo_<versione>_amd64.deb` | `PozzoLauncher-<versione>-linux-x64.tar.gz` |
 
 **Installer o portatile?**
 
 - L'**installer** mette l'app tra i programmi, crea il collegamento nel menu Start (e, se vuoi, sul desktop) e
   permette di disinstallarla dalle impostazioni del sistema. Su Windows installa per il solo utente corrente
-  (`%LOCALAPPDATA%\Programs\GameScraper`) e **non chiede i permessi di amministratore**.
+  (`%LOCALAPPDATA%\Programs\PozzoLauncher`) e **non chiede i permessi di amministratore**.
 - La versione **portatile** è una cartella da estrarre dove vuoi, anche su un disco esterno. Non installa niente.
 
 ### Windows
 
 - Installer: apri il `setup.exe` e segui i passaggi.
-- Portatile: estrai lo zip e apri `GameScraper.exe`.
+- Portatile: estrai lo zip e apri `PozzoLauncher.exe`.
 
 Gli eseguibili non sono firmati: SmartScreen chiede conferma (**Ulteriori informazioni › Esegui comunque**).
 
 ### macOS
 
-- `.dmg`: aprilo e trascina **GameScraper** nella cartella **Applicazioni**.
-- `.zip`: estrai e apri `GameScraper.app`.
+- `.dmg`: aprilo e trascina **Pozzo Launcher** nella cartella **Applicazioni**.
+- `.zip`: estrai e apri `PozzoLauncher.app`.
 
 La prima volta apri l'app con **clic destro › Apri** (l'app non è firmata), oppure da Terminale:
-`xattr -cr /Applications/GameScraper.app`.
+`xattr -cr /Applications/PozzoLauncher.app`.
 
 ### Linux
 
-- `.deb` (Debian, Ubuntu, Mint e derivate): `sudo apt install ./gamescraper_<versione>_amd64.deb`. Installa anche
-  le librerie di sistema necessarie, il collegamento nel menu delle applicazioni e il comando `gamescraper`.
-- `.tar.gz`: estrai e avvia `GameScraper/GameScraper`. Su installazioni minimali possono servire le librerie della
+- `.deb` (Debian, Ubuntu, Mint e derivate): `sudo apt install ./pozzo_<versione>_amd64.deb`. Installa anche
+  le librerie di sistema necessarie, il collegamento nel menu delle applicazioni e il comando `pozzo`.
+- `.tar.gz`: estrai e avvia `PozzoLauncher/PozzoLauncher`. Su installazioni minimali possono servire le librerie della
   finestra Qt: `libegl1 libnss3 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1
   libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1`.
 
@@ -66,13 +66,19 @@ Configurazione, cache, libreria e dati personali stanno nella cartella dell'uten
 
 | Sistema | Cartella dati |
 |---|---|
-| Windows | `%LOCALAPPDATA%\GameScraper` |
-| macOS | `~/Library/Application Support/GameScraper` |
-| Linux | `~/.local/share/GameScraper` |
+| Windows | `%LOCALAPPDATA%\PozzoLauncher` |
+| macOS | `~/Library/Application Support/PozzoLauncher` |
+| Linux | `~/.local/share/PozzoLauncher` |
+
+**Se hai usato la versione precedente** (che si chiamava GameScraper): al primo avvio la cartella
+`GameScraper` viene **copiata** in `PozzoLauncher`, con libreria, preferiti, salvataggi e impostazioni. La
+vecchia cartella non viene toccata e si può cancellare quando sei sicuro che vada tutto bene. La copia si fa una
+volta sola (con librerie grandi può richiedere qualche minuto) e, se non riesce, l'app continua a usare la
+cartella di prima senza perdere niente.
 
 Il file `config.toml` si cerca in quest'ordine:
 
-1. la variabile d'ambiente `GAMESCRAPER_CONFIG` (percorso completo di un `config.toml`);
+1. la variabile d'ambiente `POZZO_CONFIG` (percorso completo di un `config.toml`);
 2. un `config.toml` **accanto all'eseguibile**: è la modalità **portatile**, con tutti i dati nella stessa cartella
    dell'app;
 3. la cartella dati dell'utente (tabella sopra).
@@ -125,10 +131,10 @@ Per sviluppare o provare le ultime modifiche:
 
 ```powershell
 python -m pip install -r requirements.txt
-python -m gamescraper app              # finestra desktop
-python -m gamescraper app --browser    # nel browser (http://127.0.0.1:8765)
-python -m gamescraper app --bigpicture # direttamente in Big Picture
+python -m pozzo app              # finestra desktop
+python -m pozzo app --browser    # nel browser (http://127.0.0.1:8765)
+python -m pozzo app --bigpicture # direttamente in Big Picture
 ```
 
-Gli eseguibili si creano con PyInstaller (`pyinstaller packaging/gamescraper.spec --noconfirm`); su GitHub li crea
+Gli eseguibili si creano con PyInstaller (`pyinstaller packaging/pozzo.spec --noconfirm`); su GitHub li crea
 il workflow di release a ogni tag di versione.

@@ -10,8 +10,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from gamescraper import config as C  # noqa: E402
-from gamescraper import discordrpc as D  # noqa: E402
+from pozzo import config as C  # noqa: E402
+from pozzo import discordrpc as D  # noqa: E402
 
 
 class FakeChannel:
@@ -97,8 +97,8 @@ def test_percorsi_canali():
 
 
 def test_activity_pulita():
-    a = D.activity("Zelda", "Switch · su GameScraper", started=1700000000.7, large_text="Zelda")
-    assert a["details"] == "Zelda" and a["state"] == "Switch · su GameScraper"
+    a = D.activity("Zelda", "Switch · su PozzoLauncher", started=1700000000.7, large_text="Zelda")
+    assert a["details"] == "Zelda" and a["state"] == "Switch · su PozzoLauncher"
     assert a["timestamps"] == {"start": 1700000000}
     assert a["assets"]["large_text"] == "Zelda" and a["instance"] is False
     # niente campi vuoti: Discord li rifiuta

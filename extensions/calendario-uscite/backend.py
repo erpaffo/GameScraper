@@ -84,7 +84,7 @@ def register(gs):
     memo: dict = {}
 
     def get(url, params):
-        r = httpx.get(url, params=params, timeout=20, headers={"User-Agent": "GameScraper"})
+        r = httpx.get(url, params=params, timeout=20, headers={"User-Agent": "PozzoLauncher"})
         if r.status_code in (401, 403):
             raise HTTPException(400, "Chiave RAWG non valida o quota esaurita (Impostazioni › Fonti)")
         if r.status_code != 200:
@@ -98,7 +98,7 @@ def register(gs):
             raise HTTPException(400, "Serve la chiave gratuita di RAWG: Impostazioni › Fonti (rawg.io/apidocs)")
         if not 7 <= giorni <= 730:
             raise HTTPException(400, "Intervallo non valido (7-730 giorni)")
-        from gamescraper.sync import profile_path
+        from pozzo.sync import profile_path
         lib = sqlite3.connect(cache / "library.db") if (cache / "library.db").exists() else None
         user = sqlite3.connect(profile_path(gs.cfg, gs.cfg.app.get("profile") or "default"))
         try:

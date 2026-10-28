@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 ROOT = Path(__file__).parent.parent
-_spec = importlib.util.spec_from_file_location("minerva", ROOT / "gamescraper/app/plugins/minerva/backend.py")
+_spec = importlib.util.spec_from_file_location("minerva", ROOT / "pozzo/app/plugins/minerva/backend.py")
 M = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(M)
 

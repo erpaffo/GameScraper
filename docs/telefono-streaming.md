@@ -1,6 +1,6 @@
 # Telefono e streaming
 
-Il telefono (o il tablet) può fare tre cose con GameScraper:
+Il telefono (o il tablet) può fare tre cose con Pozzo Launcher:
 
 1. **telecomando della libreria**: sfogliare i giochi, avviarli e chiuderli sul PC;
 2. **controller**: tasti a schermo, giroscopio, fino a 4 telefoni per 4 giocatori;
@@ -34,18 +34,18 @@ quindi niente installazione e niente uso senza rete. La soluzione è fidarsi del
 Attenzione a cosa fa il profilo: **non attiva l'HTTPS** (c'è già, la pagina è `https://<ip>:8766/m/`), serve a dire al
 telefono «questo certificato è legittimo». HTTPS è due cose insieme: connessione cifrata e **identità** del server
 certificata da qualcuno. Un sito pubblico si fa certificare da un'autorità pubblica (serve un dominio e internet);
-qui l'autorità sei tu, sul PC, e installare `GameScraper-CA.crt` una volta sul telefono la rende riconosciuta. Con un
+qui l'autorità sei tu, sul PC, e installare `PozzoLauncher-CA.crt` una volta sul telefono la rende riconosciuta. Con un
 certificato fidato il service worker viene accettato e l'app si installa. Senza profilo, su iPhone puoi ancora usare
 *Condividi › Aggiungi alla schermata Home*, ma resta un semplice collegamento: niente uso senza rete e niente
 giroscopio (anche i sensori richiedono una connessione considerata sicura).
 
 Sul PC: **Impostazioni › 📱 Telefono e streaming › 🔒 Certificato del PC**. Si inquadra il QR (o si apre
-`https://<ip-del-pc>:8766/m/ca.crt`) e si installa il file `GameScraper-CA.crt`:
+`https://<ip-del-pc>:8766/m/ca.crt`) e si installa il file `PozzoLauncher-CA.crt`:
 
 - **Android**: Impostazioni › Sicurezza › Crittografia e credenziali › Installa un certificato › *Certificato CA* ›
   «Avvisa comunque» › scegli il file appena scaricato. Chrome si fida delle CA installate dall'utente.
 - **iPhone/iPad**: Impostazioni › Generali › VPN e gestione dispositivi › installa il profilo; poi Impostazioni ›
-  Generali › Info › *Impostazioni attendibilità certificati* › attiva l'interruttore di «GameScraper CA» (senza questo
+  Generali › Info › *Impostazioni attendibilità certificati* › attiva l'interruttore di «Pozzo Launcher CA» (senza questo
   passaggio il certificato non è fidato).
 
 Poi si chiudono e si riaprono le schede del browser: l'avviso sparisce e l'app si installa. Note utili:
@@ -62,7 +62,7 @@ Poi si chiudono e si riaprono le schede del browser: l'avviso sparisce e l'app s
 - Se il telefono continua a dire «non privata»: manca l'attivazione della fiducia (iOS), la CA è stata installata come
   certificato «Wi-Fi/VPN» invece che «CA» (Android), oppure la pagina è ancora aperta: chiudi tutte le schede e riapri.
 - Se il telefono **blocca il download** del certificato (capita finché la pagina è segnalata come non sicura), in
-  Impostazioni › Telefono e streaming c'è il link che salva `GameScraper-CA.crt` **sul PC**: passalo al telefono con
+  Impostazioni › Telefono e streaming c'è il link che salva `PozzoLauncher-CA.crt` **sul PC**: passalo al telefono con
   cavo, e-mail, cloud o AirDrop, poi installalo come sopra.
 - Se hai perso la cartella `certs` (o hai ripristinato un backup su un PC nuovo) viene creata una CA nuova: i telefoni
   vanno rifidati una volta sola.
@@ -172,7 +172,7 @@ funziona, senza aprire giochi o emulatori.
 Alcuni controller speciali richiedono impostazioni nell'emulatore. L'app le scrive da sola:
 
 - **PCSX2** per Buzz! o per la chitarra;
-- **Dolphin** per il Wii Remote: server DSU, profili «GameScraper Telefono N», Wii Remote 1…N.
+- **Dolphin** per il Wii Remote: server DSU, profili «Pozzo Launcher Telefono N», Wii Remote 1…N.
 
 I file originali vengono copiati prima; **Annulla** rimette le impostazioni dell'emulatore com'erano.
 
@@ -199,8 +199,8 @@ dispositivo che guarda.
 
 ### Pubblicare i giochi in Moonlight
 
-**Pubblica in Moonlight** aggiunge a Sunshine l'app «GameScraper Big Picture» e i tuoi giochi principali con le
-copertine; le altre app di Sunshine restano. Moonlight avvia `gamescraper-cli play --key …`, che resta aperto finché
+**Pubblica in Moonlight** aggiunge a Sunshine l'app «Pozzo Launcher Big Picture» e i tuoi giochi principali con le
+copertine; le altre app di Sunshine restano. Moonlight avvia `pozzo-cli play --key …`, che resta aperto finché
 giochi: lo streaming si chiude da solo a fine partita.
 
 ### Sunshine sempre pronto

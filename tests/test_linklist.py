@@ -5,8 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from gamescraper import config as C  # noqa: E402
-from gamescraper.linklist import add_store, platform_id, scan_page  # noqa: E402
+from pozzo import config as C  # noqa: E402
+from pozzo.linklist import add_store, platform_id, scan_page  # noqa: E402
 
 PAGE = """
 <html><head><title>Elenco di siti</title></head><body>

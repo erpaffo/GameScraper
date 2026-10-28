@@ -1,7 +1,7 @@
 [plugin]
 name = "Limite di tempo"
 version = "1.0"
-author = "GameScraper"
+author = "Pozzo Launcher"
 description = "Avvisa con una notifica quando superi X ore di gioco al giorno o alla settimana (del profilo attivo): utile per te o per i figli. È un avviso, non chiude il gioco."
 api = 1
 min_app = "0.7.1"

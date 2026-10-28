@@ -6,8 +6,8 @@
                                                    # ogni modifica; "link" e' un alias). Niente junction: l'app installata
                                                    # non le attraversa se puntano dentro OneDrive (WinError 448)
   python tools/extensions.py export <cartella> [utente]
-        # un repository per estensione (gamescraper-ext-<id>) e quello dello store (gamescraper-extensions),
-        # pronti per git init / push; lo store punta a utente/gamescraper-ext-<id> al tag v<versione>
+        # un repository per estensione (pozzo-ext-<id>) e quello dello store (pozzo-extensions),
+        # pronti per git init / push; lo store punta a utente/pozzo-ext-<id> al tag v<versione>
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ EXT = ROOT / "extensions"
 INDEX = EXT / "index.json"
 SKIP = {"__pycache__", ".pytest_cache"}
 NOT_PUBLISHED = {"index.json", "README.md", "LICENSE"}  # file del repository, non dell'estensione installata
-PREFIX, STORE = "gamescraper-ext-", "gamescraper-extensions"
+PREFIX, STORE = "pozzo-ext-", "pozzo-extensions"
 GITATTRIBUTES = "# lo store verifica lo sha256 dei file serviti da GitHub raw: in locale devono essere identici (LF)\n" \
                 "* text=auto eol=lf\n*.png binary\n*.jpg binary\n*.webp binary\n*.woff2 binary\n"
 
@@ -92,8 +92,8 @@ def cmd_install(folder: str | None = None):
     """Copia le estensioni di `folder` (default extensions/: una cartella di estensioni, oppure una sola) nella cartella
     plugin del config, al posto di quello che c'era. Una vecchia junction/symlink viene tolta (solo il collegamento)."""
     sys.path.insert(0, str(ROOT))
-    from gamescraper import config as C
-    from gamescraper.app.extensions import user_dir
+    from pozzo import config as C
+    from pozzo.app.extensions import user_dir
     plugins = user_dir(C.load(None), "plugins")
     src = Path(folder).resolve() if folder else EXT
     dirs = [src] if (src / "plugin.toml").exists() else extension_dirs(src)
@@ -115,11 +115,11 @@ def ext_readme(e: dict, repo: str) -> str:
 
 {e['description']}
 
-Estensione per [GameScraper](https://github.com/erpaffo/GameScraper) (richiede la versione {e['min_app']} o successiva).
+Estensione per [Pozzo Launcher](https://github.com/erpaffo/GameScraper) (richiede la versione {e['min_app']} o successiva).
 
 ## Installazione
 
-Dall'app: **Store estensioni** › **{e['name']}** › **⬇ Installa**, poi riavvia GameScraper.
+Dall'app: **Store estensioni** › **{e['name']}** › **⬇ Installa**, poi riavvia Pozzo Launcher.
 
 Se non è nello store ufficiale: **Store estensioni** › *Fonti delle estensioni* › incolla
 `https://github.com/{repo}` › **Aggiungi**.
@@ -127,19 +127,19 @@ Se non è nello store ufficiale: **Store estensioni** › *Fonti delle estension
 ## Sviluppo
 
 1. Modifica i file e prova l'estensione collegandola alla tua cartella plugin:
-   `python <GameScraper>/tools/extensions.py install .` (copia i file: rifallo dopo ogni modifica)
-2. Alza `version` in `plugin.toml` e rigenera l'indice: `python <GameScraper>/tools/extensions.py index .`
+   `python <PozzoLauncher>/tools/extensions.py install .` (copia i file: rifallo dopo ogni modifica)
+2. Alza `version` in `plugin.toml` e rigenera l'indice: `python <PozzoLauncher>/tools/extensions.py index .`
 3. Commit, tag `v<versione>` e push. Nello store, la voce di questa estensione va portata al tag nuovo.
 """
 
 
-STORE_README = """# Store delle estensioni di GameScraper
+STORE_README = """# Store delle estensioni di Pozzo Launcher
 
-Elenco delle estensioni che [GameScraper](https://github.com/erpaffo/GameScraper) mostra nello **Store estensioni**.
+Elenco delle estensioni che [Pozzo Launcher](https://github.com/erpaffo/GameScraper) mostra nello **Store estensioni**.
 Ogni estensione vive nel proprio repository; qui c'è solo `index.json`, con il repository e la versione approvata:
 
 ```json
-{"repos": [{"repo": "utente/gamescraper-ext-esempio", "ref": "v1.0"}]}
+{"repos": [{"repo": "utente/pozzo-ext-esempio", "ref": "v1.0"}]}
 ```
 
 L'app legge l'`index.json` di ogni repository a quel tag e installa solo file con lo sha256 indicato lì.
@@ -147,7 +147,7 @@ L'app legge l'`index.json` di ogni repository a quel tag e installa solo file co
 ## Aggiungere o aggiornare un'estensione
 
 1. Il repository dell'estensione ha in cima `plugin.toml`, i suoi file e `index.json`
-   (generato con `python tools/extensions.py index .` dal repository di GameScraper).
+   (generato con `python tools/extensions.py index .` dal repository di Pozzo Launcher).
 2. Pubblica un tag `v<versione>`.
 3. Apri una pull request qui che aggiunge la voce o ne cambia `ref`.
 

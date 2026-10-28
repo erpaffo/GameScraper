@@ -8,8 +8,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from gamescraper.remote import dualscreen as D  # noqa: E402
-from gamescraper.remote.emusetup import ini_get  # noqa: E402
+from pozzo.remote import dualscreen as D  # noqa: E402
+from pozzo.remote.emusetup import ini_get  # noqa: E402
 
 MELON = """[Instance0]
 JoystickID = 0
@@ -114,8 +114,8 @@ def test_telefono_collegato_anche_senza_controller():
     """«Collegato» = controller aperto oppure app del telefono vista da poco: non serve il pad aperto."""
     from fastapi.testclient import TestClient
 
-    from gamescraper import config
-    from gamescraper.app.server import create_app
+    from pozzo import config
+    from pozzo.app.server import create_app
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         d = Path(t)
         (d / "melon").mkdir()
@@ -151,9 +151,9 @@ def test_telefono_collegato_anche_senza_controller():
 def test_server_cycle_and_gate():
     from fastapi.testclient import TestClient
 
-    from gamescraper import config
-    from gamescraper.app.server import create_app
-    from gamescraper.remote import phone as PH
+    from pozzo import config
+    from pozzo.app.server import create_app
+    from pozzo.remote import phone as PH
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         d = Path(t)
         (d / "melon").mkdir()
@@ -210,8 +210,8 @@ def test_impostazione_secondi_senza_uso():
     """`screen_idle` (Impostazioni › Telefono): 30 secondi di default, modificabile e limitato fra 5 e 600."""
     from fastapi.testclient import TestClient
 
-    from gamescraper import config
-    from gamescraper.app.server import create_app
+    from pozzo import config
+    from pozzo.app.server import create_app
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         d = Path(t)
         cfg = config.Config(cache=d / "cache", output=d / "out")

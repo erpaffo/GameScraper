@@ -5,14 +5,14 @@
       "id": "anniversari",
       "name": "Anniversari retro",
       "version": "1.0",
-      "author": "GameScraper",
+      "author": "Pozzo Launcher",
       "description": "Un badge «30 ANNI» sulle copertine dei giochi usciti proprio oggi, di qualche anno fa, e la pagina «Oggi nel…» con l'elenco.",
       "min_app": "0.7.1",
       "base": "anniversari/",
       "files": {
         "backend.py": "4188b25566141a966561a36508cc852a0e3322ac8cb1f968d98921a5530b3229",
         "frontend.js": "8b9665770cf2eefe47c96a52a6800f3754852e3aa20e83f19a73e16aca36a86b",
-        "plugin.toml": "431903ca439c1164cc5fb1964a5a9a05cf740fb09375b2ac12e4f9ccdfb110c2",
+        "plugin.toml": "dc1d8952a95c274b96127b79b6b226bc52167f7720cfc5d86d53e129daed69bf",
         "style.css": "57030827a56b1e35ac6c1d3b8317b60600cd85e20371b73da8e8bb096cb47b40"
       }
     },
@@ -20,14 +20,14 @@
       "id": "calendario-uscite",
       "name": "Calendario uscite",
       "version": "1.0",
-      "author": "GameScraper",
+      "author": "Pozzo Launcher",
       "description": "Le prossime uscite: prima i giochi della tua lista dei desideri che devono ancora uscire, poi i titoli più attesi dei generi che giochi di più. Usa la chiave RAWG già impostata nell'app.",
       "min_app": "0.7.1",
       "base": "calendario-uscite/",
       "files": {
-        "backend.py": "f414b87c7d6e481c2280efd300c4f280111cc2e1a4d666a5ea2d8da1517e8e31",
+        "backend.py": "17ab35703763ca2190ced3fd31af0174acadb167a78fb3e6a80e8db250717fd0",
         "frontend.js": "763cded618d1ea2585ae32eabbb6dab83f8399a87a42e8cc4b51531e3b38ecfd",
-        "plugin.toml": "f517472467ebd2d47ff299eeb6b7e9b89cdcd66ccebaf36da50ef0cc7e24c124",
+        "plugin.toml": "e09d07041f906afa58673636818b8c6aef383bd1e7a4371023bd7730bce072cf",
         "style.css": "d0dbe66bd6e494de9946a9740e869aacef24b0f71267af9a3f509092fab8ab01"
       }
     },
@@ -35,14 +35,14 @@
       "id": "diario",
       "name": "Diario di gioco",
       "version": "1.0",
-      "author": "GameScraper",
+      "author": "Pozzo Launcher",
       "description": "Nel dettaglio di ogni gioco, un diario con voci datate (a che punto sei, trucchi, password) e la cronologia delle sessioni giocate. Si affianca alla nota personale già presente.",
       "min_app": "0.7.1",
       "base": "diario/",
       "files": {
-        "backend.py": "4e8cd647e55202daf9368c0805e775eeddcea0b1c072c3db6dd106f8f68e3da0",
+        "backend.py": "492150d7396718da88e1c06ba5538bb2caa13e40619240dede77fb303dcd5839",
         "frontend.js": "59932be8f5152cf7864a11595a2eecdfe87b738a3e4cc8df2c1cb356f31cd0e4",
-        "plugin.toml": "1c4f9196607563e600df674e31d2cf3420e47ba094843c7fcb63e8e5714bdb6e",
+        "plugin.toml": "30c3530e63a06198ce67fe6bfc1e0036928914df31bd619d904e337fe5c0c78b",
         "style.css": "f2424e5c7fcc2d654f59f9db0cc37f81546873a35eb65e58ed642b27ecba0940"
       }
     },
@@ -50,14 +50,14 @@
       "id": "limite-tempo",
       "name": "Limite di tempo",
       "version": "1.0",
-      "author": "GameScraper",
+      "author": "Pozzo Launcher",
       "description": "Avvisa con una notifica quando superi X ore di gioco al giorno o alla settimana (del profilo attivo): utile per te o per i figli. È un avviso, non chiude il gioco.",
       "min_app": "0.7.1",
       "base": "limite-tempo/",
       "files": {
-        "backend.py": "09cdd49c73060f1df6e8c8ae011e7f043f57e040ba784f7d58c9977259d38213",
+        "backend.py": "647d5b0f177f3de7f1b240298a591a65eb3db11cf3b37ba2849506a9833654e4",
         "frontend.js": "7b1b0b7dc24d1b66844d8a6e7263052820f51501d2aa0d2a11ca7bbf08aa8d80",
-        "plugin.toml": "9e9adda7346e589d869fc893850c0649f40a529450efded965e51ded84c31617",
+        "plugin.toml": "44fa21a4637a241077b1aa045d6a607e3289e2db2733bc48567ab081aee3750c",
         "style.css": "005928af354ef58b2fb99f2f4d3e09ccc470c99a91862e8b62a6f15753eba611"
       }
     },
@@ -65,14 +65,14 @@
       "id": "linkstores",
       "name": "Link → Store",
       "version": "1.0",
-      "author": "GameScraper",
+      "author": "Pozzo Launcher",
       "description": "Legge una pagina che raccoglie altri siti, raggruppa i link per intestazione (h2/h3) e aggiunge ciascuno come store di una console o come store PC (repack / download diretto).",
       "min_app": "0.7.1",
       "base": "linkstores/",
       "files": {
-        "backend.py": "413ab340377ea4ca43c67e25f674e9ff2520659fd5086eee0be3b3bb92faed96",
+        "backend.py": "b21286df81e91faccb3866d1b3848a6d42b9d82c60313ba2decee2b654e072ba",
         "frontend.js": "b421a17688c16e1953405313ef373056f135ca4f66bc82646f5cd20ce24d3179",
-        "plugin.toml": "88f9cf9b26802c3f1b26988baeeb93d1ab5740d5daa9f67a4e4298c3f8ff510c",
+        "plugin.toml": "15fbd2d185423cbe7e203ec7ebce2d03c45bc3fadc66d1f43d9d89db231252e5",
         "style.css": "3f947fa5c51631cdf3b26718698a0f74975817c907435dee3d2758f1e7e930b9"
       }
     },
@@ -80,28 +80,28 @@
       "id": "minerva",
       "name": "Store Minerva + Switch",
       "version": "1.1",
-      "author": "GameScraper",
+      "author": "Pozzo Launcher",
       "description": "Riempie lo «Store online» di ogni console con le cartelle di minerva-archive.org elencate su r-roms.github.io e aggiunge gli store Switch preimpostati (NXBrew, Ziperto NSP e XCI).",
       "min_app": "0.7.1",
       "base": "minerva/",
       "files": {
-        "backend.py": "2d867441cdc940943437299a0e5909fb01adf0a8e64e5efff370004e7948c10f",
+        "backend.py": "7552c3f6d6a4fe3ce45d4033f3877084df0692ef31b546f296795a814d6635f7",
         "frontend.js": "31844804e69cba619a494ab3d8840cb02dba5b65495043963b9dffe692684a2f",
-        "plugin.toml": "4855e76d1919c95a26dbcecb974accb0c5d65eaed2591c1114281349c6ac90d1"
+        "plugin.toml": "afa9710f436bb81751454be5da3b7d717f51c511adc2f0664616e34e6da7ed23"
       }
     },
     {
       "id": "obiettivi",
       "name": "Obiettivi personali",
       "version": "1.0",
-      "author": "GameScraper",
+      "author": "Pozzo Launcher",
       "description": "Obiettivi tuoi («finisci 3 giochi a marzo», «20 ore questa settimana»), serie di giorni consecutivi e distintivi che si sbloccano giocando.",
       "min_app": "0.7.1",
       "base": "obiettivi/",
       "files": {
-        "backend.py": "d0d1aec3cfee74053d694cda659b478117e88426ecbe4641ce831840c3f3a7bd",
+        "backend.py": "d8986d89d6f4c97b43ae5ab4259a639bfa4e1cc8bfacf25900d896374ca6ca7c",
         "frontend.js": "074e16f6d37fd56157890fd3f023518d7d215e7c7f0714bd8b5cafd9505395d4",
-        "plugin.toml": "3d7a84d93940633e12a5d0064e11175da99621c9c79b292598cb4e32d0e316b4",
+        "plugin.toml": "421d69e6562aaa2ab77ad7b422ceff2ded32b4e689eb9101afc3fd88133e8ad1",
         "style.css": "cc117b6eae389a23aa3fe7c69823a6c0e6b66769ba1a48766e417656e8536e6e"
       }
     },
@@ -109,14 +109,14 @@
       "id": "pulizia",
       "name": "Pulizia libreria",
       "version": "1.0",
-      "author": "GameScraper",
+      "author": "Pozzo Launcher",
       "description": "Trova duplicati, giochi mai avviati o fermi da anni e giochi con metadati incompleti, con azioni di massa (nascondi, abbandonato, backlog) e un badge «DUP» sulle copertine dei duplicati.",
       "min_app": "0.7.1",
       "base": "pulizia/",
       "files": {
         "frontend.js": "496f020d8ca59bce4a8103e8e89530c5ea892898e0c41fab5a0fa283eb683141",
         "logica.js": "067871519aec426153fea3c1849bc2e98c6ef40dda5ed7e2a5beebfd4d49b219",
-        "plugin.toml": "dcbd65eadc7e6ddaaab83a9dcdb4debbe68e488e1f3834d112a59276f7018b8c",
+        "plugin.toml": "7a8aa35154b9cfc8e6592f965c61590e4abc405d2c1cc03c524bd7b79a2d19b0",
         "style.css": "675b11dd82766b7441b0a63b865b17be0e6193a493b154aa9113d7aa0d312039"
       }
     },
@@ -124,14 +124,14 @@
       "id": "riepilogo-annuale",
       "name": "Riepilogo annuale",
       "version": "1.0",
-      "author": "GameScraper",
+      "author": "Pozzo Launcher",
       "description": "Il tuo anno in giochi: ore, giochi più giocati, console preferita, mese e giorno più attivi, giochi finiti. Con un'immagine da salvare e condividere.",
       "min_app": "0.7.1",
       "base": "riepilogo-annuale/",
       "files": {
-        "backend.py": "83ff72ab07b44c80705dcc3c567ba46ab3b9289edb926bf2700ca1082025dc1d",
-        "frontend.js": "3e89ce7756dccac376be2a57e0c1d29615097dc80ada4af9929c7e41fb191f12",
-        "plugin.toml": "9401960c8da9388567110d94391c9b912ee0b3fc19cc15635f4be1aa6a46a0da",
+        "backend.py": "30bcec14e781e0d590c23937bd89184e4fc164071de442179d437d6e264934f0",
+        "frontend.js": "6ed432ec8318629b96e1c0193a92e84c9b23837b8240588271b820ced2a5f92f",
+        "plugin.toml": "471a5d3fcc3dda2ceed827f14b897f13f11a4989977bb5cfc6d89572b6591746",
         "style.css": "54c3c8685c2819e9ba02a210f828278c29ce2592c1326aa8abe454de96689e4e"
       }
     },
@@ -139,14 +139,14 @@
       "id": "stasera",
       "name": "Cosa gioco stasera?",
       "version": "1.0",
-      "author": "GameScraper",
+      "author": "Pozzo Launcher",
       "description": "Sceglie un gioco dal backlog in base al tempo che hai (durata HowLongToBeat), al genere e alla console, dando la precedenza a quelli che non giochi da più tempo. «Un altro» ne propone un altro, «Avvia» lo lancia.",
       "min_app": "0.7.1",
       "base": "stasera/",
       "files": {
         "frontend.js": "6e43bb3c82df820a4bb667ddaccb5c07ed6f269bfbcc2595fa773e07e97370ee",
         "logica.js": "f3dbc76c814a0574a427304b96400479b0f618da4413113173009c0a9135b68a",
-        "plugin.toml": "b5c6bb1ea42b8c36042292dda3a32b609c065eb5b2b9f67d024f7c4101413b90",
+        "plugin.toml": "feabd58688441f79e848657f64b5b8eac59deaf41a5c0abc4744b970d2bcd27b",
         "style.css": "07ec9f5e800c2f90259bdb88c3789c708215fd6d4d8beddc7eb8ceb66d49c02a"
       }
     },
@@ -154,14 +154,14 @@
       "id": "statistiche",
       "name": "Statistiche di gioco",
       "version": "1.0",
-      "author": "GameScraper",
+      "author": "Pozzo Launcher",
       "description": "Pagina con tempo di gioco per console e store, giochi piu' giocati e completezza della libreria. Aggiunge anche «Video su YouTube» nel dettaglio dei giochi.",
       "min_app": "0.7.1",
       "base": "statistiche/",
       "files": {
-        "backend.py": "8654834d1f0ee5e851c38f3644960feddf73ed7327c7b9c378ed0112217085dc",
+        "backend.py": "cd50a833c89d9b61936590302c4e659dded6629ad8634c7fcd19e08796990d94",
         "frontend.js": "37ed36554079dd9f7c5d94d9c20ba35e8d9e403f3dc43f2d030320b850a11ff7",
-        "plugin.toml": "27c2df976c550b0c13cc35baf89274e81c4ff797b318011dd6e880abb6759426",
+        "plugin.toml": "e1ff0ab0ac7028328b1ae26934144c9584e730dc047a8b313c03be3248c9c732",
         "style.css": "5f206414809d5571487e96aa8a50bf763609f9939778a61004cc1ac5d3c9c595"
       }
     },
@@ -169,14 +169,14 @@
       "id": "steamgriddb",
       "name": "SteamGridDB",
       "version": "1.0",
-      "author": "GameScraper",
+      "author": "Pozzo Launcher",
       "description": "Fonte di copertine (verticali), sfondi (hero) e logo da SteamGridDB, per i giochi a cui le altre fonti non le hanno trovate. Serve una chiave gratuita di steamgriddb.com.",
       "min_app": "0.7.1",
       "base": "steamgriddb/",
       "files": {
-        "backend.py": "dc42cc975843e881c9e180dc3f0a4f8531b69d5a162961d4bb362d60fbf01e44",
+        "backend.py": "db709a541b6e5eba4ec0b3b572794583411bc5e105637af9d7298066527df3c0",
         "frontend.js": "b2db9476220602938fe6e094f857a004f345b9cd2f72cb31a11b62561507cdfc",
-        "plugin.toml": "12c46dfa4f9c016b3d8e1e93914aef1036751fa91e19fe33686623ddc67f18c9"
+        "plugin.toml": "2838970240237e807fd5875507e1990f83386874614db7d7281c2c5d034030d0"
       }
     }
   ]

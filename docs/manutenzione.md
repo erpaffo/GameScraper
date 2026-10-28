@@ -23,7 +23,7 @@ degli store PC (Steam, Epic, GOG…), telefono e streaming. La scelta va fatta u
 
 **Cartella condivisa**: scegli una cartella sincronizzata da OneDrive, Dropbox, Google Drive, un NAS o Syncthing, la
 **stessa** su tutti e due i PC, e premi **Salva**. Ogni PC ci scrive solo il suo file
-(`GameScraper-sync/<profilo>/<pc>.json`), quindi il servizio di sincronizzazione non crea conflitti. Funziona anche
+(`PozzoLauncher-sync/<profilo>/<pc>.json`), quindi il servizio di sincronizzazione non crea conflitti. Funziona anche
 se i PC non sono mai accesi insieme.
 
 **Rete locale**, senza servizi esterni:
@@ -87,8 +87,8 @@ Prima della riassociazione viene salvata una copia dei database (`*.bak`). Funzi
 i giochi con i vecchi percorsi, cioè **prima** di una ricostruzione. Da terminale:
 
 ```powershell
-python -m gamescraper relink            # anteprima
-python -m gamescraper relink --apply    # esegue
+python -m pozzo relink            # anteprima
+python -m pozzo relink --apply    # esegue
 ```
 
 ## Esportare per altri frontend
@@ -101,7 +101,7 @@ python -m gamescraper relink --apply    # esegue
 | **Pegasus** | `metadata.pegasus.txt` più le immagini |
 | **Pagina web** | `index.html` più la cartella `covers` |
 
-Da terminale: `gamescraper export-frontend --format esde`, `--format pegasus` oppure `--format html`.
+Da terminale: `pozzo export-frontend --format esde`, `--format pegasus` oppure `--format html`.
 
 ### La pagina web
 
@@ -119,10 +119,10 @@ dati e per singolo database.
 ## Ricostruire la libreria
 
 La libreria si ricostruisce da sola dopo ogni scansione, aggiornamento degli store o importazione. A mano:
-`python -m gamescraper library`. La ricostruzione non tocca i tuoi dati (`userdata.db`, `settings.json`).
+`python -m pozzo library`. La ricostruzione non tocca i tuoi dati (`userdata.db`, `settings.json`).
 
 ## Log
 
-- Il log normale dell'eseguibile, senza terminale, è in `<cartella dati>/logs/gamescraper.log`.
-- Il log diagnostico dettagliato (store, pianificatore, errori) si attiva con `--log` o `GAMESCRAPER_LOG` (vedi
+- Il log normale dell'eseguibile, senza terminale, è in `<cartella dati>/logs/pozzo.log`.
+- Il log diagnostico dettagliato (store, pianificatore, errori) si attiva con `--log` o `POZZO_LOG` (vedi
   [Log su file](store-online.md#log-su-file)).

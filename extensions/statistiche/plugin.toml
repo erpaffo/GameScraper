@@ -1,7 +1,7 @@
 [plugin]
 name = "Statistiche di gioco"
 version = "1.0"
-author = "GameScraper"
+author = "Pozzo Launcher"
 description = "Pagina con tempo di gioco per console e store, giochi piu' giocati e completezza della libreria. Aggiunge anche «Video su YouTube» nel dettaglio dei giochi."
 api = 1
 min_app = "0.7.1"

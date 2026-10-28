@@ -33,10 +33,10 @@ def best_url(items: list[dict]) -> str | None:
 
 
 def register(gs):
-    from gamescraper import config as C
-    from gamescraper import matching
-    from gamescraper.net import RateLimiter, Stop, request
-    from gamescraper.sources.base import Result, Source
+    from pozzo import config as C
+    from pozzo import matching
+    from pozzo.net import RateLimiter, Stop, request
+    from pozzo.sources.base import Result, Source
 
     def chiave(cfg) -> str:
         return (C.read_settings(cfg).get("plugins", {}).get("steamgriddb", {}).get("chiave")

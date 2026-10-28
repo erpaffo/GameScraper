@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from gamescraper import catalog  # noqa: E402
+from pozzo import catalog  # noqa: E402
 
 TYPE_A = """
 <div class="entry-content">

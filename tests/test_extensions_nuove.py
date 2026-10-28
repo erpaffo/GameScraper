@@ -24,9 +24,9 @@ sys.path.insert(0, str(ROOT))
 
 from fastapi import HTTPException  # noqa: E402
 
-from gamescraper import config as C  # noqa: E402
-from gamescraper.library import build  # noqa: E402
-from gamescraper.library.userdata import UserData  # noqa: E402
+from pozzo import config as C  # noqa: E402
+from pozzo.library import build  # noqa: E402
+from pozzo.library.userdata import UserData  # noqa: E402
 
 EXT = ROOT / "extensions"
 
@@ -82,7 +82,7 @@ def make_env(t: Path):
                     "VALUES(?,?,?,?,?,?,?,?,?,?,1)", (gid, key, plat, title, title.lower(), rel, gen, grp, prim, store))
     lib.commit()
     lib.close()
-    from gamescraper.sync import profile_path
+    from pozzo.sync import profile_path
     u = UserData(profile_path(cfg, "default"))
     return cfg, u
 
@@ -270,7 +270,7 @@ def test_limite_tempo(t):
     s = gs.routes["salva"]({"giorno_ore": 0.0001, "settimana_ore": 0, "attivo": True})   # limite di ~0,4 s: subito superato
     assert s["attivo"] and s["giorno_ore"] == 0.0001
     sent = []
-    import gamescraper.notify as N
+    import pozzo.notify as N
     N.send = lambda cfg_, title, body="": sent.append((title, body)) or True
     gs.events["game_started"][0]({"title": "Zelda"})
     time.sleep(0.6)
@@ -401,7 +401,7 @@ def test_steamgriddb(t):
             return {w for w in wanted if w not in self.have}
 
     async def run():
-        from gamescraper.sources.base import Context
+        from pozzo.sources.base import Context
         cfg.media = ["cover", "fanart", "wheel"]
         client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
         src = gs.sources[0](Context(cfg=cfg, cache=None, client=client, log=gs.log))

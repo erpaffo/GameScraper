@@ -49,7 +49,7 @@ def chapter(name: str) -> str:
 
 
 def version() -> str:
-    m = re.search(r'__version__\s*=\s*"([^"]+)"', (ROOT / "gamescraper" / "__init__.py").read_text(encoding="utf-8"))
+    m = re.search(r'__version__\s*=\s*"([^"]+)"', (ROOT / "pozzo" / "__init__.py").read_text(encoding="utf-8"))
     return m[1] if m else ""
 
 
@@ -64,7 +64,7 @@ def build(out: Path, font: str, sans: str, mono: str) -> Path:
         subprocess.run([
             "pandoc", str(src), "-f", "markdown", "-o", str(out.resolve()), "--pdf-engine=xelatex",
             "--toc", "--toc-depth=2", "--number-sections", "--top-level-division=chapter", "-H", str(head),
-            "-M", "title=GameScraper", "-M", f"subtitle=Manuale · versione {version()}", "-M", "lang=it",
+            "-M", "title=Pozzo Launcher", "-M", f"subtitle=Manuale · versione {version()}", "-M", "lang=it",
             "-V", "documentclass=report", "-V", "papersize=a4", "-V", "geometry:margin=2.2cm",
             "-V", f"mainfont={font}", "-V", f"sansfont={sans}", "-V", f"monofont={mono}",
             "-V", "colorlinks=true", "-V", "linkcolor=blue", "-V", "urlcolor=blue", "-V", "toccolor=black",
@@ -74,7 +74,7 @@ def build(out: Path, font: str, sans: str, mono: str) -> Path:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("out", nargs="?", default="GameScraper-manuale.pdf")
+    ap.add_argument("out", nargs="?", default="PozzoLauncher-manuale.pdf")
     ap.add_argument("--font", default="DejaVu Serif")
     ap.add_argument("--sans", default="DejaVu Sans")
     ap.add_argument("--mono", default="DejaVu Sans Mono")

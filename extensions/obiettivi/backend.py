@@ -79,7 +79,7 @@ def register(gs):
     cache = Path(gs.cfg.cache)
 
     def conn():
-        from gamescraper.sync import profile_path
+        from pozzo.sync import profile_path
         return sqlite3.connect(cache / "library.db"), sqlite3.connect(profile_path(gs.cfg, gs.cfg.app.get("profile") or "default"))
 
     def dati(lib, user):

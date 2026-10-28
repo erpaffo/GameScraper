@@ -11,7 +11,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Versione di GameScraper
+      label: Versione di Pozzo Launcher
       description: Impostazioni › Info
       placeholder: "0.7.3"
     validations:
@@ -50,6 +50,6 @@ body:
     attributes:
       label: Log
       description: |
-        Se puoi, allega il log diagnostico: avvia con `GAMESCRAPER_LOG=1` (oppure `gamescraper app --log`),
+        Se puoi, allega il log diagnostico: avvia con `POZZO_LOG=1` (oppure `pozzo app --log`),
         riproduci il problema e prendi `<cartella dati>/cache/logs/diagnostica.log`. Togli prima eventuali dati personali.
       render: text

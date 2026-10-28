@@ -1,4 +1,4 @@
-# GameScraper - configurazione di esempio
+# Pozzo Launcher - configurazione di esempio
 # Copia questo file in "config.toml" e compila le credenziali.
 # Le credenziali possono anche essere passate con variabili d'ambiente:
 #   SS_USER, SS_PASSWORD, SS_DEVID, SS_DEVPASSWORD, IGDB_CLIENT_ID, IGDB_CLIENT_SECRET, TGDB_API_KEY
@@ -20,7 +20,7 @@ output = "output"    # output/<console>/games.json, games.csv, missing.txt, medi
 
 # Se una cartella non viene riconosciuta automaticamente, mappala qui: "nome cartella" = "id piattaforma"
 # (vale anche un percorso relativo alla radice, es. "Vari/Collezione SNES" = "snes")
-# (elenco id: python -m gamescraper platforms)
+# (elenco id: python -m pozzo platforms)
 [platform_folders]
 # "Super Nintendo (PAL)" = "snes"
 # "Sony PS1" = "psx"
@@ -65,7 +65,7 @@ password = ""
 # Senza devid ScreenScraper non risponde alle API.
 devid = ""
 devpassword = ""
-softname = "GameScraper"
+softname = "Pozzo Launcher"
 threads = 0              # 0 = il massimo consentito dal tuo account
 quota_reserve = 200      # si ferma quando restano queste richieste giornaliere (margine di sicurezza)
 ko_reserve = 100         # idem per il limite giornaliero dei "non trovati" (il tuo account: 2.000/giorno)
@@ -103,7 +103,7 @@ download_threads = 24        # download paralleli da thumbnails.libretro.com
 thumbs_by_filename = true    # prova le immagini anche per ROM non identificate, usando il nome file
 
 # ------------------------------------------------------------------ FRONTEND
-# Avvio: python -m gamescraper app        (ricostruire la libreria: python -m gamescraper library)
+# Avvio: python -m pozzo app        (ricostruire la libreria: python -m pozzo library)
 
 [collections]
 min_games = 3                # una collezione automatica nasce con almeno N giochi

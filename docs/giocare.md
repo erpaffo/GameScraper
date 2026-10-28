@@ -47,8 +47,8 @@ PC:
 - **Prima dell'avvio**: per esempio per cambiare la risoluzione dello schermo o attivare l'HDR;
 - **Dopo la chiusura**: per rimettere le cose com'erano.
 
-Uno script è un comando oppure un file `.bat` o `.ps1`. Riceve due variabili d'ambiente: `GAMESCRAPER_TITLE` (titolo
-del gioco) e `GAMESCRAPER_KEY` (chiave del gioco nella libreria), così lo stesso script può comportarsi diversamente
+Uno script è un comando oppure un file `.bat` o `.ps1`. Riceve due variabili d'ambiente: `POZZO_TITLE` (titolo
+del gioco) e `POZZO_KEY` (chiave del gioco nella libreria), così lo stesso script può comportarsi diversamente
 per giochi diversi.
 
 Ogni gioco può avere i suoi script nel **⚙ Profilo di avvio**: vengono eseguiti **dopo** quelli di tutti i giochi.
@@ -64,7 +64,7 @@ finisce di sincronizzare i salvataggi; Steam viene chiuso in modo pulito.
 
 Nel dettaglio di un gioco, **🖥 Collegamento sul desktop** crea un collegamento con l'icona del gioco: quella
 dell'eseguibile per i giochi PC avviati da un `.exe`, altrimenti ricavata dalla copertina. Il collegamento avvia il gioco **tramite
-GameScraper**: valgono emulatore, profilo e script, e il tempo di gioco viene registrato come quando lo avvii
+Pozzo Launcher**: valgono emulatore, profilo e script, e il tempo di gioco viene registrato come quando lo avvii
 dall'app. Non è disponibile per i giochi degli store online, che non sono installati.
 
 ## Avviare un gioco

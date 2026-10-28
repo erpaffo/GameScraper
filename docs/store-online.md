@@ -1,6 +1,6 @@
 # Aggiungere store online e store PC
 
-Oltre ai giochi che possiedi, GameScraper può mostrare i giochi **disponibili da scaricare** letti da pagine web che
+Oltre ai giochi che possiedi, Pozzo Launcher può mostrare i giochi **disponibili da scaricare** letti da pagine web che
 scegli tu: i **cataloghi delle console** (store online) e gli **elenchi di giochi PC** non ufficiali (repack e
 download diretto). Questi giochi compaiono nella libreria come «da scaricare», con un pulsante per ogni sito che li
 offre.
@@ -203,9 +203,9 @@ La tabella mostra sempre tutti gli store configurati. Per ogni riga:
 Per capire perché un sito è lento o non risponde si avvia l'app con il log su file:
 
 ```bat
-python -m gamescraper app --log                   :: <cache>\logs\diagnostica.log
-python -m gamescraper app --log C:\temp\gs.log    :: percorso a scelta
-set GAMESCRAPER_LOG=1 && python -m gamescraper app
+python -m pozzo app --log                   :: <cache>\logs\diagnostica.log
+python -m pozzo app --log C:\temp\gs.log    :: percorso a scelta
+set POZZO_LOG=1 && python -m pozzo app
 ```
 
 Il file contiene, con ora e categoria, le decisioni del pianificatore (modalità, orario, avvio rimandato e perché),
@@ -241,7 +241,7 @@ toglie il tipo fisso da `settings.json`, così ogni pagina viene riconosciuta da
 
 ### Un nuovo formato di pagina
 
-I formati sono un registro in `gamescraper/catalog.py`:
+I formati sono un registro in `pozzo/catalog.py`:
 
 ```python
 PARSERS = {
@@ -275,7 +275,7 @@ Uno store nuovo, per esempio un launcher che l'app non conosce, si aggiunge con 
 import json
 from pathlib import Path
 
-from gamescraper.stores.base import StoreGame, StoreProvider
+from pozzo.stores.base import StoreGame, StoreProvider
 
 
 class MioLauncher(StoreProvider):
@@ -318,5 +318,5 @@ Campi principali di `StoreGame`:
 
 Lo store nuovo compare in **Impostazioni › Store** e i suoi giochi nella sezione PC, con avvio, tempo di gioco e
 unione con lo stesso gioco degli altri store come per gli store inclusi. Gli store inclusi
-(`gamescraper/stores/`) sono buoni esempi: `manual.py` è il più semplice, `steam.py` ed `epic.py` mostrano account e
+(`pozzo/stores/`) sono buoni esempi: `manual.py` è il più semplice, `steam.py` ed `epic.py` mostrano account e
 giochi non installati.

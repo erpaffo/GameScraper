@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from gamescraper import config, sync  # noqa: E402
+from pozzo import config, sync  # noqa: E402
 
 
 def pc(root: Path, name: str, shared: Path):
@@ -103,8 +103,8 @@ def test_server_profiles_and_lan_gate():
     """Profili dall'app (dati separati nella libreria) e cancello del server di rete per i PC abbinati."""
     from fastapi.testclient import TestClient
 
-    from gamescraper.app.server import create_app
-    from gamescraper.remote.phone import PhoneGate
+    from pozzo.app.server import create_app
+    from pozzo.remote.phone import PhoneGate
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from test_frontend import make_library
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
@@ -158,7 +158,7 @@ def test_lan_end_to_end():
 
     from fastapi.testclient import TestClient
 
-    from gamescraper.app.server import create_app
+    from pozzo.app.server import create_app
 
     def pick_port():
         with socket.socket() as s:

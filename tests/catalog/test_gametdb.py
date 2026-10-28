@@ -8,9 +8,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-os.environ.pop("GAMESCRAPER_GAMETDB", None)  # i test usano solo il file locale che creano
+os.environ.pop("POZZO_GAMETDB", None)  # i test usano solo il file locale che creano
 
-from gamescraper.gametdb import GameTDB, clean_title, parse_xml_text, title_key  # noqa: E402
+from pozzo.gametdb import GameTDB, clean_title, parse_xml_text, title_key  # noqa: E402
 
 XML = """<?xml version="1.0" encoding="UTF-8"?>
 <datafile>

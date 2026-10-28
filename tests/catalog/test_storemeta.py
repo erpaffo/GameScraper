@@ -8,7 +8,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from gamescraper import storemeta  # noqa: E402
+from pozzo import storemeta  # noqa: E402
 
 URL_NX = "https://nxbrew.net/zumba-world-the-marble-monster-adventure-switch-nsp-eshop/"
 URL_ZP = "https://www.ziperto.com/esempio-switch-nsp/"
@@ -106,7 +106,7 @@ def test_best_match():
 
 
 def test_cache_roundtrip(tmp_path):
-    from gamescraper.cache import Cache
+    from pozzo.cache import Cache
     cache = Cache(tmp_path)
     assert storemeta.cached(cache, URL_NX) == {}
     data = storemeta.parse_detail(HTML_NXBREW, URL_NX)

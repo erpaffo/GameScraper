@@ -1,4 +1,4 @@
-# GameScraper
+# Pozzo Launcher
 
 [![Test](https://github.com/erpaffo/GameScraper/actions/workflows/ci.yml/badge.svg)](https://github.com/erpaffo/GameScraper/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/erpaffo/GameScraper)](https://github.com/erpaffo/GameScraper/releases/latest)
@@ -35,9 +35,9 @@ Gli eseguibili sono nella pagina **[Releases](https://github.com/erpaffo/GameScr
 
 | Sistema | Installer | Portatile |
 |---|---|---|
-| Windows 10/11 (64 bit) | `GameScraper-<versione>-windows-x64-setup.exe` | `…-windows-x64.zip`: estrai e apri `GameScraper.exe` |
+| Windows 10/11 (64 bit) | `PozzoLauncher-<versione>-windows-x64-setup.exe` | `…-windows-x64.zip`: estrai e apri `PozzoLauncher.exe` |
 | macOS 11+ (Apple Silicon) | `…-macos-arm64.dmg`: trascina l'app in Applicazioni | `…-macos-arm64.zip` |
-| Linux (64 bit) | `gamescraper_<versione>_amd64.deb` (Debian, Ubuntu, Mint…) | `…-linux-x64.tar.gz` |
+| Linux (64 bit) | `pozzo_<versione>_amd64.deb` (Debian, Ubuntu, Mint…) | `…-linux-x64.tar.gz` |
 
 Gli eseguibili non sono firmati: su Windows SmartScreen chiede conferma (*Ulteriori informazioni › Esegui comunque*), su macOS la prima volta apri l'app con clic destro › Apri.
 
@@ -45,26 +45,26 @@ Gli eseguibili non sono firmati: su Windows SmartScreen chiede conferma (*Ulteri
 
 ## Per iniziare
 
-1. Apri GameScraper e scegli la cartella delle ROM in **Impostazioni › Nuovi giochi**.
+1. Apri Pozzo Launcher e scegli la cartella delle ROM in **Impostazioni › Nuovi giochi**.
 2. Avvia la ricerca: la libreria si riempie, e copertine e dati arrivano in sottofondo.
 3. Per i giochi PC, collega gli store da **Impostazioni › Store**.
 
-Configurazione, cache e libreria stanno nella cartella dell'utente (`%LOCALAPPDATA%\GameScraper` su Windows, `~/Library/Application Support/GameScraper` su macOS, `~/.local/share/GameScraper` su Linux). Tutto il resto (credenziali delle fonti, comandi da terminale, store online, telefono, estensioni) è nel [manuale](https://erpaffo.github.io/GameScraper/).
+Configurazione, cache e libreria stanno nella cartella dell'utente (`%LOCALAPPDATA%\PozzoLauncher` su Windows, `~/Library/Application Support/PozzoLauncher` su macOS, `~/.local/share/PozzoLauncher` su Linux). Tutto il resto (credenziali delle fonti, comandi da terminale, store online, telefono, estensioni) è nel [manuale](https://erpaffo.github.io/GameScraper/).
 
 ## Dai sorgenti
 
 ```powershell
 python -m pip install -r requirements.txt
-python -m gamescraper app          # apre l'app
-python -m gamescraper run          # solo scansione e scraping, da terminale
+python -m pozzo app          # apre l'app
+python -m pozzo run          # solo scansione e scraping, da terminale
 ```
 
 Struttura del codice, come creare gli eseguibili e confronto con Skyscraper: [Sviluppo](docs/sviluppo.md). Per contribuire: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Avvertenze
 
-GameScraper è un gestore di librerie: **non contiene, non ospita e non distribuisce giochi, ROM, BIOS o chiavi**. Usalo con giochi che possiedi legalmente e nel rispetto delle leggi del tuo paese e dei termini dei siti a cui ti colleghi: la responsabilità dei contenuti che aggiungi è tua.
+Pozzo Launcher è un gestore di librerie: **non contiene, non ospita e non distribuisce giochi, ROM, BIOS o chiavi**. Usalo con giochi che possiedi legalmente e nel rispetto delle leggi del tuo paese e dei termini dei siti a cui ti colleghi: la responsabilità dei contenuti che aggiungi è tua.
 
-I nomi e i marchi di console, giochi e store citati appartengono ai rispettivi proprietari. GameScraper non è affiliato né approvato da nessuno di loro.
+I nomi e i marchi di console, giochi e store citati appartengono ai rispettivi proprietari. Pozzo Launcher non è affiliato né approvato da nessuno di loro.
 
 [Privacy](PRIVACY.md) · [Sicurezza](SECURITY.md) · [Codice di condotta](CODE_OF_CONDUCT.md) · [Componenti di terze parti](THIRD_PARTY_NOTICES.md)

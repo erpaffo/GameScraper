@@ -16,10 +16,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes  # noqa: E402
 
-from gamescraper import platforms as P  # noqa: E402
-from gamescraper import switchmeta  # noqa: E402
-from gamescraper.scanner import Game  # noqa: E402
-from gamescraper.sources.nsp import Nsp  # noqa: E402
+from pozzo import platforms as P  # noqa: E402
+from pozzo import switchmeta  # noqa: E402
+from pozzo.scanner import Game  # noqa: E402
+from pozzo.sources.nsp import Nsp  # noqa: E402
 
 # Chiavi finte generate per il test (non sono chiavi reali)
 FAKE_HEADER_KEY = bytes((i * 7 + 3) & 0xFF for i in range(32))

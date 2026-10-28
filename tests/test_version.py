@@ -26,8 +26,8 @@ def main():
         g("config", "user.name", "t")
         (repo / "tools").mkdir()
         shutil.copy(SRC, repo / "tools" / "version.py")
-        (repo / "gamescraper").mkdir()
-        (repo / "gamescraper" / "__init__.py").write_text('__version__ = "0.2.1"\n')
+        (repo / "pozzo").mkdir()
+        (repo / "pozzo" / "__init__.py").write_text('__version__ = "0.2.1"\n')
         (repo / "changelog.md").write_text("# Changelog\n\nIntro.\n\n## 0.2.1 (2026-01-01)\n\n### Corretto\n\n- vecchio\n")
         g("add", "-A")
         g("commit", "-q", "-m", "Version 0.2.1")
@@ -53,8 +53,8 @@ def main():
         assert "lasciati fuori: port.py" in v("commit", "--force")
         assert g("log", "-1", "--format=%s") == "Version 0.3.0\n"
         files = g("show", "--name-only", "--format=", "HEAD").split()
-        assert "ok.py" in files and "port.py" not in files and "gamescraper/__init__.py" in files, files
-        assert '"0.3.0"' in (repo / "gamescraper" / "__init__.py").read_text()
+        assert "ok.py" in files and "port.py" not in files and "pozzo/__init__.py" in files, files
+        assert '"0.3.0"' in (repo / "pozzo" / "__init__.py").read_text()
         assert cl().index("## 0.3.0 (") < cl().index("### Aggiunto") < cl().index("### In corso") < cl().index("## 0.2.1"), cl()
         # prima del push le modifiche finiscono nella stessa versione
         v("add", "corretto", "altro bug")

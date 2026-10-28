@@ -1,6 +1,6 @@
 # Componenti di terze parti
 
-GameScraper usa queste librerie, incluse negli eseguibili delle release. Licenze lette dai metadati dei pacchetti; il testo completo di ciascuna è nel pacchetto stesso e sul sito del progetto.
+Pozzo Launcher usa queste librerie, incluse negli eseguibili delle release. Licenze lette dai metadati dei pacchetti; il testo completo di ciascuna è nel pacchetto stesso e sul sito del progetto.
 
 | Componente | Licenza | Progetto |
 |---|---|---|
@@ -17,7 +17,7 @@ GameScraper usa queste librerie, incluse negli eseguibili delle release. Licenze
 | howlongtobeatpy | MIT | https://github.com/ScrappyCocco/HowLongToBeat-PythonAPI |
 | qrcode | BSD | https://github.com/lincolnloop/python-qrcode |
 | cryptography | Apache-2.0 o BSD-3-Clause | https://github.com/pyca/cryptography |
-| ViGEmClient (`gamescraper/remote/vendor/ViGEmClient.dll`) | MIT, vedi [LICENSE-ViGEm.txt](gamescraper/remote/vendor/LICENSE-ViGEm.txt) | https://github.com/nefarius/ViGEmClient |
+| ViGEmClient (`pozzo/remote/vendor/ViGEmClient.dll`) | MIT, vedi [LICENSE-ViGEm.txt](pozzo/remote/vendor/LICENSE-ViGEm.txt) | https://github.com/nefarius/ViGEmClient |
 
 Gli eseguibili includono anche le dipendenze di queste librerie e l'interprete Python (licenza PSF). L'eseguibile **Linux** include anche Qt tramite `pywebview[qt]`, cioè **PyQt6 e PyQt6-WebEngine (GPL-3.0)**: chi lo ridistribuisce deve rispettarne i termini.
 

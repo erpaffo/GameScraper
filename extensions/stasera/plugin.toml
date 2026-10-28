@@ -1,7 +1,7 @@
 [plugin]
 name = "Cosa gioco stasera?"
 version = "1.0"
-author = "GameScraper"
+author = "Pozzo Launcher"
 description = "Sceglie un gioco dal backlog in base al tempo che hai (durata HowLongToBeat), al genere e alla console, dando la precedenza a quelli che non giochi da più tempo. «Un altro» ne propone un altro, «Avvia» lo lancia."
 api = 1
 min_app = "0.7.1"

@@ -20,8 +20,8 @@ from fastapi import FastAPI, WebSocket  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from starlette.websockets import WebSocketDisconnect  # noqa: E402
 
-from gamescraper import config  # noqa: E402
-from gamescraper.app.server import LocalGuard, create_app  # noqa: E402
+from pozzo import config  # noqa: E402
+from pozzo.app.server import LocalGuard, create_app  # noqa: E402
 
 
 def test_local_guard():
@@ -43,7 +43,7 @@ def test_local_guard():
 
     c = TestClient(LocalGuard(inner, 8765), base_url="http://127.0.0.1:8765")
     assert c.get("/api/x").status_code == 200
-    assert c.post("/api/x").status_code == 200  # senza Origin (gamescraper-cli, curl)
+    assert c.post("/api/x").status_code == 200  # senza Origin (pozzo-cli, curl)
     assert c.post("/api/x", headers={"Origin": "http://127.0.0.1:8765"}).status_code == 200
     assert c.post("/api/x", headers={"Origin": "http://localhost:8765"}).status_code == 200
     assert c.post("/api/x", headers={"Origin": "https://evil.example"}).status_code == 403

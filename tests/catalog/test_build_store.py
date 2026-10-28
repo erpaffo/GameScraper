@@ -9,9 +9,9 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from gamescraper import config, storemeta  # noqa: E402
-from gamescraper.cache import Cache  # noqa: E402
-from gamescraper.library import build as B  # noqa: E402
+from pozzo import config, storemeta  # noqa: E402
+from pozzo.cache import Cache  # noqa: E402
+from pozzo.library import build as B  # noqa: E402
 
 URL = "https://example-b.test/all"
 

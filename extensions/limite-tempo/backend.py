@@ -61,13 +61,13 @@ def register(gs):
                 "attivo": s.get("attivo", True) is not False}
 
     def db() -> sqlite3.Connection:
-        from gamescraper.sync import profile_path
+        from pozzo.sync import profile_path
         return sqlite3.connect(profile_path(gs.cfg, gs.cfg.app.get("profile") or "default"))
 
     def avvisa(titolo: str, testo: str):
         gs.log(f"[limite-tempo] {testo}")
         try:
-            from gamescraper import notify
+            from pozzo import notify
             notify.send(gs.cfg, titolo, testo)
         except Exception:  # un avviso perso non deve mai fermare niente
             pass

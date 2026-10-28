@@ -1,4 +1,4 @@
-"""Test offline per il modulo RetroAchievements (gamescraper/retroachievements.py).
+"""Test offline per il modulo RetroAchievements (pozzo/retroachievements.py).
 
 Usa httpx.MockTransport e le fixture nel formato documentato da api-docs.retroachievements.org.
 
@@ -15,8 +15,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import httpx  # noqa: E402
 
-from gamescraper import platforms as P  # noqa: E402
-from gamescraper import retroachievements as ra  # noqa: E402
+from pozzo import platforms as P  # noqa: E402
+from pozzo import retroachievements as ra  # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 

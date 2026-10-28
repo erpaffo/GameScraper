@@ -12,9 +12,9 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from gamescraper import config  # noqa: E402
-from gamescraper.cache import Cache  # noqa: E402
-from gamescraper.library import build as B  # noqa: E402
+from pozzo import config  # noqa: E402
+from pozzo.cache import Cache  # noqa: E402
+from pozzo.library import build as B  # noqa: E402
 
 # --------------------------------------------------------------- client HTTP usa-e-chiudi
 _LIVE: list = []
@@ -24,7 +24,7 @@ def client(cfg):
     """TestClient registrato: a fine test si chiudono i database (su Windows un file aperto resta bloccato)."""
     from fastapi.testclient import TestClient
 
-    from gamescraper.app.server import create_app
+    from pozzo.app.server import create_app
 
     api = TestClient(create_app(cfg))
     _LIVE.append(api)
@@ -106,7 +106,7 @@ def test_build_pc_entries(tmp_path: Path):
 
 def test_api_pc_stores(tmp_path: Path):
     from fastapi.testclient import TestClient
-    from gamescraper.app.server import create_app
+    from pozzo.app.server import create_app
     cfg = make_env(tmp_path)
     api = client(cfg)
     d = api.get("/api/pc-stores").json()

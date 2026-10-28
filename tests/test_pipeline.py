@@ -19,9 +19,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import httpx  # noqa: E402
 from rich.progress import Progress  # noqa: E402
 
-from gamescraper import config, net, pipeline, platforms as P  # noqa: E402
-from gamescraper.cache import Cache  # noqa: E402
-from gamescraper.scanner import Game  # noqa: E402
+from pozzo import config, net, pipeline, platforms as P  # noqa: E402
+from pozzo.cache import Cache  # noqa: E402
+from pozzo.scanner import Game  # noqa: E402
 
 # senza attese fra le richieste: col ritmo vero (ScreenScraper < 1 al secondo) il test durava oltre 2 minuti
 net.RateLimiter.interval = property(lambda self: 0, lambda self, v: None)
@@ -148,7 +148,7 @@ async def test_quota_stop(tmp):
 async def test_ko_limit_and_secondary(tmp):
     """Limite giornaliero dei 'non trovati' + versioni secondarie non mandate a ScreenScraper."""
     import sqlite3
-    from gamescraper.library.build import SCHEMA
+    from pozzo.library.build import SCHEMA
     cfg = config.Config(cache=Path(tmp) / "cache3", output=Path(tmp) / "out3")
     cfg.ss = {"devid": "d", "devpassword": "p", "user": "u", "password": "pw", "ko_reserve": 0}
     cfg.media = ["wheel"]

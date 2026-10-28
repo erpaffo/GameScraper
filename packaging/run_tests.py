@@ -46,7 +46,7 @@ TESTS = [
 
 def limit() -> float:
     try:
-        return float(os.environ.get("GAMESCRAPER_TEST_TIMEOUT", "180"))
+        return float(os.environ.get("POZZO_TEST_TIMEOUT", "180"))
     except ValueError:
         return 180.0
 

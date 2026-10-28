@@ -22,7 +22,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CHANGELOG = ROOT / "changelog.md"
-INIT = ROOT / "gamescraper" / "__init__.py"
+INIT = ROOT / "pozzo" / "__init__.py"
 LOCK = ROOT / ".git" / "version.lock"
 KINDS = {"aggiunto": "Aggiunto", "cambiato": "Cambiato", "migliorato": "Migliorato", "corretto": "Corretto", "rimosso": "Rimosso"}
 WIP = "In corso"
@@ -50,7 +50,7 @@ def git(*a, check=True) -> str:
 
 def pushed_version() -> tuple[int, int, int] | None:
     """Versione su GitHub (origin/main, come l'ultima volta che si e' fatto fetch)."""
-    t = git("show", "origin/main:gamescraper/__init__.py", check=False)
+    t = git("show", "origin/main:pozzo/__init__.py", check=False)
     m = re.search(r"__version__\s*=\s*[\"'](\d+\.\d+\.\d+)", t)
     return vt(m[1]) if m else None
 

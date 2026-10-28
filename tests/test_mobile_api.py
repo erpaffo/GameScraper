@@ -8,8 +8,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from gamescraper import config  # noqa: E402
-from gamescraper.app.server import create_app  # noqa: E402
+from pozzo import config  # noqa: E402
+from pozzo.app.server import create_app  # noqa: E402
 
 # --------------------------------------------------------------- client HTTP usa-e-chiudi
 _LIVE: list = []
@@ -19,7 +19,7 @@ def client(cfg):
     """TestClient registrato: a fine test si chiudono i database (su Windows un file aperto resta bloccato)."""
     from fastapi.testclient import TestClient
 
-    from gamescraper.app.server import create_app
+    from pozzo.app.server import create_app
 
     api = TestClient(create_app(cfg))
     _LIVE.append(api)
@@ -85,7 +85,7 @@ def test_aggiorna_store_senza_store(tmp_path):
 
 
 def test_aggiorna_store_accoda(tmp_path, monkeypatch):
-    from gamescraper import catalog
+    from pozzo import catalog
 
     async def fake_fetch(cfg_, cache, client, plat, url, log=None, progress=None, should_stop=None):
         return [{"name": "Gioco", "size": None, "url": url, "magnet": None}]
@@ -118,8 +118,8 @@ def test_cancello_del_telefono(tmp_path):
     import base64
     import sqlite3
 
-    from gamescraper.library.build import SCHEMA
-    from gamescraper.remote.phone import PhoneGate
+    from pozzo.library.build import SCHEMA
+    from pozzo.remote.phone import PhoneGate
 
     cache = tmp_path / "cache"
     (cache / "media" / "gba").mkdir(parents=True)

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1117">
+<title>Pozzo Launcher · gioca con un amico</title>
+<link rel="icon" href="/m/static/icon.png">
+<link rel="stylesheet" href="/m/static/m.css">
+<style>
+  #join, #inside { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .box { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 12px; }
+  .box h1, .box h2 { margin: 0; } .logo.big { font-size: 54px; }
+  #code { text-align: center; font-size: 30px; letter-spacing: 10px; font-weight: 700; }
+  ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; }
+  .row { display: flex; gap: 8px; }
+  .card { background: var(--bg2); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+</style>
+</head>
+<body>
+<section id="join" hidden>
+  <div class="box">
+    <div class="logo big">◆</div>
+    <h1>Pozzo Launcher</h1>
+    <p class="muted">Il tuo amico ti ha invitato a giocare. Scrivi il <b>codice</b> che ti ha mandato e come vuoi comparire
+      nella partita.</p>
+    <input id="code" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="one-time-code">
+    <input id="name" maxlength="40" placeholder="Il tuo nome" autocomplete="nickname">
+    <button class="btn primary big" id="go">Entra</button>
+    <p class="err" id="join-err"></p>
+  </div>
+</section>
+
+<section id="inside" hidden>
+  <div class="box">
+    <div class="logo big">◆</div>
+    <h2>Sei dentro</h2>
+    <p class="muted small">Sei un altro controller del PC del tuo amico: apri il controller, metti il telefono in
+      orizzontale e giocate.</p>
+    <a class="btn primary big" href="/m/">🎮 Apri il controller</a>
+    <div class="card">
+      <b>Il video con Moonlight</b>
+      <ol class="small">
+        <li>Installa <b>Moonlight</b> (gratis per Android, iPhone, iPad, PC, Mac, TV: <a href="https://moonlight-stream.org">moonlight-stream.org</a>).</li>
+        <li>Aggiungi il PC all'indirizzo <b id="video-addr"></b><span id="video-ask" class="muted"> che ti dà l'amico
+          (in Moonlight: <i>Aggiungi PC</i>; per giocare da fuori casa serve la sua rete privata, per esempio Tailscale)</span>.</li>
+        <li>Apri un gioco, poi scrivi qui il <b>PIN di 4 cifre</b> che Moonlight mostra: lo conferma il PC.</li>
+      </ol>
+      <div class="row">
+        <input id="pin" inputmode="numeric" maxlength="4" placeholder="PIN" autocomplete="one-time-code">
+        <button class="btn" id="pin-go">Abbina</button>
+      </div>
+    </div>
+    <button class="btn" id="out">Esci da questa partita</button>
+  </div>
+</section>
+
+<div id="toast" hidden></div>
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch { /* niente */ } throw new Error(m); }
+  return r.status === 204 ? null : r.json();
+}
+
+let toastT = 0;
+function toast(msg, ok = false) {
+  const t = $("#toast");
+  t.textContent = msg; t.className = ok ? "" : "err"; t.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 4000);
+}
+
+async function show() {
+  let h = {};
+  try { h = await (await fetch("/g/api/hello", { credentials: "same-origin" })).json(); } catch { /* senza rete */ }
+  $("#join").hidden = !!h.paired;
+  $("#inside").hidden = !h.paired;
+  if (h.paired) {
+    $("#video-addr").textContent = h.video || "___";
+    $("#video-addr").hidden = !h.video;
+    $("#video-ask").hidden = !!h.video;
+    return;
+  }
+  const c = (location.hash.match(/code=(\d{6})/) || [])[1];
+  if (c) $("#code").value = c;
+}
+
+$("#go").onclick = async () => {
+  $("#join-err").textContent = "";
+  try {
+    await post("/g/api/join", { code: $("#code").value, name: $("#name").value });
+    history.replaceState(null, "", "/g/");
+    show();
+  } catch (e) { $("#join-err").textContent = e.message; }
+};
+
+$("#pin-go").onclick = async () => {
+  try { await post("/g/api/pin", { pin: $("#pin").value }); $("#pin").value = ""; toast("Moonlight abbinato: buon gioco", true); }
+  catch (e) { toast(e.message); }
+};
+
+$("#out").onclick = async () => {
+  try { await post("/m/api/logout"); } catch { /* gia' fuori */ }
+  history.replaceState(null, "", "/g/");
+  show();
+};
+
+show();
+</script>
+</body>
+</html>

@@ -16,8 +16,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fastapi import FastAPI, WebSocket  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from gamescraper import config  # noqa: E402
-from gamescraper.remote import phone as PH  # noqa: E402
+from pozzo import config  # noqa: E402
+from pozzo.remote import phone as PH  # noqa: E402
 
 
 def make_cfg() -> config.Config:
@@ -151,7 +151,7 @@ def test_cancello_ospite():
 
 
 def test_ospite_nel_hello_del_telefono():
-    from gamescraper.app.server import create_app
+    from pozzo.app.server import create_app
 
     cfg = make_cfg()
     api = TestClient(create_app(cfg))
@@ -176,7 +176,7 @@ def test_ospite_nel_hello_del_telefono():
 
 def test_scheda_del_pc():
     """La scheda «Gioca con un amico» legge e salva l'indirizzo pubblico; gli ospiti non si confondono coi telefoni."""
-    from gamescraper.app.server import create_app
+    from pozzo.app.server import create_app
 
     api = TestClient(create_app(make_cfg()))
     try:

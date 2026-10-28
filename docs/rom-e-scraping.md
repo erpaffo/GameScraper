@@ -25,7 +25,7 @@ L'app riconosce:
   `Nintendo - GameCube - NKit RVZ [zstd-19-128k]` diventa GameCube.
 
 Per alcune console (Switch, PS3, PS Vita, Xbox, Xbox 360) ogni sottocartella è un gioco. L'elenco completo delle
-console riconosciute si ottiene con `python -m gamescraper platforms`.
+console riconosciute si ottiene con `python -m pozzo platforms`.
 
 Una console nella barra laterale mostra i suoi giochi con gli stessi filtri della libreria, il pulsante **🏆 Top 100**
 e il pulsante **Store online** (vedi [Aggiungere store](store-online.md#store-online-di-una-console)):
@@ -184,7 +184,7 @@ limiti delle fonti. Se una quota finisce, riprende il giorno dopo.
 
 Nel dettaglio, il riquadro **Mancano: …** elenca i campi e le immagini che non si sono trovati. **⟳ Cerca dati
 mancanti** riprova le fonti per quel gioco e tutte le sue versioni. Da riga di comando:
-`python -m gamescraper scrape --missing`.
+`python -m pozzo scrape --missing`.
 
 La vista **? Senza dati** della barra laterale raccoglie tutti i giochi che nessuna fonte ha riconosciuto, per
 controllarli in blocco:
@@ -214,8 +214,8 @@ alternativa con le variabili d'ambiente `SS_USER`, `SS_PASSWORD`, `SS_DEVID`, `S
 Lo scraping funziona anche senza interfaccia (vedi [Riferimento](riferimento.md#comandi-da-terminale)):
 
 ```powershell
-python -m gamescraper run                # tutte le console trovate
-python -m gamescraper run -p snes,psx    # solo alcune console
+python -m pozzo run                # tutte le console trovate
+python -m pozzo run -p snes,psx    # solo alcune console
 ```
 
 Il risultato va in `output/<console>/`: `games.json` (tutti i dati con la fonte di ogni campo), `games.csv`

@@ -11,10 +11,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from gamescraper.remote import emusetup, mic, mouse  # noqa: E402
-from gamescraper.remote.dsu import pad_bytes  # noqa: E402
-from gamescraper.remote.phone import PhoneHub  # noqa: E402
-from gamescraper.remote.vigem import BUTTONS as B  # noqa: E402
+from pozzo.remote import emusetup, mic, mouse  # noqa: E402
+from pozzo.remote.dsu import pad_bytes  # noqa: E402
+from pozzo.remote.phone import PhoneHub  # noqa: E402
+from pozzo.remote.vigem import BUTTONS as B  # noqa: E402
 
 
 def test_dsu_pad():
@@ -44,10 +44,10 @@ def test_pcsx2_dolphin_setup():
     assert ch["InputSources"] == {"XInput": "true"} and rep == {"USB1"}
     ch, rep = emusetup.pcsx2_changes("guitar", 1)
     assert ch["Pad1"]["Type"] == "Guitar" and ch["Pad1"]["Orange"] == "XInput-0/LeftShoulder" and rep == {"Pad1"}
-    assert emusetup.dsu_entries("DS4:192.168.1.5:26760;") == "DS4:192.168.1.5:26760;GameScraper:127.0.0.1:26760;"
+    assert emusetup.dsu_entries("DS4:192.168.1.5:26760;") == "DS4:192.168.1.5:26760;PozzoLauncher:127.0.0.1:26760;"
     assert emusetup.dsu_entries("X:127.0.0.1:26760;") == "X:127.0.0.1:26760;"  # server gia' presente
     k = emusetup.wiimote_keys(1)
-    assert k["Device"] == "DSUClient/1/GameScraper" and k["Buttons/A"] == "Cross" and k["IMUGyroscope/Yaw Left"] == "`Gyro Yaw Left`"
+    assert k["Device"] == "DSUClient/1/PozzoLauncher" and k["Buttons/A"] == "Cross" and k["IMUGyroscope/Yaw Left"] == "`Gyro Yaw Left`"
 
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
@@ -71,9 +71,9 @@ def test_pcsx2_dolphin_setup():
         (cfgd / "WiimoteNew.ini").write_text("[Wiimote1]\nDevice = DInput/0/Keyboard Mouse\nButtons/A = `Click 0`\n[Wiimote2]\nDevice = X\n")
         r = emusetup.setup("dolphin_wii", emus, 1)
         wm = (cfgd / "WiimoteNew.ini").read_text(encoding="utf-8")
-        assert "Device = DSUClient/0/GameScraper" in wm and "Click 0" not in wm and "Source = 1" in wm and "[Wiimote2]\nDevice = X" in wm, wm
-        assert "Entries = GameScraper:127.0.0.1:26760;" in (cfgd / "DSUClient.ini").read_text(encoding="utf-8")
-        assert (cfgd / "Profiles" / "Wiimote" / "GameScraper Telefono 1.ini").read_text(encoding="utf-8").startswith("[Profile]\nDevice = DSUClient/0/")
+        assert "Device = DSUClient/0/PozzoLauncher" in wm and "Click 0" not in wm and "Source = 1" in wm and "[Wiimote2]\nDevice = X" in wm, wm
+        assert "Entries = PozzoLauncher:127.0.0.1:26760;" in (cfgd / "DSUClient.ini").read_text(encoding="utf-8")
+        assert (cfgd / "Profiles" / "Wiimote" / "PozzoLauncher Telefono 1.ini").read_text(encoding="utf-8").startswith("[Profile]\nDevice = DSUClient/0/")
     print("ok  PCSX2 (Buzz, chitarra) e Dolphin (Wii Remote via DSU) configurati, con copia e ripristino")
 
 

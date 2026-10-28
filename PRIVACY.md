@@ -1,10 +1,10 @@
 # Privacy
 
-GameScraper non ha un server proprio, non ha account e **non raccoglie dati di utilizzo** (nessuna telemetria, nessuna statistica inviata).
+Pozzo Launcher non ha un server proprio, non ha account e **non raccoglie dati di utilizzo** (nessuna telemetria, nessuna statistica inviata).
 
 ## Dove stanno i tuoi dati
 
-Tutto resta sul tuo PC, nella cartella dati (`%LOCALAPPDATA%\GameScraper` su Windows, `~/Library/Application Support/GameScraper` su macOS, `~/.local/share/GameScraper` su Linux, oppure accanto all'eseguibile nella versione portatile): libreria, preferiti, tempo di gioco, note, impostazioni, copertine scaricate.
+Tutto resta sul tuo PC, nella cartella dati (`%LOCALAPPDATA%\PozzoLauncher` su Windows, `~/Library/Application Support/PozzoLauncher` su macOS, `~/.local/share/PozzoLauncher` su Linux, oppure accanto all'eseguibile nella versione portatile): libreria, preferiti, tempo di gioco, note, impostazioni, copertine scaricate.
 
 Chiavi delle fonti e accessi agli store stanno in `config.toml` e `settings.json` in quella cartella, **in chiaro**: proteggi la cartella come proteggeresti un file di password, e non condividerla.
 

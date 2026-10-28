@@ -13,7 +13,7 @@ Indica, se puoi: versione e sistema, cosa permette di fare la vulnerabilità, i 
 
 ## Cosa conta di più
 
-GameScraper gira sul tuo PC con i tuoi permessi. Le parti esposte, e quindi più importanti da segnalare:
+Pozzo Launcher gira sul tuo PC con i tuoi permessi. Le parti esposte, e quindi più importanti da segnalare:
 
 - **Server per il telefono** (HTTPS sulla rete di casa): abbinamento con codice, accesso senza abbinamento, cosa può fare un telefono abbinato o un ospite.
 - **Server dell'app** (solo `127.0.0.1`): richieste da altri siti aperti nel browser (CSRF, DNS rebinding).
@@ -21,4 +21,4 @@ GameScraper gira sul tuo PC con i tuoi permessi. Le parti esposte, e quindi più
 - **Aggiornamento automatico**: download e sostituzione dell'eseguibile.
 - **Dati personali**: chiavi delle fonti, account degli store e libreria non devono uscire dal PC (vedi [PRIVACY.md](PRIVACY.md)).
 
-Le estensioni di terze parti installate a mano nella cartella `plugins/` girano con gli stessi permessi dell'app: un loro comportamento dannoso non è una vulnerabilità di GameScraper.
+Le estensioni di terze parti installate a mano nella cartella `plugins/` girano con gli stessi permessi dell'app: un loro comportamento dannoso non è una vulnerabilità di Pozzo Launcher.

@@ -124,7 +124,7 @@ limite di richieste a GitHub.
 
 ## Avvisi di Windows
 
-Con **Impostazioni › 🧩 Integrazioni › 🔔 Notifiche di Windows** attive (lo sono di base) GameScraper avvisa con una
+Con **Impostazioni › 🧩 Integrazioni › 🔔 Notifiche di Windows** attive (lo sono di base) Pozzo Launcher avvisa con una
 notifica di Windows — che resta nel centro notifiche — quando:
 
 - un gioco della lista desideri scende sotto la soglia di prezzo;
