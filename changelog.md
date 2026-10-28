@@ -1,6 +1,16 @@
 # Changelog
 
-## 0.8.1 (2026-10-28)
+## 0.9.1 (2026-10-28)
+### Corretto
+
+- Aggiornamento dall'app: dopo il cambio di nome del repository (erpaffo/Pozzo-Launcher) il download della nuova versione veniva rifiutato con «Indirizzo di download inatteso». Ora l'indirizzo è controllato solo per host (github.com), così il nome del repository si può cambiare senza rompere gli aggiornamenti
+- La versione scritta nel programma torna a corrispondere a quella pubblicata: chi installa questa release non se la vede più riproporre come aggiornamento
+
+### Cambiato
+
+- Link al repository aggiornati in manuale, README, installer e documenti delle estensioni: la vecchia pagina GitHub Pages (erpaffo.github.io/GameScraper) non esiste più
+
+## 0.9.0 (2026-10-28)
 ### Corretto
 
 - Se la cartella di un'estensione non è leggibile (per esempio un collegamento non attendibile di Windows, errore 448) l'app parte lo stesso: l'estensione compare disattivata, con il motivo, invece di bloccare l'avvio
