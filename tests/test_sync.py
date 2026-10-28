@@ -161,20 +161,31 @@ def test_lan_end_to_end():
     from gamescraper.app.server import create_app
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         apps = {}
-        for name in ("A", "B"):
+        # Assegna porte libere distinte con SO_REUSEADDR
+        ports = []
+        socks = []
+        for _ in range(2):
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.bind(("127.0.0.1", 0))
+            ports.append(s.getsockname()[1])
+            socks.append(s)
+        for s in socks:
+            s.close()
+
+        for name, port in zip(("A", "B"), ports):
             d = Path(t) / name
             d.mkdir()
             cfg = config.Config(cache=d / "cache", output=d / "out")
             cfg.config_path = d / "config.toml"
-            with socket.socket() as s:
-                s.bind(("127.0.0.1", 0))
-                port = s.getsockname()[1]
             cfg.app["phone"] = {"host": "127.0.0.1", "port": port}
             app = create_app(cfg)
             apps[name] = (cfg, app, TestClient(app), port)
         (cfg_a, app_a, ca, port_a), (cfg_b, app_b, cb, _) = apps["A"], apps["B"]
         try:
-            code = ca.post("/api/sync/code").json()["code"]
+            r = ca.post("/api/sync/code")
+            assert r.status_code == 200, f"sync/code fallito ({r.status_code}): {r.text}"
+            code = r.json()["code"]
             ca.post("/api/sync/peer", json={"url": "x", "code": "1"})  # indirizzo sbagliato: errore, nessun crash
             r = cb.post("/api/sync/peer", json={"url": f"127.0.0.1:{port_a}", "code": code})
             assert r.status_code == 200 and r.json()["peers"][0]["url"] == f"https://127.0.0.1:{port_a}", r.text
@@ -198,6 +209,7 @@ def test_lan_end_to_end():
             assert "certificato" in last["peers"][peer["id"]]["error"], last
         finally:
             app_a.state.phone_hub.stop()
+            app_b.state.phone_hub.stop()
     print("ok  rete locale, due app vere: abbinamento, scambio nei due sensi, certificato verificato")
 
 
