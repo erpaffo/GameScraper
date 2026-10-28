@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -23,6 +24,7 @@ HEADER = r"""
 \usepackage{fvextra}
 \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,breakanywhere,commandchars=\\\{\}}
 \usepackage{xurl}
+\setkeys{Gin}{width=\linewidth,keepaspectratio}
 """
 
 
@@ -56,6 +58,7 @@ def build(out: Path, font: str, sans: str, mono: str) -> Path:
     md = "\n\n".join(chapter(p) for p in pages(nav))
     with tempfile.TemporaryDirectory() as t:
         src, head = Path(t) / "manuale.md", Path(t) / "header.tex"
+        shutil.copytree(DOCS / "images", Path(t) / "images")  # le immagini del manuale, accanto al markdown
         src.write_text(md, encoding="utf-8")
         head.write_text(HEADER, encoding="utf-8")
         subprocess.run([

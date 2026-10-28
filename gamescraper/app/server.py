@@ -505,7 +505,7 @@ def create_app(cfg) -> FastAPI:
                                      "genres", "players", "rating", "description", "region", "files", "video_url",
                                      "canonical", "crc", "found")},
                 "platform_name": p.name if p else g["platform"],
-                "media": {k: f"/img/{gid}/{k}" for k in g["media"]},
+                "media": {k: f"/img/{gid}/{k}" for k in _media(g)},
                 "sources": json.loads(g["origin"] or "{}"),
                 "user": grp, "versions": versions, "collections": sorted(colls, key=lambda c: c["name"].lower()),
                 "missing": [] if g.get("store") else _missing(g),
@@ -674,8 +674,13 @@ def create_app(cfg) -> FastAPI:
     @app.post("/api/game/{gid}/profile")
     def api_profile_save(gid: int, body: dict = Body(...)):
         g = lib.get(gid)
-        fields = L.SCRIPT_KEYS if g.get("store") else ("emulator", "core", "exe", "args", "extra", *L.SCRIPT_KEYS)
+        fields = (*L.SCRIPT_KEYS, *L.COMPANION_KEYS) if g.get("store") else \
+            ("emulator", "core", "exe", "args", "extra", *L.SCRIPT_KEYS, *L.COMPANION_KEYS)
         data = {k: str(body.get(k) or "").strip() for k in fields}
+        if data.get("companion"):
+            data["companion"] = data["companion"].strip('"')
+            if not Path(data["companion"]).is_file():
+                raise HTTPException(400, "Applicazione abbinata non trovata")
         data = {k: v for k, v in data.items() if v}
         if data.get("emulator") and data["emulator"] not in L.EMULATOR_NAMES:
             raise HTTPException(400, "Emulatore sconosciuto")
@@ -1292,8 +1297,9 @@ def create_app(cfg) -> FastAPI:
             raise HTTPException(400, "Seleziona un file .exe esistente")
         title = (body.get("title") or "").strip() or Path(exe).stem
         args = [a.strip('"') for a in shlex.split(body.get("args") or "", posix=False)]
-        user.add_manual(title, exe, args, (body.get("cwd") or "").strip())
-        return _start_store_job(["manual"])
+        kind = "app" if body.get("kind") == "app" else "game"
+        user.add_manual(title, exe, args, (body.get("cwd") or "").strip(), kind)
+        return _refresh_manual()
 
     @app.delete("/api/manual/{key:path}")
     def api_manual_delete(key: str):
@@ -1301,7 +1307,34 @@ def create_app(cfg) -> FastAPI:
         if not g or g.get("store") != "manual":
             raise HTTPException(404)
         user.delete_manual(int(key.split(":", 1)[1]))
-        return _start_store_job(["manual"])
+        return _refresh_manual()
+
+    @app.post("/api/manual/dedupe")
+    def api_manual_dedupe():
+        removed = user.dedupe_manual()
+        if removed:
+            _refresh_manual()
+        return {"removed": removed}
+
+    def _refresh_manual():
+        """Solo i giochi aggiunti a mano (una query locale): niente job degli store ne' 409. Le copertine
+        si cercano dopo, in background, senza bloccare l'aggiunta."""
+        import asyncio
+        from ..cache import Cache
+
+        def run(images):
+            cache = Cache(cfg.cache)
+            try:
+                asyncio.run(STORES.refresh(cfg, cache, only=["manual"], images=images))
+            finally:
+                cache.close()
+            build(cfg)
+            lib.load()
+            events.emit("library_built", {})
+
+        run(False)
+        threading.Thread(target=run, args=(True,), daemon=True).start()
+        return job["stores"].state()
 
     # ------------------------------------------------------------ fonti, limiti, database locali, pianificazione
     SOURCE_INFO = {
@@ -1754,6 +1787,34 @@ def create_app(cfg) -> FastAPI:
             raise HTTPException(400, "dati non validi")
         C.save_settings(cfg, platform_folders={folder: pid or None})
         return api_scan_preview()
+
+    @app.post("/api/folders/add")
+    def api_folders_add(body: dict = Body(...)):
+        """Aggiunge la cartella dei giochi di una console e cerca solo i dati dei giochi nuovi.
+        Per il PC ogni sottocartella con un .exe diventa un gioco aggiunto a mano."""
+        pid = (body.get("platform") or "").strip()
+        p = Path(os.path.expandvars(os.path.expanduser(str(body.get("path") or "").strip().strip('"'))))
+        if pid not in P.PLATFORMS or not p.is_dir():
+            raise HTTPException(400, "Console o cartella non valida")
+        if pid == "windows":
+            skip = re.compile(r"unins|setup|redist|crash|install|dxsetup|vcredist|launcher_helper", re.I)
+            added = 0
+            for sub in sorted(x for x in p.iterdir() if x.is_dir()):
+                exes = [f for f in sub.glob("*.exe") if not skip.search(f.name)]
+                if exes:
+                    exe = max(exes, key=lambda f: f.stat().st_size)
+                    before = len(user.manual_games())
+                    user.add_manual(sub.name, str(exe), [], str(sub))
+                    added += len(user.manual_games()) - before
+            if added:
+                _refresh_manual()
+            return {"added": added}
+        p = p.resolve()
+        cur = [str(x) for x in cfg.extra_roms]
+        if p != Path(cfg.roms).resolve() and str(p) not in cur:
+            C.save_settings(cfg, paths={"extra_roms": [*cur, str(p)]})
+        C.save_settings(cfg, platform_folders={str(p): pid})
+        return api_scan_start({"platforms": [pid]})
 
     @app.post("/api/scan")
     def api_scan_start(body: dict = Body(default={})):
@@ -2595,10 +2656,29 @@ def create_app(cfg) -> FastAPI:
             os.replace(tmp, out)
         return out
 
+    def _media(g: dict) -> dict:
+        """Immagini del gioco: quelle scelte dall'utente hanno la precedenza su quelle delle fonti."""
+        return {**g["media"], **user.media_overrides(g["key"])}
+
+    @app.post("/api/game/{gid}/media")
+    def api_media_set(gid: int, body: dict = Body(...)):
+        """Imposta un'immagine (copertina, sfondo, schermata...) scaricandola da un indirizzo scelto dall'utente."""
+        g = lib.get(gid)
+        kind, url_ = str(body.get("kind") or ""), str(body.get("url") or "").strip()
+        if kind not in ("cover", "hero", "screenshot", "title", "wheel", "fanart", "marquee", "header", "logo", "icon"):
+            raise HTTPException(400, "Tipo di immagine non valido")
+        if not url_.startswith(("http://", "https://")):
+            raise HTTPException(400, "Indirizzo non valido")
+        rel = _fetch_remote(url_)
+        if not rel:
+            raise HTTPException(400, "Immagine non scaricabile")
+        user.set_media(g["key"], kind, rel)
+        return {"media": {k: f"/img/{gid}/{k}" for k in _media(g)}}
+
     @app.get("/img/{gid}/{kind}")
     def api_img(gid: int, kind: str, request: Request, w: int = 0):
         g = lib.get(gid)
-        rel = g["media"].get(kind)
+        rel = _media(g).get(kind)
         if not rel:
             raise HTTPException(404)
         if rel.startswith("url:"):  # immagine remota (giochi degli store online): scaricata solo quando serve

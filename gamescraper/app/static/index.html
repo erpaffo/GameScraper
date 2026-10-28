@@ -18,6 +18,7 @@
       <a class="nav-item" data-view="foryou"><span class="ico">✨</span><span class="lbl">Per te</span></a>
       <a class="nav-item" data-view="all"><span class="ico">▦</span><span class="lbl">Tutti i giochi</span><span class="cnt" id="cnt-all"></span></a>
       <a class="nav-item" data-view="favorites"><span class="ico">★</span><span class="lbl">Preferiti</span><span class="cnt" id="cnt-fav"></span></a>
+      <div id="fav-plat-list"></div>
       <a class="nav-item" data-view="shop"><span class="ico">🛒</span><span class="lbl">Store</span><span class="cnt" id="cnt-shop"></span></a>
       <a class="nav-item" data-view="multi"><span class="ico">👥</span><span class="lbl">Multigiocatore locale</span><span class="cnt" id="cnt-multi"></span></a>
       <a class="nav-item" data-view="free"><span class="ico">🎁</span><span class="lbl">Giochi gratis</span><span class="cnt" id="cnt-free"></span></a>
@@ -58,6 +59,7 @@
       <div id="coll-list"></div>
 
       <div class="nav-section">Altro</div>
+      <a class="nav-item" data-view="apps" hidden><span class="ico">🧩</span><span class="lbl">Applicazioni</span><span class="cnt" id="cnt-apps"></span></a>
       <a class="nav-item" data-view="missing"><span class="ico">?</span><span class="lbl">Senza dati</span><span class="cnt" id="cnt-missing"></span></a>
       <a class="nav-item" data-view="dups"><span class="ico">⧉</span><span class="lbl">Duplicati</span><span class="cnt" id="cnt-dups"></span></a>
       <a class="nav-item" data-view="hidden"><span class="ico">⊘</span><span class="lbl">Nascosti</span><span class="cnt" id="cnt-hidden"></span></a>
@@ -154,9 +156,31 @@
         <input class="field" id="pf-before" placeholder="es. C:\Script\hdr-on.bat"></label>
       <label class="wide">Script dopo la chiusura
         <input class="field" id="pf-after" placeholder="es. C:\Script\hdr-off.bat"></label>
+      <label class="wide">App da avviare insieme al gioco <span class="muted small">(facoltativa: es. un deck tracker per Hearthstone)</span>
+        <span class="row tight"><input class="field grow" id="pf-comp-exe" placeholder="C:\Programmi\Tracker\tracker.exe">
+        <button class="btn" id="pf-comp-pick" type="button">Sfoglia…</button></span></label>
+      <label class="wide">Argomenti dell'app <input class="field" id="pf-comp-args" placeholder="es. --minimized"></label>
+      <label class="chk wide"><input type="checkbox" id="pf-comp-kill"> Chiudi l'app quando il gioco finisce</label>
     </div>
     <div class="row end"><button class="btn" id="pf-reset">Ripristina predefinito</button><span class="grow"></span>
       <button class="btn" id="pf-cancel">Annulla</button><button class="btn primary" id="pf-save">Salva</button></div>
+  </dialog>
+  <dialog id="media-dlg" class="small-dlg">
+    <form method="dialog" class="dlg-head"><h2>Immagine <span class="muted small" id="md-game"></span></h2><button class="icon-btn">✕</button></form>
+    <div class="dlg-body">
+      <div class="row wrap">
+        <label>Tipo <select id="md-kind" class="field">
+          <option value="cover">Copertina</option>
+          <option value="fanart">Sfondo</option>
+          <option value="screenshot">Schermata</option></select></label>
+        <button class="btn" id="md-search" type="button">🖼 Cerca</button>
+      </div>
+      <p class="muted small" id="md-hint">I candidati arrivano da SteamGridDB (serve la chiave in Impostazioni › SteamGridDB).</p>
+      <div id="md-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;max-height:44vh;overflow:auto"></div>
+      <label class="lbl-field">Oppure incolla l'indirizzo di un'immagine
+        <span class="row tight"><input id="md-url" class="field grow" placeholder="https://…jpg">
+        <button class="btn primary" id="md-use" type="button">Usa</button></span></label>
+    </div>
   </dialog>
   <dialog id="wl-dlg"><div class="dlg-body" id="wl-dlg-body"></div></dialog>
   <div id="toast" hidden></div>
@@ -624,14 +648,18 @@
     </div>
   </dialog>
   <dialog id="add-game" class="small-dlg">
-    <form method="dialog" class="dlg-head"><h2>Aggiungi un gioco PC</h2><button class="icon-btn">✕</button></form>
+    <form method="dialog" class="dlg-head"><h2>Aggiungi un gioco o un'applicazione</h2><button class="icon-btn">✕</button></form>
     <div class="dlg-body">
-      <label class="lbl-field">Eseguibile del gioco
+      <label class="lbl-field">Eseguibile
         <span class="row tight"><input id="ag-exe" class="field grow" placeholder="C:\Giochi\MioGioco\gioco.exe">
         <button class="btn" id="ag-pick" type="button">Sfoglia…</button></span></label>
+      <label class="lbl-field">Tipo <select id="ag-kind" class="field">
+        <option value="game">Gioco</option>
+        <option value="app">Applicazione (programma che non è un gioco)</option></select></label>
       <label class="lbl-field">Titolo <input id="ag-title" class="field" placeholder="se vuoto: nome della cartella"></label>
       <label class="lbl-field">Argomenti (facoltativi) <input id="ag-args" class="field" placeholder="es. -fullscreen"></label>
-      <p class="muted small">Copertina e immagini vengono cercate automaticamente (Steam, IGDB). Il tempo di gioco viene registrato.</p>
+      <p class="muted small">Copertina e immagini vengono cercate automaticamente (Steam, IGDB). Il tempo di gioco viene registrato.
+        Le applicazioni finiscono nella vista <b>Applicazioni</b> invece che tra i giochi.</p>
       <div class="row end"><button class="btn primary" id="ag-save" type="button">Aggiungi</button></div>
     </div>
   </dialog>

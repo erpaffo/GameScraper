@@ -1,14 +1,34 @@
 # Changelog
 
-## Non rilasciato
-
-
+## 0.8.0 (2026-10-28)
 ### Aggiunto
 
 - API locale stabile /api/v1 con token (Impostazioni > Info), errori uniformi, eventi SSE, client incluso per script e plugin
-### In corso
+- Preferiti divisi per console nella barra laterale, e vista «Applicazioni» per i programmi aggiunti a mano
+- Incolla cartella (📋) per ogni console e per i giochi PC: legge il percorso dagli appunti e cerca solo i giochi nuovi
+- Cerca immagini… dal menu del tasto destro: copertina, sfondo o schermata da SteamGridDB, oppure un indirizzo incollato
+- App da avviare insieme al gioco nel profilo di avvio, con chiusura automatica a fine partita
+- Pulizia libreria: Rimuovi doppioni manuali (stesso eseguibile e argomenti)
 
-- Screenshot nel manuale — `docs` `mkdocs.yml`
+### Migliorato
+
+- Manuale: screenshot di ogni funzione, nuova sezione Statistiche e test automatico di link e immagini
+- Aggiunta manuale di un gioco o di un'applicazione: nessun aggiornamento degli store, la voce compare subito
+- Libreria PC: DLC, colonne sonore, season pass, bundle e simili non compaiono più come giochi
+- Battle.net: genere, anno, descrizione e sviluppatore dei giochi
+- Giochi aggiunti a mano: lo stesso eseguibile non si aggiunge due volte; le immagini scelte dall'utente hanno la precedenza sulle fonti
+
+### Cambiato
+
+- Store estensioni: le estensioni arrivano da più fonti. La prima è lo store ufficiale (ogni estensione nel proprio repository); con «Aggiungi» si importa il link GitHub di un'altra estensione o di un altro store. Le estensioni di altre fonti sono indicate con la loro provenienza, e lo sha256 dei file viene sempre verificato
+
+### Corretto
+
+- Scheda del gioco: un clic su un altro gioco durante il caricamento non mostra piu' il gioco sbagliato, e le riaperture non ricaricano un pannello gia' chiuso
+- Torrent: il pulsante compare solo quando il link magnet scarica il singolo file
+- Avvio dei giochi PC: gli script «prima» non bloccano più il gioco oltre 15 secondi
+- Store: uno store non più rilevato non lascia giochi fantasma (per esempio titoli GOG che non sono di GOG); le voci GOG nel registro senza cartella del gioco vengono ignorate
+- Torrent: i link magnet di un intero set vengono scartati, così non si scarica più tutta la raccolta
 
 ## 0.7.3 (2026-10-28)
 ### Migliorato

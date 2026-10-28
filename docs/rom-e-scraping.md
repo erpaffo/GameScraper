@@ -60,6 +60,16 @@ In **Impostazioni › Nuovi giochi › Altre cartelle ROM** aggiungi altri disch
 di console oppure essere essa stessa una console (per esempio `E:\Switch`). Un disco scollegato viene saltato e
 segnalato, senza bloccare gli altri.
 
+### 📋 Incolla una cartella per una console
+
+Nella tabella di **⟳ Nuovi giochi** ogni console ha il pulsante **📋**: legge il percorso dagli **appunti** del PC e lo
+aggiunge come cartella di quella console; **📋 Incolla cartella PC** fa lo stesso con una cartella di giochi PC
+(`.exe`). Se il browser non lascia leggere gli appunti (succede fuori dall'app desktop) il percorso si incolla in una
+finestra.
+
+La cartella viene salvata e l'app cerca **solo i giochi nuovi**, in sottofondo: un messaggio dice quanti ne ha
+trovati, e la barra di avanzamento mostra il resto. Non serve rifare la scansione di tutto.
+
 ## Cercare i giochi nuovi
 
 **⟳ Nuovi giochi** apre la finestra di scansione: per ogni console trovata sul disco mostra quanti giochi non sono

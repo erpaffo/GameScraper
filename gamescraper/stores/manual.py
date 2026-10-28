@@ -25,5 +25,6 @@ class Manual(StoreProvider):
             exe = Path(m["exe"])
             games.append(StoreGame(
                 store=self.id, id=str(m["id"]), title=m["title"], installed=exe.exists(), install_dir=str(exe.parent),
+                kind=m["kind"],
                 launch={"type": "exe", "target": str(exe), "args": m["args"], "cwd": m.get("cwd") or str(exe.parent)}))
         return games

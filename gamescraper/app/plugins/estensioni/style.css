@@ -2,3 +2,9 @@
 .es-row { display: flex; gap: 16px; align-items: center; justify-content: space-between; padding: 12px 14px;
   background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; }
 .es-btns { display: flex; gap: 8px; flex-shrink: 0; }
+.es-src { max-width: 900px; margin: 0 0 14px; padding: 10px 14px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; }
+.es-src summary { cursor: pointer; font-weight: 600; }
+.es-srow { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.es-add { display: flex; gap: 8px; margin-top: 10px; }
+.es-add input { flex: 1; min-width: 0; }
+.es-third { font-size: 11px; padding: 1px 6px; border-radius: 6px; background: var(--bg-3); color: var(--muted); }

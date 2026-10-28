@@ -34,7 +34,9 @@ CREATE TABLE IF NOT EXISTS sync_times(tbl TEXT, id TEXT, field TEXT, t REAL, PRI
 SHARED_SCHEMA = """
 CREATE TABLE IF NOT EXISTS game_profiles(key TEXT PRIMARY KEY, data TEXT);
 CREATE TABLE IF NOT EXISTS manual_games(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, exe TEXT, args TEXT,
-                                        cwd TEXT, added REAL);
+                                        cwd TEXT, added REAL, kind TEXT DEFAULT 'game');
+-- immagini scelte dall'utente (percorso nella cache), valide al posto di quelle delle fonti
+CREATE TABLE IF NOT EXISTS media_overrides(key TEXT, kind TEXT, path TEXT, PRIMARY KEY(key, kind));
 """
 DELETED = "__deleted__"
 
@@ -58,6 +60,8 @@ class UserData:
         for col, typ in (("note", "TEXT"), ("my_rating", "INT")):  # nota personale e voto (1-5) dell'utente
             if col not in cols:
                 self.db.execute(f"ALTER TABLE user_games ADD COLUMN {col} {typ}")
+        if "kind" not in {r[1] for r in self.db.execute("PRAGMA table_info(manual_games)")}:  # game | app
+            self.db.execute("ALTER TABLE manual_games ADD COLUMN kind TEXT DEFAULT 'game'")
         wcols = {r[1] for r in self.db.execute("PRAGMA table_info(wishlist)")}
         # prezzo migliore sui negozi di key (GG.deals): attuale, minimo storico, pagina di confronto;
         # aks = dettaglio prezzi (JSON: Steam, key, offerte ITAD; nome storico, prima veniva da allkeyshop), cover = copertina
@@ -155,6 +159,12 @@ class UserData:
                     self.db.execute("DELETE FROM game_profiles WHERE key=?", (k,))
             self.db.commit()
 
+    def media_overrides(self, key: str) -> dict[str, str]:
+        return dict(self._q("SELECT kind, path FROM media_overrides WHERE key=?", (key,)))
+
+    def set_media(self, key: str, kind: str, path: str):
+        self._exec("INSERT OR REPLACE INTO media_overrides VALUES(?,?,?)", (key, kind, path))
+
     # ------------------------------------------------------------ lista dei desideri
     WISH_COLS = ("id", "title", "steam_appid", "itad_id", "target", "added", "price", "regular", "cut", "shop", "url",
                  "low", "currency", "checked", "alert", "seen", "key_price", "key_low", "key_url", "aks", "aks_checked", "cover")
@@ -240,16 +250,33 @@ class UserData:
     # ------------------------------------------------------------ giochi PC aggiunti a mano
     def manual_games(self) -> list[dict]:
         import json
-        cur = self._q("SELECT id, title, exe, args, cwd FROM manual_games ORDER BY title")
-        return [{"id": r[0], "title": r[1], "exe": r[2], "args": json.loads(r[3] or "[]"), "cwd": r[4]} for r in cur]
+        cur = self._q("SELECT id, title, exe, args, cwd, kind FROM manual_games ORDER BY title")
+        return [{"id": r[0], "title": r[1], "exe": r[2], "args": json.loads(r[3] or "[]"), "cwd": r[4],
+                 "kind": r[5] or "game"} for r in cur]
 
-    def add_manual(self, title: str, exe: str, args: list[str], cwd: str = "") -> int:
+    def add_manual(self, title: str, exe: str, args: list[str], cwd: str = "", kind: str = "game") -> int:
+        """Lo stesso exe con gli stessi argomenti non si aggiunge due volte: si riusa la voce esistente."""
         import json
         with self.lock:
-            cur = self.db.execute("INSERT INTO manual_games(title, exe, args, cwd, added) VALUES(?,?,?,?,?)",
-                                  (title.strip(), exe, json.dumps(args), cwd, time.time()))
+            row = self.db.execute("SELECT id FROM manual_games WHERE lower(exe)=lower(?) AND args=?",
+                                  (exe, json.dumps(args))).fetchone()
+            if row:
+                return row[0]
+            cur = self.db.execute("INSERT INTO manual_games(title, exe, args, cwd, added, kind) VALUES(?,?,?,?,?,?)",
+                                  (title.strip(), exe, json.dumps(args), cwd, time.time(), kind))
             self.db.commit()
             return cur.lastrowid
+
+    def dedupe_manual(self) -> int:
+        """Tiene la voce piu' vecchia per ogni exe+argomenti e cancella le altre. Ritorna quante ne ha tolte."""
+        with self.lock:
+            ids = [r[0] for r in self.db.execute(
+                "SELECT id FROM manual_games WHERE id NOT IN "
+                "(SELECT MIN(id) FROM manual_games GROUP BY lower(exe), args)")]
+            for i in ids:
+                self.db.execute("DELETE FROM manual_games WHERE id=?", (i,))
+            self.db.commit()
+        return len(ids)
 
     def delete_manual(self, mid: int):
         self._exec("DELETE FROM manual_games WHERE id=?", (mid,))

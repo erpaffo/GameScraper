@@ -12,6 +12,8 @@ weekend gratuiti e DLC gratis.
 | Ricerca di Steam | Giochi normalmente a pagamento scontati del 100% (esclusi free to play, DLC, colonne sonore) |
 | GamerPower | Giochi in regalo con data di fine |
 
+![Giochi gratis: le offerte del momento con tipo di offerta, valore e pulsanti Apri e Preso](images/giochi-gratis.jpg)
+
 Nella pagina:
 
 - l'etichetta **Nuovo** e il numero 🆕 nella barra laterale indicano le offerte comparse dall'ultima visita;
@@ -35,6 +37,8 @@ La vista **♡ Lista desideri** segue i prezzi dei giochi che vuoi comprare e av
 - **♡** nella pagina dei giochi gratis.
 
 Un gioco che hai già in libreria è segnato con *già in libreria*.
+
+![Lista desideri: prezzo attuale, sconto, minimo storico e key più economica per ogni gioco](images/lista-desideri.jpg)
 
 ### Prezzi
 
@@ -84,6 +88,8 @@ Ogni gioco ha uno **storico dei prezzi** (un punto al giorno, store e negozi di 
 
 La vista **🕹 Port PC** elenca i giochi console **ricompilati o ricostruiti per Windows** (Zelda64Recomp, Ship of
 Harkinian, Banjo Recompiled…) dal catalogo di Quiver Launcher: circa 580 port, aggiornato ogni 24 ore.
+
+![Port PC: i filtri per console e i port con l'indicazione della ROM richiesta](images/port-pc.jpg)
 
 ### Trovare un port
 

@@ -23,6 +23,8 @@ Tutto si configura in **Impostazioni › 📱 Telefono e streaming**.
 
 Windows può chiedere di consentire l'app sulle reti private: rispondi Sì.
 
+![Impostazioni › Telefono e streaming: attivazione, certificato del PC, QR di abbinamento e telefoni abbinati](images/impostazioni-telefono.jpg)
+
 ### Installare l'app: il certificato HTTPS
 
 Il server del telefono parla HTTPS, ma con un certificato **fatto in casa**. Un certificato non fidato produce due
@@ -90,6 +92,8 @@ digitato): le impostazioni e i file del PC restano fuori portata. L'**ospite a d
 - **📱 Gioca su questo telefono**: avvia il gioco sul PC e spiega come entrarci da Moonlight con un tocco, tramite
   l'app **▶ Gioco in corso** pubblicata in Sunshine. Aprire Moonlight direttamente su un gioco da una pagina web non è
   possibile (né su iOS né su Android).
+
+![La web app sul telefono: Home con In corso, Giocati di recente e giochi PC installati](images/telefono.jpg)
 
 ## Il telefono come controller
 

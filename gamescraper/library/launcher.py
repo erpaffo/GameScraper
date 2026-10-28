@@ -204,7 +204,7 @@ def plan(cfg, platform: P.Platform, profile: dict | None = None) -> dict | None:
     """Emulatore scelto per una console (o per un gioco con un profilo proprio):
     {emulator, exe, core, args, profile} oppure None."""
     over = dict(cfg.launch.get(platform.id, {}))
-    prof = {k: v for k, v in (profile or {}).items() if v not in (None, "", []) and k not in SCRIPT_KEYS}
+    prof = {k: v for k, v in (profile or {}).items() if v not in (None, "", []) and k not in SCRIPT_KEYS + COMPANION_KEYS}
     if prof:
         emu = prof.get("emulator") or over.get("emulator")
         if emu:
@@ -352,11 +352,14 @@ def _xinput():
 
 XINPUT_BACK, XINPUT_START, XINPUT_RB = 0x0020, 0x0010, 0x0200
 
+# applicazione da avviare insieme al gioco (es. il deck tracker di Hearthstone): programma, argomenti, "1" = chiudila a fine partita
+COMPANION_KEYS = ("companion", "companion_args", "companion_close")
 SCRIPT_KEYS = ("before", "after")  # script prima/dopo il gioco: in cfg.app["launch"] (tutti i giochi) e nel profilo del gioco
 # processo del launcher di ogni store, chiuso a fine partita se l'aveva aperto il gioco (cfg.app["launch"]["close_launcher"])
 STORE_LAUNCHERS = {"steam": "steam.exe", "epic": "epicgameslauncher.exe", "gog": "galaxyclient.exe",
                    "battlenet": "battle.net.exe", "amazon": "amazon games.exe"}
-LAUNCHER_GRACE = 10  # secondi dopo la partita prima di chiudere il launcher: finisce la sincronizzazione dei salvataggi
+BEFORE_WAIT = 15  # secondi massimi di attesa di uno script «prima» del gioco, poi il gioco parte comunque
+LAUNCHER_GRACE = 10 # secondi dopo la partita prima di chiudere il launcher: finisce la sincronizzazione dei salvataggi
 
 
 def _procs_named(name: str) -> list:
@@ -545,11 +548,36 @@ class Launcher:
         flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
         for cmd in filter(None, cmds if when == "before" else cmds[::-1]):
             try:
-                r = subprocess.run(cmd, shell=True, env=env, timeout=120, creationflags=flags)
-                if r.returncode:
-                    self._set(message=f"Script «{when}» terminato con codice {r.returncode}: {cmd}")
+                p = subprocess.Popen(cmd, shell=True, env=env, creationflags=flags)
+                try:
+                    # prima del gioco si aspetta poco: uno script che non finisce (es. un tracker) resta in
+                    # esecuzione e il gioco parte lo stesso
+                    code = p.wait(timeout=BEFORE_WAIT if when == "before" else 120)
+                    if code:
+                        self._set(message=f"Script «{when}» terminato con codice {code}: {cmd}")
+                except subprocess.TimeoutExpired:
+                    if when != "before":
+                        p.kill()
+                        self._set(message=f"Script «{when}» interrotto dopo 120 s: {cmd}")
             except Exception as e:
                 self._set(message=f"Script «{when}» non riuscito ({type(e).__name__}): {cmd}")
+
+    def _companion(self, key: str):
+        """Avvia (staccata) l'applicazione abbinata al gioco, se c'e'. Un errore non blocca il gioco."""
+        import shlex
+        pr = self.profile_of(key) or {}
+        if not pr.get("companion"):
+            return None
+        try:
+            args = [a.strip('"') for a in shlex.split(pr.get("companion_args") or "", posix=False)]
+            return subprocess.Popen([pr["companion"], *args], cwd=str(Path(pr["companion"]).parent))
+        except Exception as e:
+            self._set(message=f"Applicazione abbinata non avviata ({type(e).__name__}): {pr['companion']}")
+            return None
+
+    def _end_companion(self, proc, key: str):
+        if proc and (self.profile_of(key) or {}).get("companion_close") and proc.poll() is None:
+            proc.terminate()
 
     @staticmethod
     def _game_procs(folder: str) -> list:
@@ -570,6 +598,7 @@ class Launcher:
         launcher = STORE_LAUNCHERS.get(store_id) if (self.cfg.app.get("launch") or {}).get("close_launcher") else None
         launcher_was_open = bool(launcher and _procs_named(launcher))
         self._scripts(key, "before")
+        comp = self._companion(key)
         self.on_event("game_launching", dict(self.state))  # sincrono: la copia dei salvataggi finisce prima del gioco
         try:
             target, args = launch["target"], launch.get("args") or []
@@ -598,6 +627,7 @@ class Launcher:
                     time.sleep(3)
             played = time.time() - t0 if (not via_launcher or track) else 0
             self.user.record_play(key, played)
+            self._end_companion(comp, key)
             self._scripts(key, "after")
             self._set(status="finished", played=played, code=proc.returncode if proc else 0)
             if launcher and not launcher_was_open:  # solo se l'ha aperto il gioco: un launcher gia' aperto resta
@@ -605,8 +635,10 @@ class Launcher:
                 if self.state.get("status") == "finished":  # nessun altro gioco avviato nel frattempo
                     close_launcher(launcher)
         except LaunchError as e:
+            self._end_companion(comp, key)
             self._set(status="error", message=str(e))
         except Exception as e:
+            self._end_companion(comp, key)
             self._set(status="error", message=f"{type(e).__name__}: {e}")
 
     def _set(self, **kw):
@@ -639,6 +671,7 @@ class Launcher:
             core = str(_core_path(self.cfg, pl["core"])) if pl["core"] else ""
             args = [a.replace("{rom}", str(target)).replace("{core}", core) for a in pl["args"]]
             self._scripts(key, "before")
+            comp = self._companion(key)
             cmd = [pl["exe"], *self.prelaunch(dict(self.state)), *args]
             self.on_event("game_launching", dict(self.state))
             self._set(status="running", message=" ".join(f'"{c}"' if " " in c else c for c in cmd))
@@ -648,6 +681,7 @@ class Launcher:
             proc.wait()
             played = time.time() - t0
             self.user.record_play(key, played)
+            self._end_companion(comp, key)
             self._scripts(key, "after")
             self._set(status="finished", played=played, code=proc.returncode)
         except LaunchError as e:

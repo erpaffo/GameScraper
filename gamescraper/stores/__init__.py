@@ -140,8 +140,9 @@ async def _download_images(cfg, cache, client, games: list[dict], log, progress=
             g["media"]["cover_wide"] = g["media"]["header"]
 
 
-async def refresh(cfg, cache, log=print, only: list[str] | None = None, progress=None) -> dict:
-    """Aggiorna gli store (tutti o solo `only`) e salva le istantanee in cache."""
+async def refresh(cfg, cache, log=print, only: list[str] | None = None, progress=None, images: bool = True) -> dict:
+    """Aggiorna gli store (tutti o solo `only`) e salva le istantanee in cache.
+    images=False salta la ricerca e il download delle copertine (aggiunta rapida di giochi a mano)."""
     summary = {}
     async with make_client() as client:
         for P in PROVIDERS:
@@ -152,6 +153,8 @@ async def refresh(cfg, cache, log=print, only: list[str] | None = None, progress
             prov = P(cfg, cache, client, log)
             try:
                 if not prov.detected():
+                    if cache.kv_get(f"store:{P.id}"):  # store disinstallato: niente giochi fantasma dall'istantanea vecchia
+                        cache.kv_set(f"store:{P.id}", [])
                     continue
                 games = [g.to_dict() for g in await prov.fetch()]
             except Exception as e:
@@ -162,7 +165,10 @@ async def refresh(cfg, cache, log=print, only: list[str] | None = None, progress
             for g in games:
                 if g["id"] in old:
                     g["media"] = old[g["id"]].get("media", {})
-            await _download_images(cfg, cache, client, games, log, progress)
+            for g in games:
+                g.setdefault("media", {})
+            if images:
+                await _download_images(cfg, cache, client, games, log, progress)
             cache.kv_set(f"store:{P.id}", games)
             summary[P.id] = {"games": len(games), "installed": sum(1 for g in games if g["installed"])}
     cache.kv_set("stores:refreshed", time.time())

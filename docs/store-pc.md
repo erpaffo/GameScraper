@@ -39,6 +39,13 @@ Con **＋** accanto a *PC* scegli un `.exe`: il gioco entra in libreria tra i gi
 cercate su Steam e IGDB. I giochi aggiunti a mano sono salvati nei tuoi dati e non vengono toccati dalle
 ricostruzioni della libreria.
 
+Nel campo **Tipo** scegli **Gioco** o **Applicazione**: le applicazioni (un programma che non è un gioco) finiscono
+nella vista **🧩 Applicazioni** invece che tra i giochi, e si avviano allo stesso modo. Le voci aggiunte due volte
+per sbaglio si tolgono con **🧹 Rimuovi doppioni manuali** nell'estensione *Pulizia libreria*.
+
+L'aggiunta è immediata e non avvia nessun aggiornamento degli store: la voce compare subito, mentre copertina e
+immagini arrivano in sottofondo.
+
 ## Stesso gioco su più store
 
 Un gioco posseduto su più store (per esempio Steam ed Epic) è **una scheda sola** con più versioni. La versione

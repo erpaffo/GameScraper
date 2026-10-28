@@ -286,6 +286,13 @@ def serial_core(serial: str) -> str:
 
 # ---------------------------------------------------------------- giochi PC dagli store
 
+APP_GENRE = "Applicazione"
+# titoli di contenuti extra degli store; parole intere, per non colpire giochi veri
+NOT_A_GAME = re.compile(
+    r"\b(dlc|soundtrack|original score|season pass|expansion pass|art ?book|bonus content|upgrade pack|"
+    r"(texture|content|starter|booster|cosmetic|skin|weapon|costume) pack|bundle|supporter pack)\b", re.I)
+
+
 def _store_entries(cfg, cache) -> list[dict]:
     """Giochi degli store (istantanee in cache) come voci della piattaforma 'windows'.
     Lo stesso gioco su piu' store (es. Steam + Epic) diventa un gruppo con piu' versioni:
@@ -298,6 +305,8 @@ def _store_entries(cfg, cache) -> list[dict]:
         title = s.get("title") or s["id"]
         if not s.get("installed") and re.fullmatch(r"[0-9a-fA-F]{16,}", title):
             continue  # DLC senza scheda (titolo = codice interno dello store)
+        if s["store"] not in ("manual", "minecraft") and NOT_A_GAME.search(title):
+            continue  # DLC, colonne sonore, season pass, bundle: non sono giochi
         rd = str(s.get("release_date") or "")
         entries.append({
             "key": f"windows/{s['store']}:{s['id']}", "title": title, "sort": sort_title(title),
@@ -310,14 +319,14 @@ def _store_entries(cfg, cache) -> list[dict]:
             "store": s["store"], "installed": int(bool(s.get("installed"))), "launch": s.get("launch") or {},
             "install_uri": s.get("install_uri") or None, "page": s.get("page") or None,
             "store_playtime": s.get("playtime") or 0, "install_dir": s.get("install_dir") or None,
-            "size": s.get("size") or None,
+            "size": s.get("size") or None, "kind": s.get("kind") or "game",
             "grp": "windows/t:" + normalize(title),
         })
     # metadati SOLO dalle fonti offline (LaunchBox/TheGamesDB), cercati col pulsante "Metadati store":
-    # descrizioni/generi/valutazioni forniti online dagli store non si usano (tranne i dati fissi di Minecraft)
+    # descrizioni/generi/valutazioni forniti online dagli store non si usano (tranne i dati fissi di Minecraft e Battle.net)
     from .ratings import combine
     for e in entries:
-        if e["store"] != "minecraft":
+        if e["store"] not in ("minecraft", "battlenet"):
             e.update(description=None, developer=None, publisher=None, genres=[], release_date=None, year=None)
         m = cache.kv_get("storemeta:" + e["key"]) or {}
         e["players"] = str(m["players"]) if m.get("players") else None
@@ -327,6 +336,8 @@ def _store_entries(cfg, cache) -> list[dict]:
         if e["release_date"] and not e["year"] and re.match(r"^\d{4}", e["release_date"]):
             e["year"] = int(e["release_date"][:4])
         e["ratings"] = combine({"launchbox": m["rating"]} if m.get("rating") else {})
+        if e.pop("kind", "game") == "app":  # le applicazioni si riconoscono dal genere (nessuna colonna in piu')
+            e["genres"] = [APP_GENRE]
     order = {sid: i for i, sid in enumerate(STORE_ORDER)}
     groups: dict[str, list[dict]] = defaultdict(list)
     for e in entries:

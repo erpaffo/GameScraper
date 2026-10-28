@@ -38,6 +38,7 @@ class StoreGame:
     release_date: str = ""
     reviews: dict = field(default_factory=dict)
     size: int = 0  # byte (se lo store lo indica)  # {"rating": 0..1, "rating_count": n, "label": ...}
+    kind: str = "game"  # "app" = programma che non e' un gioco (solo aggiunti a mano)
 
     def to_dict(self) -> dict:
         return asdict(self)

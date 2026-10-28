@@ -5,11 +5,15 @@ quello che chiede la configurazione (media: cover, fanart, wheel). Chiave gratui
 
 POST /plugin-api/steamgriddb/chiave  {"chiave": "..."}   (vuota = rimuovi)
 GET  /plugin-api/steamgriddb/stato   -> {"chiave": true|false}
+GET  /plugin-api/steamgriddb/cerca?q=<titolo>&kind=cover|splash|screenshot
+     -> {"game": nome trovato, "items": [{url, thumb, w, h, score}]}   (per «Cerca immagini…» nel menu del gioco)
 """
 
 import os
+from urllib.parse import quote
 
-from fastapi import Body
+import httpx
+from fastapi import Body, HTTPException
 
 API = "https://www.steamgriddb.com/api/v2"
 # tipo di media dell'app -> (percorso dell'API, parametri)
@@ -18,6 +22,8 @@ MEDIA = {
     "fanart": ("heroes", {"types": "static"}),
     "wheel": ("logos", {"types": "static"}),
 }
+# tipo chiesto dalla finestra «Cerca immagini…» -> stesso schema; None = SteamGridDB non lo ha
+CERCA = {"cover": MEDIA["cover"], "splash": MEDIA["fanart"], "screenshot": None}
 
 
 def best_url(items: list[dict]) -> str | None:
@@ -95,3 +101,29 @@ def register(gs):
         gs.save_settings({"chiave": k})
         gs.settings["chiave"] = k
         return {"chiave": bool(k)}
+
+    @gs.route("cerca")
+    def cerca(q: str = "", kind: str = "cover"):
+        """Candidati per «Cerca immagini…»: prima il gioco che SteamGridDB riconosce, poi fino a 24 immagini.
+        Vuoto se `kind` non esiste (screenshot) o se il gioco non si trova: la finestra lascia incollare un URL."""
+        key = chiave(gs.cfg)
+        if not key:
+            raise HTTPException(400, "Serve la chiave di SteamGridDB (Impostazioni › SteamGridDB)")
+        spec = CERCA.get(str(kind), CERCA["cover"])
+        if spec is None or not str(q).strip():
+            return {"game": None, "items": []}
+        path, params = spec
+        try:
+            with httpx.Client(timeout=10, headers={"Authorization": "Bearer " + key}) as c:
+                found = c.get(f"{API}/search/autocomplete/{quote(str(q).strip(), safe='')}").json().get("data") or []
+                if not found:
+                    return {"game": None, "items": []}
+                hit = found[0]
+                r = c.get(f"{API}/{path}/game/{hit['id']}", params=params).json().get("data") or []
+        except (httpx.HTTPError, ValueError) as e:  # rete assente o risposta illeggibile
+            raise HTTPException(502, f"SteamGridDB non risponde ({type(e).__name__})")
+        items = [{"url": i["url"], "thumb": i.get("thumb") or i["url"], "w": i.get("width"), "h": i.get("height"),
+                  "score": i.get("score") or 0}
+                 for i in r if str(i.get("url", "")).startswith("https://")]
+        items.sort(key=lambda i: -i["score"])
+        return {"game": hit.get("name"), "items": items[:24]}

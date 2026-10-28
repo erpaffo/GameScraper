@@ -2,6 +2,8 @@
 
 Big Picture è l'interfaccia a **schermo intero per il controller**, pensata per un PC collegato alla TV.
 
+![Big Picture: la Home a scaffali con il gioco in evidenza e i comandi del controller in basso](images/bigpicture.jpg)
+
 ## Aprirla
 
 - il pulsante **🎮 Big Picture** in alto nella finestra principale;

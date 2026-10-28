@@ -117,6 +117,8 @@ In **Impostazioni › Info**, con una versione nuova disponibile, c'è anche il 
 La copia della versione portatile **non cancella niente**: `config.toml`, la cache e gli altri file tuoi accanto
 all'eseguibile restano. Se la cartella dell'app non è scrivibile, l'app lo dice e va aggiornata a mano.
 
+![Impostazioni › Info: versione installata, controllo aggiornamenti, dati scaricati e novità](images/impostazioni-info.jpg)
+
 ## Avvio dai sorgenti
 
 Per sviluppare o provare le ultime modifiche:

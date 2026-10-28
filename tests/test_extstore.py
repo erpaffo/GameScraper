@@ -123,7 +123,10 @@ def main():
         assert X.list_plugins(cfg)[0]["enabled"]
         print("ok  store sempre quello incluso e sempre attivo")
 
-    # il backend dello store si carica e registra le sue tre route
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_fonti(Path(t))
+
+    # il backend dello store si carica e registra le sue route
     class GS:
         cfg, routes, log = None, {}, staticmethod(lambda m: None)
 
@@ -135,9 +138,83 @@ def main():
     spec.loader.exec_module(mod)
     gs = GS()
     mod.register(gs)
-    assert set(gs.routes) == {"catalogo", "installa", "rimuovi"}
+    assert set(gs.routes) == {"catalogo", "installa", "rimuovi", "fonti/aggiungi", "fonti/rimuovi"}
     print("ok  backend dello store")
     print("test_extstore: OK")
+
+
+def test_fonti(t: Path):
+    """Repository separati: export, store che rimanda ai repository, fonti aggiunte con un link, priorita' e errori."""
+    # link -> index.json
+    assert S.index_link("https://github.com/u/r") == "https://raw.githubusercontent.com/u/r/HEAD/index.json"
+    assert S.index_link("https://github.com/u/r.git/") == "https://raw.githubusercontent.com/u/r/HEAD/index.json"
+    assert S.index_link("https://github.com/u/r/tree/v1.2") == "https://raw.githubusercontent.com/u/r/v1.2/index.json"
+    assert S.index_link(" https://esempio.it/store/index.json ") == "https://esempio.it/store/index.json"
+    for bad in ("http://github.com/u/r", "https://github.com/u", "C:/store/index.json", "https://esempio.it/pagina", "ftp://x/i.json"):
+        expect(lambda b=bad: S.index_link(b), "link non valido")
+    assert S.sources(C.Config())[0] == {"link": S.OFFICIAL, "official": True}   # lo store ufficiale e' sempre il primo
+
+    # export: un repository per estensione (index.json con base "./") e lo store con i riferimenti ai tag
+    out = t / "out"
+    T.cmd_export(str(out), "utente")
+    store = json.loads((out / T.STORE / "index.json").read_text(encoding="utf-8"))
+    ids = sorted(d.name for d in T.extension_dirs(T.EXT))
+    assert [r["repo"] for r in store["repos"]] == [f"utente/{T.PREFIX}{i}" for i in ids]
+    assert all(r["ref"].startswith("v") for r in store["repos"])
+    one = out / f"{T.PREFIX}statistiche"
+    idx = json.loads((one / "index.json").read_text(encoding="utf-8"))["extensions"]
+    assert len(idx) == 1 and idx[0]["id"] == "statistiche" and idx[0]["base"] == "./"
+    assert {"README.md", "LICENSE", "index.json"}.isdisjoint(idx[0]["files"])      # file del repository, non dell'estensione
+    assert (one / "README.md").exists() and (one / ".gitattributes").exists()
+    # index <cartella> rigenera lo stesso indice dal repository separato (la cartella si chiama gamescraper-ext-<id>)
+    before = (one / "index.json").read_text(encoding="utf-8")
+    T.cmd_index(str(one))
+    assert (one / "index.json").read_text(encoding="utf-8") == before
+
+    # store locale che rimanda ai repository con "url" (al posto di repo+ref, che richiederebbe GitHub)
+    local = {"version": 1, "repos": [{"url": str(out / f"{T.PREFIX}{i}" / "index.json")} for i in ("stasera", "diario")]
+             + [{"url": str(t / "manca" / "index.json")}, {"repo": "non valido!"}]}
+    (t / "store.json").write_text(json.dumps(local), encoding="utf-8")
+    cfg = cfg_in(t, t / "store.json")
+    plugins = X.user_dir(cfg, "plugins")
+    cat = S.catalog(cfg)
+    assert sorted(x["id"] for x in cat["items"]) == ["diario", "stasera"], cat["items"]
+    src = cat["sources"][0]
+    assert src["official"] and src["count"] == 2 and len(src["errors"]) == 2      # un repository irraggiungibile non toglie gli altri
+    S.install(cfg, "stasera")
+    assert (plugins / "stasera" / "logica.js").is_file() and not (plugins / "stasera" / "README.md").exists()
+
+    # seconda fonte (un altro store, letto da disco perche' l'utente non puo' aggiungere percorsi locali): stessa estensione
+    # in entrambe -> vince lo store ufficiale; una nuova -> compare con la sua fonte
+    other = {"version": 1, "repos": [{"url": str(out / f"{T.PREFIX}{i}" / "index.json")} for i in ("diario", "pulizia")]}
+    (t / "altro.json").write_text(json.dumps(other), encoding="utf-8")
+    cfg.app["extensions_sources"] = [str(t / "altro.json")]
+    by = {x["id"]: x for x in S.catalog(cfg)["items"]}
+    assert by["diario"]["official"] and not by["pulizia"]["official"] and by["pulizia"]["source"] == str(t / "altro.json")
+    S.install(cfg, "pulizia", str(t / "altro.json"))
+    assert (plugins / "pulizia" / "plugin.toml").is_file()
+    expect(lambda: S.install(cfg, "pulizia", "https://github.com/sconosciuto/store"), "fonte sconosciuta")
+    # sha256 manomesso nel repository di un'estensione: rifiutata anche se arriva da uno store
+    (out / f"{T.PREFIX}diario" / "backend.py").write_text("import os\n", encoding="utf-8")
+    expect(lambda: S.install(cfg, "diario"), "sha256")
+    assert not (plugins / "diario").exists()
+
+    # aggiungere e togliere fonti: solo link https validi e con estensioni; niente doppioni; l'ufficiale resta
+    cfg.app["extensions_sources"] = []
+    expect(lambda: S.add_source(cfg, "C:/store.json"), "link non valido")
+    real_fetch = S.fetch_source
+    S.fetch_source = lambda link: ([{"id": "x"}], []) if "buona" in link else ([], [])
+    try:
+        assert S.add_source(cfg, "https://github.com/utente/buona/") == ["https://github.com/utente/buona"]
+        expect(lambda: S.add_source(cfg, "https://github.com/utente/buona"), "gia' presente")
+        expect(lambda: S.add_source(cfg, "https://github.com/utente/vuota"), "non ci sono estensioni")
+        saved = json.loads((t / "settings.json").read_text(encoding="utf-8"))
+        assert saved["app"]["extensions_sources"] == ["https://github.com/utente/buona"]
+        assert S.remove_source(cfg, "https://github.com/utente/buona") == []
+        expect(lambda: S.remove_source(cfg, S.OFFICIAL), "non si rimuove")
+    finally:
+        S.fetch_source = real_fetch
+    print("ok  repository separati: export, store con rimandi, fonti aggiunte da link, priorita' dello store ufficiale")
 
 
 if __name__ == "__main__":

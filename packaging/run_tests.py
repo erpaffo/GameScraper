@@ -26,6 +26,7 @@ TESTS = [
     "test_pipeline.py",
     "test_stores.py",
     "test_launcher.py",
+    "test_fixes_backend.py",
     "test_switchmeta.py",
     "test_wishlist.py",
     "test_frontends.py",

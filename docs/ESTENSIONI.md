@@ -69,6 +69,10 @@ Sulla pagina sono disponibili due attributi utili:
 
 I temi inclusi (`gamescraper/app/themes/`: OLED, Chiaro, Retrò, Notte blu) sono buoni esempi da copiare.
 
+In **Impostazioni › Aspetto** si sceglie il tema e si vede l'anteprima del colore di ciascuno:
+
+![Impostazioni › Aspetto: scelta del tema e plugin installati](images/impostazioni-aspetto.jpg)
+
 ---
 
 ## Plugin
@@ -184,30 +188,56 @@ L'app include un solo plugin: lo **Store estensioni** (`gamescraper/app/plugins/
 della barra laterale e di **Impostazioni › Aspetto**, e non si può disattivare. Tutte le altre estensioni si
 installano da lì, nella cartella `plugins/` accanto a `config.toml`. Dopo un'installazione o una rimozione, riavvia l'app.
 
-Lo store legge l'indice `extensions/index.json` del repository (da GitHub raw). Per ogni estensione l'indice
-elenca i file con il loro sha256. L'installazione scarica i file uno per uno e scrive su disco solo se **tutti**
-corrispondono. Rifiuta anche nomi di file con percorsi, sottocartelle e versioni dell'app più vecchie di `min_app`.
+Le estensioni arrivano dalle **fonti**, elencate in *Fonti delle estensioni* in cima alla pagina:
+
+- la prima è sempre lo **store ufficiale** ([gamescraper-extensions](https://github.com/erpaffo/gamescraper-extensions)) e non si toglie;
+- **Aggiungi** accetta il link di un repository GitHub (`https://github.com/utente/repo`, anche `/tree/<tag>`) o
+  l'indirizzo https di un `index.json`. Se il link è il repository di un'estensione si aggiunge quell'estensione,
+  se è un altro store si aggiunge tutto il suo elenco. L'app controlla che il link risponda e contenga estensioni;
+- se la stessa estensione è in più fonti vince lo store ufficiale; quelle di altre fonti mostrano «da utente/repo».
+
+Ogni estensione ha il suo `index.json` con l'elenco dei file e il loro sha256. L'installazione scarica i file uno per
+uno e scrive su disco solo se **tutti** corrispondono. Rifiuta anche nomi di file con percorsi, sottocartelle e versioni
+dell'app più vecchie di `min_app`. Lo sha256 garantisce che i file siano quelli dell'indice, non che l'estensione sia
+affidabile: le estensioni di fonti di terzi eseguono codice sul PC, quindi aggiungi solo fonti di cui ti fidi.
 Un'estensione collegata alla cartella di sviluppo (vedi sotto) non viene mai aggiornata né cancellata dallo store.
 
-Per provare un indice diverso, per esempio quello locale prima del push, imposta in `settings.json`:
-`"app": {"extensions_index": "C:/percorso/GameScraper/extensions/index.json"}`.
+Per provare uno store diverso al posto di quello ufficiale, anche da disco prima del push, imposta in `settings.json`:
+`"app": {"extensions_index": "C:/percorso/store/index.json"}`.
+
+![Lo Store estensioni: le estensioni disponibili con descrizione e pulsante Installa](images/plugin-estensioni.jpg)
 
 ### Pubblicare un'estensione
 
-1. L'estensione sta in `extensions/<id>/`, con i file in cima alla cartella (niente sottocartelle).
-2. In `plugin.toml` alza `version` e, se usa funzioni nuove dell'app, `min_app = "x.y.z"`.
-3. Rigenera l'indice: `python tools/extensions.py index`. Il test `tests/test_extstore.py` fallisce se ti dimentichi.
-4. Commit e push: dopo il push lo store la vede subito, senza una nuova release dell'app.
+Ogni estensione vive nel **proprio repository** (per esempio `gamescraper-ext-stasera`): in cima ci sono
+`plugin.toml`, i file dell'estensione (niente sottocartelle) e `index.json`. Lo store ufficiale è un altro repository
+con un solo `index.json`, che elenca i repository e la versione approvata di ciascuno:
 
-Un'estensione può vivere anche in un repository a parte: nell'indice basta un `base` con l'URL assoluto della
-sua cartella raw (per esempio `https://raw.githubusercontent.com/<utente>/<repo>/main/`).
+```json
+{"version": 1, "repos": [{"repo": "erpaffo/gamescraper-ext-stasera", "ref": "v1.0"}]}
+```
 
-I fine riga di `extensions/` sono fissati a LF (`.gitattributes`): lo sha256 nell'indice è quello dei file
-come li serve GitHub.
+L'app legge l'`index.json` di ogni repository a quel tag. Una voce può anche indicare `"url"` al posto di
+`repo`/`ref`, per un indice che non sta su GitHub.
 
-Per lo sviluppo, `python tools/extensions.py link` collega ogni `extensions/<id>` alla tua cartella `plugins/`
-(junction su Windows, symlink altrove). Così la tua copia dell'app le ha già installate e usa i sorgenti del
-repository. La release, invece, contiene solo lo store.
+Per pubblicare una versione:
+
+1. In `plugin.toml` alza `version` e, se usa funzioni nuove dell'app, `min_app = "x.y.z"`.
+2. Rigenera l'indice dal repository dell'estensione: `python <GameScraper>/tools/extensions.py index .`
+3. Commit, tag `v<versione>` e push.
+4. Nello store porta `ref` al tag nuovo (una pull request sul repository dello store). Chi ha aggiunto il repository
+   dell'estensione come fonte la vede invece subito, perché quel link segue il ramo principale.
+
+I repository hanno i fine riga fissati a LF (`.gitattributes`): lo sha256 nell'indice è quello dei file come li serve GitHub.
+
+**Dal repository dell'app ai repository separati**: `python tools/extensions.py export <cartella> <utente>` crea in
+`<cartella>` un repository pronto per ogni estensione di `extensions/` (file, `index.json`, README, licenza) e quello
+dello store, che punta a `<utente>/gamescraper-ext-<id>` al tag `v<versione>`.
+
+Per lo sviluppo, `python tools/extensions.py link [<cartella>]` collega le estensioni alla tua cartella `plugins/`
+(junction su Windows, symlink altrove): senza argomento quelle di `extensions/`, altrimenti quelle della cartella
+indicata (una cartella con i repository clonati, oppure una sola estensione). Così la tua copia dell'app le ha già
+installate e usa i sorgenti. La release, invece, contiene solo lo store.
 
 ### Estensioni disponibili
 
@@ -218,12 +248,12 @@ repository. La release, invece, contiene solo lo store.
 | **Store Minerva + Switch** | importa in un clic le cartelle di minerva-archive.org elencate su r-roms.github.io **e** aggiunge gli store Switch preimpostati (NXBrew `game-index`, Ziperto NSP, Ziperto XCI) |
 | **Cosa gioco stasera?** | propone un gioco dal backlog in base al tempo che hai (durata HowLongToBeat), al genere e alla console, con più probabilità per quelli che non giochi da più tempo; «Un altro» e «Avvia» |
 | **Anniversari retro** | badge «30 ANNI» sulle copertine dei giochi usciti proprio oggi e pagina «Oggi nel…» (servono le date di uscita complete) |
-| **Pulizia libreria** | duplicati, giochi mai avviati o fermi da anni, dati incompleti; azioni di massa (nascondi, abbandonato, backlog) e badge «DUP» |
+| **Pulizia libreria** | duplicati, giochi mai avviati o fermi da anni, dati incompleti; azioni di massa (nascondi, abbandonato, backlog), badge «DUP» e **🧹 Rimuovi doppioni manuali** (voci aggiunte a mano con lo stesso eseguibile e gli stessi argomenti: si tiene la più vecchia) |
 | **Diario di gioco** | nel dettaglio di ogni gioco, voci datate e cronologia delle sessioni (si affianca alla nota personale già presente) |
 | **Limite di tempo** | notifica quando superi X ore al giorno o a settimana (del profilo attivo); è un avviso, non chiude il gioco |
 | **Obiettivi personali** | obiettivi a periodo (giochi finiti, ore, giorni di gioco), serie di giorni consecutivi e distintivi |
 | **Riepilogo annuale** | il tuo anno in giochi (ore, più giocati, console, mese) con un'immagine da salvare |
-| **SteamGridDB** | fonte di copertine verticali, sfondi e logo mancanti; chiave gratuita in Impostazioni › SteamGridDB |
+| **SteamGridDB** | fonte di copertine verticali, sfondi e logo mancanti; chiave gratuita in Impostazioni › SteamGridDB. Alimenta anche **🖼 Cerca immagini…** del menu del tasto destro (candidati da scegliere per il singolo gioco) |
 | **Calendario uscite** | uscite future dei giochi in lista desideri e dei prossimi titoli dei tuoi generi, da RAWG (usa la chiave di Impostazioni › Fonti) |
 
 **Store Minerva + Switch** tiene i preset in `PRESETS` (`backend.py`): per aggiungerne altri basta una riga

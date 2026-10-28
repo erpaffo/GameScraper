@@ -37,13 +37,17 @@ Nella stessa finestra:
 - **↻ Rileggi** rilegge subito gli elenchi;
 - togliere tutti gli indirizzi e salvare scollega la console dagli store online.
 
+![La finestra Store online di una console: indirizzi, giochi letti per pagina e pulsanti Rileggi e Salva e leggi](images/store-online.jpg)
+
 ### Come compaiono i giochi
 
 - Il titolo viene **ripulito** dalle parole dei siti: «Zumba World – The Marble Adventure Switch NSP (eShop)» diventa
   «Zumba World – The Marble Adventure». La parola «Switch» che fa parte del titolo resta («1-2-Switch»).
 - **Stesso gioco da più fonti**: se due siti offrono lo stesso gioco, anche con nomi leggermente diversi, la libreria
   mostra **una sola scheda** con un pulsante per ogni fonte («⬇ nxbrew.net», «⬇ ziperto.com») e il pulsante Torrent
-  quando c'è un link magnet. Con una sola fonte resta **⬇ Scarica (browser)**.
+  quando c'è un link magnet **per il singolo file**. Con una sola fonte resta **⬇ Scarica (browser)**.
+- **Torrent**: si offre solo per i magnet che indicano il file (nome con estensione); quelli che scaricherebbero
+  l'intero set non hanno il pulsante, e la scheda lo dice, così non si scaricano decine di giochi per sbaglio.
 - I giochi solo online **non contano come posseduti**: non entrano nel conteggio della console, in «Multigiocatore
   locale» né nei consigli basati sui tuoi giochi.
 - Una console con uno store online compare nella barra laterale **anche se non hai nessun suo gioco**: così puoi
@@ -165,6 +169,8 @@ sceglie quando rileggerli:
 | **All'avvio dell'app** (predefinita) | Rilegge tutti gli elenchi poco dopo l'avvio |
 | **Ogni giorno alle** | Una volta al giorno all'ora scelta, con l'app aperta |
 | **Solo manualmente** | Mai in automatico: si usa **⟳ Aggiorna tutti** |
+
+![Impostazioni › Store: stato degli store, account collegati e aggiornamento degli elenchi](images/impostazioni-store.jpg)
 
 ### La coda
 

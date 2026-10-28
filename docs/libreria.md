@@ -14,7 +14,7 @@ miniature WebP leggere.
 |---|---|
 | **✨ Per te** | Pagina di consigli in stile Netflix (vedi [Per te](#per-te-e-a-cosa-vuoi-giocare)) |
 | **▦ Tutti i giochi** | Tutta la libreria: ROM e giochi PC |
-| **★ Preferiti** | I giochi segnati con la stella |
+| **★ Preferiti** | I giochi segnati con la stella; sotto la voce, una **sotto-voce per console** con i preferiti di quella console (compaiono solo quelle che ne hanno) |
 | **🛒 Store** | Giochi da installare o scaricare: posseduti negli store ma non installati, e giochi degli store online |
 | **👥 Multigiocatore locale** | Giochi con almeno 2 giocatori sullo stesso schermo |
 | **🎁 Giochi gratis** | Offerte gratuite del momento (vedi [Giochi gratis](extra.md#giochi-gratis)) |
@@ -24,6 +24,7 @@ miniature WebP leggere.
 | **🏆 Migliori giochi** | Classifiche Top 100 e Top 1000 (vedi [Migliori giochi](#migliori-giochi)) |
 | **📊 Statistiche** | Tempo di gioco per console e store, giochi più giocati, completezza dei dati |
 | **◷ Giocati di recente** | In ordine di ultima partita |
+| **🧩 Applicazioni** | I programmi aggiunti a mano come *Applicazione* invece che come gioco (compare solo se ce ne sono) |
 | **? Senza dati** | Giochi per cui nessuna fonte ha trovato informazioni |
 | **⧉ Duplicati** | Le versioni secondarie dei giochi (altre regioni, revisioni) |
 | **⊘ Nascosti** | I giochi che hai nascosto |
@@ -115,10 +116,20 @@ Azioni principali:
 
 ### Menu del tasto destro
 
-Un clic destro su una copertina apre un menu rapido: Gioca, Dettagli, Mostra nella cartella, preferiti, aggiungi a
-una collezione, stato, nascondi. **Rimuovi da…** toglie il gioco dalla vista corrente (per esempio da
-«Giocati di recente», che azzera solo l'ultima partita lasciando tempo di gioco e numero di avvii) o dalle altre
-categorie a cui appartiene.
+Un clic destro su una copertina apre un menu rapido: Gioca, Dettagli, Mostra nella cartella, **🖼 Cerca immagini…**,
+preferiti, aggiungi a una collezione, stato, nascondi. **Rimuovi da…** toglie il gioco dalla vista corrente (per
+esempio da «Giocati di recente», che azzera solo l'ultima partita lasciando tempo di gioco e numero di avvii) o dalle
+altre categorie a cui appartiene.
+
+### Scegliere l'immagine del gioco
+
+**🖼 Cerca immagini…** apre una finestra con i candidati di **SteamGridDB** per quel gioco: *Copertina*, *Sfondo* o
+*Schermata*. Un clic su un candidato lo salva e sostituisce l'immagine scaricata dalle fonti. Se l'estensione non è
+installata o manca la chiave, si incolla l'**indirizzo di un'immagine** (http o https) e si preme **Usa**: l'app la
+scarica e la usa per quel gioco soltanto.
+
+Con un solo posto da guardare, l'immagine scelta vale ovunque: griglia, scheda, Big Picture, telefono e pagina web
+esportata.
 
 ## Una versione per gioco
 
@@ -193,7 +204,7 @@ store online.
 
 - i **totali**: giochi in libreria, giochi giocati almeno una volta, tempo di gioco complessivo (app e store),
   giochi finiti, in corso e da giocare, con le ore che servono per finire il backlog (HowLongToBeat);
-- **Il tuo anno**: le ore giocate mese per mese, la classifica dell'anno e il grafico per genere;
+- **Il tuo anno**: le ore giocate mese per mese e la classifica dell'anno;
 - **Tempo per console e store**, **tempo per genere**, **i più giocati di sempre** e la completezza dei dati.
 
 I numeri arrivano dal tempo di gioco registrato dall'app più quello dichiarato dagli store.

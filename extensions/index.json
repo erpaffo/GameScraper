@@ -114,7 +114,7 @@
       "min_app": "0.7.1",
       "base": "pulizia/",
       "files": {
-        "frontend.js": "612f279ec380363be3815123e162f558ada7fdb061eece68a71712a280cae5a8",
+        "frontend.js": "496f020d8ca59bce4a8103e8e89530c5ea892898e0c41fab5a0fa283eb683141",
         "logica.js": "067871519aec426153fea3c1849bc2e98c6ef40dda5ed7e2a5beebfd4d49b219",
         "plugin.toml": "dcbd65eadc7e6ddaaab83a9dcdb4debbe68e488e1f3834d112a59276f7018b8c",
         "style.css": "675b11dd82766b7441b0a63b865b17be0e6193a493b154aa9113d7aa0d312039"
@@ -174,7 +174,7 @@
       "min_app": "0.7.1",
       "base": "steamgriddb/",
       "files": {
-        "backend.py": "a4925fc15bd9975e6fbe71ba4ff2d413b2b78ff86333857a80229da5313040bb",
+        "backend.py": "dc42cc975843e881c9e180dc3f0a4f8531b69d5a162961d4bb362d60fbf01e44",
         "frontend.js": "b2db9476220602938fe6e094f857a004f345b9cd2f72cb31a11b62561507cdfc",
         "plugin.toml": "12c46dfa4f9c016b3d8e1e93914aef1036751fa91e19fe33686623ddc67f18c9"
       }

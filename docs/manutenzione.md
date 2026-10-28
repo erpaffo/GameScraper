@@ -7,6 +7,8 @@ dati personali di ogni profilo: preferiti, nascosti, stati, note, voti, versione
 partite, collezioni personali e modifiche alle collezioni, lista desideri. La sincronizzazione avviene da sola
 all'avvio e ogni 5 minuti, oppure subito con **⟳ Sincronizza ora**.
 
+![Impostazioni › Libreria: sincronizzazione tra PC, esportazione per altri frontend e copie di sicurezza](images/impostazioni-libreria.jpg)
+
 ### Cosa sincronizzare
 
 | Scelta | Cosa passa da un PC all'altro |
@@ -70,6 +72,8 @@ La libreria (`library.db`) non serve copiarla: si ricostruisce da sola. Per i sa
 - età dell'ultima copia dei tuoi dati.
 
 Ogni problema ha il pulsante che lo risolve o porta all'impostazione giusta. Il controllo non fa richieste in rete.
+
+![La pagina Salute: i problemi da sistemare e i controlli andati a buon fine](images/impostazioni-salute.jpg)
 
 ## Cartelle rinominate o spostate
 

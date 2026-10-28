@@ -13,7 +13,7 @@ const S = {
   oneVersion: store.get("oneVersion", true), zoom: store.get("zoom", 170),
   collSort: store.get("collSort", "name"), collFilter: "",
   items: [], rows: [], total: 0, cols: 1, tw: 170, th: 260, gap: 18, pad: 22,
-  nodes: new Map(), selected: null, detail: null, running: null,
+  nodes: new Map(), selected: null, detail: null, running: null, openSeq: 0,
   instFilter: store.get("instFilter", "all"), stores: [],
   disc: store.get("disc", { preset: "", genre: "", decade: "" }),
   shopF: store.get("shopF", { src: "", plat: "", size: "" }), shop: [], shopIds: new Set(),
@@ -85,6 +85,9 @@ function loading(text) {
 
 /* ------------------------------------------------------------------ filtri e ordinamento */
 const platName = (id) => S.plats.get(id)?.name || id;
+// le applicazioni aggiunte a mano hanno questo genere (vedi build.py: APP_GENRE)
+const APP_GENRE = "Applicazione";
+const isApp = (g) => g.store === "manual" && String(g.genres || "").split(", ").includes(APP_GENRE);
 
 function inView(g, v) {
   const grp = g.grp;
@@ -94,7 +97,8 @@ function inView(g, v) {
   if (S.oneVersion && g.id !== grp.primary && !(v.type === "store" && v.id !== "all")) return false;
   if (v.type !== "hidden" && grp.hidden) return false;
   switch (v.type) {
-    case "favorites": return !!grp.favorite;
+    case "favorites": return !!grp.favorite && (!v.plat || g.platform === v.plat);
+    case "apps": return isApp(g);
     case "recent": return grp.last > 0;
     case "multi": return g.players >= 2;
     case "status": return (grp.status || "") === v.id;
@@ -299,14 +303,19 @@ function refreshGrid(keepScroll = false) {
 
 /* ------------------------------------------------------------------ sidebar e intestazione */
 function counts() {
-  const c = { all: 0, fav: 0, recent: 0, missing: 0, hidden: 0, plat: new Map(), coll: new Map(), store: new Map() };
+  const c = { all: 0, fav: 0, recent: 0, missing: 0, hidden: 0, apps: 0,
+    plat: new Map(), coll: new Map(), store: new Map(), favPlat: new Map() };
   for (const g of S.games) {
     const grp = g.grp;
     if (S.oneVersion && g.id !== grp.primary) continue;
     if (g.store === "online") continue; // disponibili online: non sono giochi posseduti
     if (grp.hidden) { c.hidden++; continue; }
     c.all++;
-    if (grp.favorite) c.fav++;
+    if (isApp(g)) c.apps++;
+    if (grp.favorite) {
+      c.fav++;
+      c.favPlat.set(g.platform, (c.favPlat.get(g.platform) || 0) + 1);
+    }
     if (grp.last) c.recent++;
     if (!g.found) c.missing++;
     if (g.store) {
@@ -325,6 +334,13 @@ function renderSidebar() {
   $("#cnt-all").textContent = c.all.toLocaleString("it");
   $("#cnt-fav").textContent = c.fav || "";
   $("#cnt-recent").textContent = c.recent || "";
+  $("#cnt-apps").textContent = c.apps || "";
+  $('[data-view="apps"]').hidden = !c.apps;
+  // preferiti per console: una sotto-voce per le console che ne hanno almeno uno
+  const favPlats = [...c.favPlat.entries()].sort((a, b) => collator.compare(platName(a[0]), platName(b[0])));
+  $("#fav-plat-list").innerHTML = favPlats.map(([p, n]) =>
+    `<a class="nav-item" data-view="favorites" data-plat="${esc(p)}" style="padding-left:28px" title="Preferiti · ${esc(platName(p))}">`
+    + `<span class="ico">${platIcon(p)}</span><span class="lbl">${esc(platName(p))}</span><span class="cnt">${n}</span></a>`).join("");
   renderStatusList();
   renderSmartList();
   $("#cnt-multi").textContent = S.games.filter((g) => g.id === g.grp.primary && !g.grp.hidden && g.players >= 2 && g.store !== "online").length || "";
@@ -452,7 +468,8 @@ function renderCollList() {
 
 function markActive() {
   document.querySelectorAll("#nav .nav-item").forEach((a) => {
-    const on = a.dataset.view === S.view.type && (a.dataset.id || null) === (S.view.id || null);
+    const on = a.dataset.view === S.view.type && (a.dataset.id || null) === (S.view.id || null)
+      && (a.dataset.plat || null) === (S.view.plat || null);
     a.classList.toggle("active", on);
   });
 }
@@ -481,6 +498,8 @@ function renderShopTools() {
 
 function viewTitle() {
   const v = S.view;
+  if (v.type === "favorites" && v.plat) return `★ Preferiti · ${platName(v.plat)}`;
+  if (v.type === "apps") return "🧩 Applicazioni";
   return { shots: "Schermate", free: "Giochi gratis", ports: "Port PC", wishlist: "Lista desideri", stats: "Statistiche",
     top: !v.id || v.id === "all" ? "🏆 Migliori giochi" : `🏆 Top 100 · ${platName(v.id)}`,
     status: `${STATUS[v.id]?.icon || ""} ${STATUS[v.id]?.label || ""}`,
@@ -706,11 +725,13 @@ function fmtTime(sec) {
 function fmtDate(ts) { return ts ? new Date(ts * 1000).toLocaleString("it", { dateStyle: "medium", timeStyle: "short" }) : "—"; }
 
 async function openDetail(id) {
+  const my = ++S.openSeq; // un fetch lento non deve sovrascrivere il gioco aperto dopo
   S.selected = id;
   document.querySelectorAll(".tile.selected").forEach((t) => t.classList.remove("selected"));
   S.nodes.get(id)?.classList.add("selected");
   let d;
-  try { d = await api(`/api/game/${id}`); } catch (e) { syncLibrary(); return toast(e.message, true); }
+  try { d = await api(`/api/game/${id}`); } catch (e) { if (my === S.openSeq) { syncLibrary(); toast(e.message, true); } return; }
+  if (my !== S.openSeq) return; // nel frattempo e' stato aperto (o chiuso) un altro gioco
   S.detail = d;
   const hero = d.media.hero || d.media.screenshot || d.media.title || d.media.header || d.media.cover;
   $("#detail .hero-bg").style.backgroundImage = hero ? `url("${hero}?w=1280")` : "none";
@@ -735,7 +756,8 @@ async function openDetail(id) {
       ? dlSources.map((s, i) => `<button class="btn${i === 0 ? " primary" : ""}" data-open="${esc(s.url)}"
           title="Apri la pagina di download su ${esc(s.site || "questo sito")}">⬇ ${esc((s.site || "sito").replace(/^www\./, ""))}</button>`).join("")
       : `<button class="btn primary" id="d-install" title="Apre la pagina di download nel browser">⬇ Scarica (browser)</button>`)
-      + (d.magnet ? `<button class="btn" id="d-torrent" title="Apre il link nel client torrent">🧲 Torrent</button>` : "")
+      // solo i magnet per-file (con il nome del file dentro): gli altri scaricherebbero l'intero set
+      + (d.magnet && /dn=[^&]*\./.test(d.magnet) ? `<button class="btn" id="d-torrent" title="Apre il link nel client torrent">🧲 Torrent</button>` : "")
     : pc && !d.installed
     ? `<button class="btn primary" id="d-install" ${d.can_install ? "" : "disabled"}>⬇ Installa</button>`
     : `<button class="btn primary" id="d-play" ${d.emulator ? "" : "disabled"}>▶ Gioca</button>`;
@@ -948,6 +970,7 @@ async function renderDetailSections(d) {
 }
 
 function closeDetail() {
+  S.openSeq++; // una risposta in arrivo non deve riaprire il pannello
   $("#detail").classList.remove("open");
   $("#detail").setAttribute("aria-hidden", "true");
   S.detail = null;
@@ -960,7 +983,7 @@ async function setFlag(field, value) {
   g.grp[field] = field === "status" ? value || "" : value ? 1 : 0;
   renderSidebar();
   refreshGrid(true);
-  openDetail(d.id);
+  if (S.detail?.id === d.id) openDetail(d.id); // solo se il pannello mostra ancora questo gioco
 }
 
 /* ------------------------------------------------------------------ popover (collezioni / testo) */
@@ -1019,7 +1042,7 @@ function pickCollection(anchor, gameId, current) {
     } catch (err) { return toast(err.message, true); }
     closePopover();
     await reload(true);
-    openDetail(gameId);
+    if (S.detail?.id === gameId) openDetail(gameId);
   };
 }
 
@@ -1067,6 +1090,7 @@ function openCtx(e, g) {
   if (g.store !== "online") rows.push({ l: "▶ Gioca", f: () => play(g.id) });
   rows.push({ l: "Dettagli", f: () => openDetail(g.id) });
   if (!g.store) rows.push({ l: "📂 Mostra nella cartella", f: () => api(`/api/game/${g.id}/open-folder`, { body: {} }) });
+  rows.push({ l: "🖼 Cerca immagini…", f: () => openMediaPick(g) });
   if (here) rows.push("-", { l: `✖ Rimuovi da «${here.l}»`, f: here.f, hl: 1 });
   rows.push("-", { l: grp.favorite ? "★ Togli dai preferiti" : "☆ Aggiungi ai preferiti", f: () => setGrp(g, "favorite", !grp.favorite) });
   rows.push({ l: "＋ Aggiungi a una collezione…", f: () => pickCollection(pt, g.id, grp.colls.map((i) => S.colls[i]?.slug)) });
@@ -1089,6 +1113,69 @@ function openCtx(e, g) {
     closeCtx();
     try { await rows[+it.dataset.i].f(); } catch (err) { toast(err.message, true); }
   };
+}
+
+/* ---- immagine scelta a mano: candidati da SteamGridDB (estensione) oppure un indirizzo incollato */
+let MD = null;
+function openMediaPick(g) {
+  MD = g;
+  $("#md-game").textContent = `— ${g.title}`;
+  $("#md-url").value = "";
+  $("#media-dlg").showModal();
+  searchMedia();
+}
+
+async function searchMedia() {
+  const g = MD;
+  if (!g) return;
+  const kind = $("#md-kind").value;
+  const grid = $("#md-grid");
+  grid.innerHTML = `<p class="muted small">Cerco…</p>`;
+  try {
+    const d = await api(`/plugin-api/steamgriddb/cerca?q=${encodeURIComponent(g.title)}&kind=${encodeURIComponent(kind)}`);
+    const items = d.items || [];
+    grid._items = items;
+    grid.innerHTML = items.length
+      ? items.map((it, i) => `<button type="button" data-md="${i}" title="${esc([it.w, it.h].filter(Boolean).join("×"))}"
+          style="padding:0;border:0;background:none;cursor:pointer"><img src="${esc(it.thumb || it.url)}" alt="" loading="lazy"
+          style="width:100%;border-radius:8px;display:block"></button>`).join("")
+      : `<p class="muted small">${kind === "screenshot"
+        ? "SteamGridDB non ha schermate: incolla qui sotto l'indirizzo di un'immagine."
+        : "Nessun candidato trovato."}</p>`;
+  } catch (e) {
+    grid._items = [];
+    grid.innerHTML = `<p class="muted small">${esc(e.message)}</p>`;
+  }
+}
+
+async function useMedia(url) {
+  const g = MD;
+  if (!g || !/^https?:\/\//i.test(url || "")) return toast("Serve un indirizzo di immagine (http o https)", true);
+  try { await api(`/api/game/${g.id}/media`, { body: { kind: $("#md-kind").value, url } }); }
+  catch (e) { return toast(e.message, true); }
+  $("#media-dlg").close();
+  toast("Immagine salvata");
+  await reload(true);
+  if (S.detail?.id === g.id) openDetail(g.id);
+}
+
+/* ---- incolla una cartella per una console (o per i giochi PC) e cerca solo i giochi nuovi */
+async function pasteFolder(platform) {
+  let path = "";
+  try { path = (await navigator.clipboard.readText() || "").trim().replace(/^"|"$/g, ""); }
+  catch { /* permesso negato o pagina non in HTTPS: si chiede a mano */ }
+  if (!path) path = prompt(`Percorso della cartella (${platform === "windows" ? "giochi PC" : platName(platform)})`) || "";
+  path = path.trim().replace(/^"|"$/g, "");
+  if (!path) return;
+  let r;
+  try { r = await api("/api/folders/add", { body: { platform, path } }); }
+  catch (e) { return toast(e.message, true); }
+  // giochi PC: {added}; console: lo stato dello scraping appena avviato (i giochi nuovi si vedono nella barra)
+  if (r.added) toast(`Cartella aggiunta: ${r.added} ${r.added === 1 ? "gioco PC" : "giochi PC"}`);
+  else if (r.status === "running" || (r.keys || []).length) { toast("Cartella aggiunta: cerco i giochi nuovi…"); SET.lastStatus = "running"; pollScan(); }
+  else toast("Cartella aggiunta");
+  await reload(true);
+  loadScan();
 }
 
 let pollTimer = 0;
@@ -1128,22 +1215,26 @@ async function installGame(id) {
   toast("Apro lo store per l'installazione. Al termine premi «↻ Aggiorna store» in Impostazioni › Account.");
 }
 
-function openAddGame() {
+function openAddGame(kind = "game") {
   const dlg = $("#add-game");
   $("#ag-exe").value = ""; $("#ag-title").value = ""; $("#ag-args").value = "";
+  $("#ag-kind").value = kind;
   dlg.showModal();
   $("#ag-exe").focus();
 }
 
 async function saveAddGame() {
   const exe = $("#ag-exe").value.trim();
-  if (!exe) return toast("Scegli il file .exe del gioco", true);
+  const kind = $("#ag-kind").value === "app" ? "app" : "game";
+  if (!exe) return toast(kind === "app" ? "Scegli il file .exe dell'applicazione" : "Scegli il file .exe del gioco", true);
   try {
-    await api("/api/manual", { body: { exe, title: $("#ag-title").value.trim(), args: $("#ag-args").value } });
+    await api("/api/manual", { body: { exe, title: $("#ag-title").value.trim(), args: $("#ag-args").value, kind } });
   } catch (e) { return toast(e.message, true); }
   $("#add-game").close();
-  toast("Gioco aggiunto: cerco copertina e immagini…");
-  pollStores(true);
+  // l'aggiunta a mano non e' un aggiornamento degli store: nessuna coda, solo la voce nuova.
+  // Copertina e immagini arrivano dopo, in sottofondo.
+  toast(kind === "app" ? "Applicazione aggiunta" : "Gioco aggiunto: cerco copertina e immagini…");
+  await reload(true);
 }
 
 /* ---- immagini delle collezioni */
@@ -1895,6 +1986,9 @@ async function openProfile(d) {
   $("#pf-game").textContent = `— ${d.title} (${PF.platform})`;
   $("#pf-before").value = p.before || "";
   $("#pf-after").value = p.after || "";
+  $("#pf-comp-exe").value = p.companion || "";
+  $("#pf-comp-args").value = p.companion_args || "";
+  $("#pf-comp-kill").checked = p.companion_close === "1";
   $("#pf-emu-box").hidden = !!PF.pc; // giochi PC: solo gli script
   if (PF.pc) return $("#prof-dlg").showModal();
   const emus = PF.emulators.filter((e) => e.configured || e.id === p.emulator).sort((a, b) => (b.preset - a.preset) || a.id.localeCompare(b.id));
@@ -1920,15 +2014,18 @@ function pfRefresh() {
   $("#pf-cmd").textContent = `"${exe}" ${extra && args.includes("{rom}") ? args.replace("{rom}", extra + " {rom}") : args + (extra ? " " + extra : "")}`;
 }
 async function saveProfile(reset = false) {
+  // app da avviare insieme al gioco (facoltativa), per giochi PC e console: tre campi nel profilo
+  const comp = { companion: $("#pf-comp-exe").value.trim(), companion_args: $("#pf-comp-args").value.trim(),
+    companion_close: $("#pf-comp-kill").checked ? "1" : "" };
   try {
     PF = Object.assign(PF, reset ? await api(`/api/game/${PF.id}/profile`, { method: "DELETE" })
-      : await api(`/api/game/${PF.id}/profile`, { body: PF.pc ? { before: $("#pf-before").value, after: $("#pf-after").value }
+      : await api(`/api/game/${PF.id}/profile`, { body: PF.pc ? { before: $("#pf-before").value, after: $("#pf-after").value, ...comp }
         : { emulator: $("#pf-emu").value, core: $("#pf-emu").value === "retroarch" || !$("#pf-emu").value ? $("#pf-core").value : "",
-          exe: $("#pf-exe").value, args: $("#pf-args").value, extra: $("#pf-extra").value, before: $("#pf-before").value, after: $("#pf-after").value } }));
+          exe: $("#pf-exe").value, args: $("#pf-args").value, extra: $("#pf-extra").value, before: $("#pf-before").value, after: $("#pf-after").value, ...comp } }));
   } catch (e) { return toast(e.message, true); }
   $("#prof-dlg").close();
   toast(reset ? "Profilo rimosso: si usano le impostazioni della console" : "Profilo di avvio salvato");
-  openDetail(PF.id);
+  if (S.detail?.id === PF.id) openDetail(PF.id);
 }
 
 /* ---- telefono e streaming */
@@ -3010,7 +3107,8 @@ function renderExtraRoots(extra) {
     + (extra.length ? extra.map((x) => `<span class="xr${x.online ? "" : " off"}" title="${x.online ? "" : "Non raggiungibile: disco scollegato?"}">`
       + `<code>${esc(x.path)}</code>${x.online ? "" : " ⚠"} <a href="#" class="xr-del" data-path="${esc(x.path)}" title="Togli">✕</a></span>`).join(" ")
       : "nessuna")
-    + ` <button class="btn" id="xr-add" type="button">＋ Aggiungi</button></div>`;
+    + ` <button class="btn" id="xr-add" type="button">＋ Aggiungi</button>`
+    + ` <button class="btn" id="xr-paste" type="button" title="Incolla dagli appunti una cartella con giochi PC (.exe)">📋 Incolla cartella PC</button></div>`;
 }
 
 async function extraRoot(action, path) {
@@ -3057,10 +3155,12 @@ function renderScan(pv, js) {
   $("#scan-table").innerHTML = `<table class="emu"><tr><th style="width:28px"><input type="checkbox" id="scan-all" title="Seleziona tutte"></th>`
     + `<th>Console</th><th>Cartella</th><th class="num">Giochi</th><th class="num">Nuovi</th>`
     + `<th class="num" title="Giochi che nessuna fonte ha riconosciuto">Senza dati</th>`
-    + `<th class="num" title="Giochi riconosciuti a cui manca qualcosa (descrizione, immagini...)">Incompleti</th></tr>`
+    + `<th class="num" title="Giochi riconosciuti a cui manca qualcosa (descrizione, immagini...)">Incompleti</th>`
+    + `<th title="Incolla dagli appunti la cartella di questa console: i giochi nuovi vengono cercati subito"></th></tr>`
     + pv.platforms.map((r) => `<tr class="${r.new ? "new" : ""}"><td><input type="checkbox" class="scan-sel" data-p="${esc(r.platform)}"></td>`
       + `<td>${esc(r.name)}</td><td class="muted small">${esc(r.folder)}</td><td class="num">${r.games.toLocaleString("it")}</td>`
-      + `<td class="num n">${fmt(r.new)}</td><td class="num warn">${fmt(r.nodata)}</td><td class="num">${fmt(r.partial)}</td></tr>`).join("") + `</table>`;
+      + `<td class="num n">${fmt(r.new)}</td><td class="num warn">${fmt(r.nodata)}</td><td class="num">${fmt(r.partial)}</td>`
+      + `<td><button class="btn paste-dir" data-platform="${esc(r.platform)}" title="Incolla una cartella di ${esc(r.name)} (dagli appunti)">📋</button></td></tr>`).join("") + `</table>`;
   applyScanMode();
   const opts = `<option value="">— di quale console? —</option>` + SET.platforms.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
   $("#scan-unknown").innerHTML = pv.unknown.length
@@ -3246,7 +3346,7 @@ function bind() {
       return;
     }
     if (a.dataset.view === "ports") PORTS_F.open = null; // dalla barra laterale: sempre il catalogo
-    setView({ type: a.dataset.view, id: a.dataset.id || null });
+    setView({ type: a.dataset.view, id: a.dataset.id || null, plat: a.dataset.plat || undefined });
   });
   $("#inst-filter").value = S.instFilter;
   // altri store PC: aggiunta, rimozione, categoria e filtro
@@ -3435,6 +3535,15 @@ function bind() {
   });
 
   $("#detail-close").onclick = closeDetail;
+  $("#md-search").onclick = searchMedia;
+  $("#md-kind").onchange = searchMedia;
+  $("#md-use").onclick = () => useMedia($("#md-url").value.trim());
+  $("#md-grid").onclick = (e) => {
+    const b = e.target.closest("[data-md]");
+    if (!b) return;
+    const it = ($("#md-grid")._items || [])[+b.dataset.md];
+    if (it) useMedia(it.url);
+  };
   // la nota si salva quando si esce dal campo (change), senza ridisegnare la scheda
   $("#detail").addEventListener("change", async (e) => {
     const d = S.detail;
@@ -3571,6 +3680,10 @@ function bind() {
     if (e.target.id === "scan-all") document.querySelectorAll(".scan-sel").forEach((c) => { c.checked = e.target.checked; });
     if (e.target.id === "scan-all" || e.target.classList?.contains("scan-sel")) applyScanMode();
   });
+  $("#scan-table").addEventListener("click", (e) => {
+    const b = e.target.closest(".paste-dir");
+    if (b) pasteFolder(b.dataset.platform);
+  });
   $("#scan-unknown").addEventListener("change", async (e) => {
     const s = e.target.closest(".map-folder");
     if (!s || !s.value) return;
@@ -3664,6 +3777,7 @@ function bind() {
       const p = window.pywebview?.api ? await pickPath("folder") : prompt("Percorso di un'altra cartella ROM (anche una sola console, es. D:\\Switch)");
       extraRoot("add", p);
     }
+    if (e.target.id === "xr-paste") pasteFolder("windows");
   });
   document.querySelector('[data-tab="src"]')?.addEventListener("click", () => { pollHltb(); pollCollart(); });
   $("#collart-missing").onclick = () => startCollart("missing");
@@ -3739,6 +3853,7 @@ function bind() {
   $("#pf-save").onclick = () => saveProfile(false);
   $("#pf-reset").onclick = () => saveProfile(true);
   $("#pf-exe-pick").onclick = async () => { const p = await pickPath("file"); if (p) { $("#pf-exe").value = p; pfRefresh(); } };
+  $("#pf-comp-pick").onclick = async () => { const p = await pickPath("file"); if (p) $("#pf-comp-exe").value = p; };
   $("#running").addEventListener("click", (e) => { if (e.target.closest("#run-shot")) api("/api/running/screenshot", { body: {} }); });
   api("/api/shots").then((d) => {
     $("#cnt-shots").textContent = d.shots.length || "";

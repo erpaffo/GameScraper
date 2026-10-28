@@ -75,9 +75,9 @@ class Gog(StoreProvider):
             v = reg_get("HKLM", REG + "\\" + gid) or {}
             name = v.get("gameName") or v.get("GAMENAME")
             exe = v.get("exe") or v.get("EXE")
-            if not name:
+            if not name or not os.path.isdir(v.get("path") or ""):  # voce di registro rimasta senza il gioco
                 continue
-            launch = {"type": "exe", "target": exe, "args": (v.get("launchParam") or "").split(), "cwd": v.get("workingDir") or v.get("path", "")}
+            launch ={"type": "exe", "target": exe, "args": (v.get("launchParam") or "").split(), "cwd": v.get("workingDir") or v.get("path", "")}
             out[gid] = StoreGame(store=self.id, id=gid, title=name, installed=True, install_dir=v.get("path", ""),
                                  launch=launch, install_uri=self._install_uri(gid, ""),
                                  page="https://www.gog.com/account")

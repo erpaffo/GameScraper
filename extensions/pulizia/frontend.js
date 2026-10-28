@@ -41,7 +41,8 @@ export default function (gs) {
           <p class="muted">${list.length.toLocaleString("it")} ${list.length === 1 ? "voce" : "voci"}${list.length > shown.length ? ` (le prime ${shown.length})` : ""}.
             ${tab === "dup" ? "Per i duplicati le azioni valgono per tutte le copie tranne la prima." : ""}</p>
           <div class="pl-bar"><button class="btn" id="pl-all">Seleziona tutto</button><button class="btn" id="pl-none">Nessuno</button>
-            ${Object.entries(ACTIONS).map(([k, [l]]) => `<button class="btn" data-act="${k}" ${sel.size ? "" : "disabled"}>${l} (${sel.size})</button>`).join("")}</div>
+            ${Object.entries(ACTIONS).map(([k, [l]]) => `<button class="btn" data-act="${k}" ${sel.size ? "" : "disabled"}>${l} (${sel.size})</button>`).join("")}
+            <button class="btn" id="pl-manual-dupes" title="Toglie le voci aggiunte a mano due volte (stesso eseguibile e stessi argomenti)">🧹 Rimuovi doppioni manuali</button></div>
           <ul class="pl-list">${shown.map((r, i) => {
             const on = r.ids.slice(r.ids.length > 1 ? 1 : 0).every((id) => sel.has(id));
             return `<li><label><input type="checkbox" data-i="${i}" ${on ? "checked" : ""}> <b>${gs.esc(r.main.title)}</b>
@@ -59,12 +60,21 @@ export default function (gs) {
         draw();
       };
       el.onclick = async (e) => {
-        const t = e.target.closest("[data-tab],[data-act],[data-open],#pl-all,#pl-none");
+        const t = e.target.closest("[data-tab],[data-act],[data-open],#pl-all,#pl-none,#pl-manual-dupes");
         if (!t) return;
         if (t.dataset.open) { e.preventDefault(); return gs.openGame(+t.dataset.open); }
         if (t.dataset.tab) { tab = t.dataset.tab; gs.store.set("pulizia.tab", tab); sel.clear(); return draw(); }
         if (t.id === "pl-all") { el._rows.forEach((r) => targets(r).forEach((id) => sel.add(id))); return draw(); }
         if (t.id === "pl-none") { sel.clear(); return draw(); }
+        if (t.id === "pl-manual-dupes") {
+          if (!confirm("Rimuovere i doppioni tra le voci aggiunte a mano (stesso eseguibile e stessi argomenti)? Si tiene la più vecchia.")) return;
+          try {
+            const r = await gs.api("/api/manual/dedupe", { body: {} });
+            gs.toast(r.removed ? `${r.removed} ${r.removed === 1 ? "doppione rimosso" : "doppioni rimossi"}` : "Nessun doppione da rimuovere");
+            if (r.removed) await gs.refresh();
+          } catch (err) { gs.toast(err.message, true); }
+          return draw();
+        }
         const [label, body] = ACTIONS[t.dataset.act];
         if (!sel.size || !confirm(`${label}: ${sel.size} giochi?`)) return;
         let ok = 0, fail = 0;

@@ -31,9 +31,13 @@ versioni). I campi vuoti usano le impostazioni della console:
 - eseguibile diverso (per esempio un'altra versione dell'emulatore);
 - argomenti al posto di quelli predefiniti;
 - argomenti aggiuntivi, messi prima del file del gioco (per esempio `-f` per lo schermo intero);
-- **script prima dell'avvio** e **script dopo la chiusura** (vedi sotto).
+- **script prima dell'avvio** e **script dopo la chiusura** (vedi sotto);
+- **app da avviare insieme al gioco**: un eseguibile con i suoi argomenti e l'opzione **Chiudi l'app quando il gioco
+  finisce**. Serve per i programmi che devono girare accanto al gioco, per esempio un deck tracker su Hearthstone o un
+  overlay di statistiche: si avvia con il gioco e, se vuoi, si chiude con lui.
 
-Per i giochi PC il profilo contiene solo i due script: il gioco si avvia sempre come prevede il suo store.
+Per i giochi PC il profilo contiene i due script e l'app di accompagnamento: il gioco si avvia sempre come prevede il
+suo store.
 
 ## Script prima e dopo il gioco
 

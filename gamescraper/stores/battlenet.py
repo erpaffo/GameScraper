@@ -30,6 +30,22 @@ PRODUCTS = {
     "w3": ("W3", "Warcraft III: Reforged", False),
     "gryphon": ("GRY", "Warcraft Rumble", True),
 }
+# dati fissi (Blizzard non ha un'API pubblica): uid -> (genere, anno di uscita, descrizione)
+META = {
+    "wow": (["MMORPG"], "2004", "Il MMORPG di Blizzard ambientato nel mondo di Azeroth."),
+    "wow_classic": (["MMORPG"], "2019", "World of Warcraft com'era ai tempi del lancio."),
+    "d3": (["Action RPG"], "2012", "Hack and slash in cui si combattono le forze dell'Inferno a Sanctuarium."),
+    "fenris": (["Action RPG"], "2023", "Il ritorno di Lilith: action RPG oscuro e online."),
+    "osi": (["Action RPG"], "2021", "Remaster del classico Diablo II."),
+    "anbs": (["Action RPG"], "2022", "Diablo per dispositivi mobili e PC, gratuito."),
+    "hs_beta": (["Carte collezionabili"], "2014", "Gioco di carte collezionabili ambientato nell'universo Warcraft."),
+    "heroes": (["MOBA"], "2015", "MOBA a squadre con gli eroi dei giochi Blizzard."),
+    "pro": (["Sparatutto in prima persona"], "2022", "Sparatutto a squadre con eroi, gratuito."),
+    "s1": (["Strategia in tempo reale"], "1998", "Remaster dello storico StarCraft."),
+    "s2": (["Strategia in tempo reale"], "2010", "Lo strategico in tempo reale di Blizzard, gratuito."),
+    "w3": (["Strategia in tempo reale"], "2020", "Remaster di Warcraft III."),
+    "gryphon": (["Strategia"], "2023", "Gioco di strategia a squadre con le unità di Warcraft."),
+}
 UNINSTALL = r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
 CONFIG = Path(os.path.expandvars(r"%APPDATA%\Battle.net\Battle.net.config"))
 
@@ -60,8 +76,10 @@ class BattleNet(StoreProvider):
         exe = self.client_exe()
         launch = ({"type": "exe", "target": exe, "args": [f"--exec=launch {code}"], "cwd": str(Path(exe).parent)}
                   if exe and installed else {"type": "uri", "target": f"battlenet://{code}"})
+        genres, year, desc = META[uid]
         return StoreGame(store=self.id, id=uid, title=title, installed=installed, install_dir=install_dir,
-                         launch=launch, install_uri=f"battlenet://{code}", page="https://shop.battle.net/")
+                         genres=genres, release_date=year, description=desc, developer="Blizzard Entertainment",
+                         publisher="Blizzard Entertainment", launch=launch, install_uri=f"battlenet://{code}", page="https://shop.battle.net/")
 
     async def fetch(self) -> list[StoreGame]:
         games: dict[str, StoreGame] = {}

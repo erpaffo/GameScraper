@@ -84,10 +84,18 @@ def parse_listing(page: str, base_url: str, exts: set[str] | None = None) -> lis
         tail = page[m.end():min(end, m.end() + 1500)]
         size = parse_size(_TAG.sub(" ", tail.split("magnet:")[0]))
         mag = _MAGNET.search(tail)
+        magnet = html.unescape(mag.group(0)) if mag else None
         seen.add(name)
         out.append({"name": name, "size": size, "url": urljoin(base_url, href),
-                    "magnet": html.unescape(mag.group(0)) if mag else None})
+                    "magnet": magnet if _per_file(magnet, exts) else None})
     return out
+
+
+def _per_file(magnet: str | None, exts: set[str]) -> bool:
+    """Un magnet va tenuto solo se e' di un singolo file (dn=nome.ext): quelli di un intero set farebbero
+    scaricare tutta la raccolta."""
+    dn = (parse_qs(urlparse(magnet or "").query).get("dn") or [""])[0]
+    return "." in dn and dn.rsplit(".", 1)[-1].lower() in exts
 
 
 # --------------------------------------------------------------------------- type_a: elenco paginato
