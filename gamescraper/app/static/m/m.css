@@ -321,3 +321,7 @@ body.pad-on { overflow: hidden; height: 100%; touch-action: none; }
 .act-bar i { display: block; height: 100%; background: var(--accent, #5b8cff); transition: width .3s ease; }
 .act-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 14px; }
 .act-btns .btn { padding: 12px 10px; font-size: 14px; }
+/* telecomando del PC: tasti e tasti multimediali (un tocco = un tasto) */
+.act-keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 0 14px; }
+.act-keys .btn { padding: 10px 4px; font-size: 13px; }
+.act-keys .btn:active { background: var(--accent, #5b8cff); color: #0f1117; }

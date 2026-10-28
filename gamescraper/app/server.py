@@ -2710,6 +2710,13 @@ def create_app(cfg) -> FastAPI:
         if action == "stop-scan":
             job["current"].cancel()
             return {"ok": True, "state": api_mobile_state()}
+        if action == "key":
+            # telecomando: volume, play/pausa, Esc, Invio, Alt+Tab... (elenco chiuso in remote/keyboard.py)
+            try:
+                phone_hub.key_input(str(body.get("key") or ""))
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+            return {"ok": True, "state": api_mobile_state()}
         raise HTTPException(400, "Comando sconosciuto")
 
     # ------------------------------------------------------------ temi, plugin, link esterni
@@ -2733,6 +2740,41 @@ def create_app(cfg) -> FastAPI:
         C.save_settings(cfg, app={"launch": conf})
         cfg.app["launch"] = conf
         return conf
+
+    @app.get("/api/app/notify")
+    def api_notify_get():
+        return {"enabled": cfg.app.get("notify") is not False, "available": sys.platform == "win32"}
+
+    @app.post("/api/app/notify")
+    def api_notify_set(body: dict = Body(...)):
+        on = bool(body.get("enabled"))
+        C.save_settings(cfg, app={"notify": on})
+        cfg.app["notify"] = on
+        if on:
+            from .. import notify
+            notify.send(cfg, "GameScraper", "Notifiche attive: prezzi, giochi gratis e lavori finiti.")
+        return {"enabled": on}
+
+    @app.get("/api/app/power")
+    def api_power_get():
+        from .. import power
+        return {"after_jobs": cfg.app.get("after_jobs") or "none", "modes": list(power.MODES), **power.pending()}
+
+    @app.post("/api/app/power")
+    def api_power_set(body: dict = Body(...)):
+        """Cosa fare al termine delle operazioni lunghe: niente, sospendi o spegni il PC."""
+        from .. import power
+        mode = str(body.get("after_jobs") or "none")
+        if mode not in power.MODES:
+            raise HTTPException(400, "Scelta non valida")
+        C.save_settings(cfg, app={"after_jobs": mode})
+        cfg.app["after_jobs"] = mode
+        return api_power_get()
+
+    @app.post("/api/app/power/abort")
+    def api_power_abort():
+        from .. import power
+        return {"cancelled": power.cancel(), **power.pending()}
 
     @app.post("/api/app/duplicates")
     def api_duplicates(body: dict = Body(...)):
@@ -3061,6 +3103,8 @@ def create_app(cfg) -> FastAPI:
             wish_state["last"] = time.time()
             if r["alerts"]:
                 events.emit("wishlist_alerts", r)
+                _notify(f"💸 {len(r['alerts'])} giochi sotto la soglia di prezzo",
+                        "\n".join(f"• {t}" for t in r["alerts"][:4]))
         except Exception as e:
             wish_state["log"].append(f"{type(e).__name__}: {e}")
         finally:
@@ -3188,6 +3232,109 @@ def create_app(cfg) -> FastAPI:
             time.sleep(1800)
 
     threading.Thread(target=_wish_loop, daemon=True).start()
+
+    # ------------------------------------------------------------ avvisi di Windows e coda finita
+    def _notify(title: str, body: str = ""):
+        try:
+            from .. import notify
+            notify.send(cfg, title, body)
+        except Exception:  # una notifica non deve mai fermare un lavoro
+            pass
+
+    def _busy() -> bool:
+        from . import ports_api
+        return (state["building"] or any(j.status == "running" for j in job.values())
+                or ports_api.PORT_JOB["status"] == "running")
+
+    def _free_alerts():
+        """Nuovi giochi gratis (non gia' visti e non posseduti): un solo avviso per quelli usciti insieme."""
+        from .. import freegames as fg
+        fs = C.read_settings(cfg)
+        notified = set(fs.get("free_notified") or [])
+        seen = set((fs.get("free_state") or {}).get("seen") or [])
+        owned = {normalize(g["title"]) for g in lib.games if g.get("store") != "online"}
+        from ..cache import Cache
+        c = Cache(cfg.cache)
+        try:
+            d = fg.get(c)
+        finally:
+            c.close()
+        items = d.get("items") or []
+        ids = {_free_id(i) for i in items}
+        fresh = [i for i in items if _free_id(i) not in seen and _free_id(i) not in notified
+                 and normalize(i.get("title") or "") not in owned]
+        # la memoria si tiene solo per le offerte ancora in elenco: non cresce all'infinito
+        C.set_setting(cfg, "free_notified", sorted((notified & ids) | {_free_id(i) for i in fresh}))
+        if fresh and fs.get("free_state") is not None:  # la prima volta si registra e basta
+            titles = [f"• {i.get('title')} ({i.get('source') or i.get('console') or ''})".strip() for i in fresh[:4]]
+            extra = f"\n+{len(fresh) - 4} altri" if len(fresh) > 4 else ""
+            _notify(f"🎁 {len(fresh)} giochi gratis nuovi", "\n".join(titles) + extra)
+
+    def _port_alerts():
+        """Aggiornamenti dei port PC installati: un avviso per ogni versione nuova, non a ogni controllo."""
+        from .. import ports as pt
+        from ..cache import Cache
+        c = Cache(cfg.cache)
+        try:
+            tok = pt._token(cfg)
+            inst = pt.all_installed(cfg)
+            seen = dict(C.read_settings(cfg).get("ports_seen") or {})
+            fresh = []
+            for slug, man in inst.items():
+                info = pt.update_info(c, man, tok)
+                tag = info.get("latest") or ""
+                if info.get("update") and seen.get(slug) != tag:
+                    fresh.append(f"• {man.get('name') or slug} {tag}")
+                    seen[slug] = tag
+        finally:
+            c.close()
+        seen = {s: t for s, t in seen.items() if s in inst}  # port disinstallati: si toglie la memoria
+        C.set_setting(cfg, "ports_seen", seen)
+        if fresh:
+            _notify(f"🕹 {len(fresh)} port da aggiornare", "\n".join(fresh[:4]))
+
+    app.state.alerts = {"free": _free_alerts, "ports": _port_alerts}  # per i test (avvisi senza rete)
+
+    def _watch_loop():
+        """Ogni 20 s: avvisi quando un lavoro finisce e, a coda vuota, spegnimento/sospensione scelti
+        in Impostazioni. In sottofondo (ogni 6 e 12 ore) i controlli di giochi gratis e port aggiornati."""
+        from .. import power
+        prev = {r["id"]: r["status"] for r in _job_rows()}
+        busy_before = False
+        next_free, next_ports = time.time() + 180, time.time() + 300
+        while True:
+            time.sleep(20)
+            try:
+                rows = _job_rows()
+                for r in rows:
+                    if prev.get(r["id"]) == "running" and r["status"] in ("done", "error", "cancelled"):
+                        _notify(r["name"], r["phase"] or ("Completato" if r["status"] == "done" else r["status"]))
+                prev = {r["id"]: r["status"] for r in rows}
+                if _busy():
+                    busy_before = True
+                    continue
+                game = (launcher.running() or {}).get("status") in ("starting", "extracting", "running")
+                if busy_before and not game:
+                    busy_before = False
+                    mode = str(cfg.app.get("after_jobs") or "none")
+                    if mode in ("sleep", "shutdown"):
+                        try:
+                            power.schedule(mode)
+                            _notify("Operazioni finite", "Sospendo il PC tra 60 secondi." if mode == "sleep"
+                                    else "Spengo il PC tra 60 secondi.")
+                        except ValueError:
+                            pass
+                now = time.time()
+                if now >= next_free:
+                    next_free = now + 6 * 3600
+                    _free_alerts()
+                if now >= next_ports:
+                    next_ports = now + 12 * 3600
+                    _port_alerts()
+            except Exception:  # un giro andato male non ferma i successivi
+                pass
+
+    threading.Thread(target=_watch_loop, daemon=True).start()
 
     # ------------------------------------------------------------ giochi gratis
     from .. import freegames as FG

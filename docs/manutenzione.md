@@ -95,8 +95,16 @@ python -m gamescraper relink --apply    # esegue
 |---|---|
 | **ES-DE** | `gamelist.xml` più la cartella `downloaded_media` |
 | **Pegasus** | `metadata.pegasus.txt` più le immagini |
+| **Pagina web** | `index.html` più la cartella `covers` |
 
-Da terminale: `gamescraper export-frontend --format esde` oppure `--format pegasus`.
+Da terminale: `gamescraper export-frontend --format esde`, `--format pegasus` oppure `--format html`.
+
+### La pagina web
+
+La pagina web è **un solo file più le copertine**, senza server e senza risorse esterne: si apre con doppio clic
+(anche da `file://`), da un NAS, da un disco di rete o da un sito statico. Ha ricerca, filtro per console, ordinamento
+e la scheda del gioco; le schede si disegnano man mano che si scorre, quindi funziona anche con migliaia di giochi.
+Il titolo della pagina si sceglie nel campo accanto al formato.
 
 ## Dati scaricati
 

@@ -1990,6 +1990,20 @@ async function loadRemote() {
       <p class="muted">Per i giochi senza giroscopio, nell'app del telefono scegli 🎯 <b>Mira</b>: inclinando il telefono si muove la levetta destra.</p>
     </details>`;
   const s = sun;
+  if (document.activeElement.id !== "ph-public") $("#ph-public").value = ph.public_url || "";
+  if (document.activeElement.id !== "ph-video") $("#ph-video").value = ph.video_addr || "";
+  const inv = ph.invite || {};
+  const gmin = inv.until ? Math.max(0, Math.round((inv.until - Date.now() / 1000) / 60)) : 0;
+  $("#guest-box").innerHTML = `<p class="small">${inv.code
+    ? `Manda all'amico il link <code>${esc(inv.link)}</code> e il codice <span class="ph-code">${esc(inv.code)}</span>
+       <span class="muted small">(vale ancora ${gmin} min, per un ospite solo)</span>`
+    : `<span class="muted">Nessun invito attivo: l'ospite non può entrare.</span>`}
+    <button class="btn primary" id="ph-invite">${inv.code ? "Nuovo invito" : "Crea invito per un amico"}</button></p>
+    <p class="muted small">Il video va con Moonlight: l'amico scrive l'indirizzo qui sopra e il PIN che Moonlight gli
+      mostra, e il PC li conferma (serve un utente e una password di Sunshine salvati qui sotto).</p>
+    ${(ph.guests || []).length ? `<h4>Ospiti</h4><table class="emu">${ph.guests.map((d) => `<tr><td>🙋 ${esc(d.name)}</td>
+      <td class="muted small">entrato ${new Date(d.created * 1000).toLocaleString("it", { dateStyle: "short", timeStyle: "short" })}</td>
+      <td><button class="btn" data-revoke="${esc(d.id)}">Togli</button></td></tr>`).join("")}</table>` : ""}`;
   $("#sun-box").innerHTML = !s.installed ? `<p>Sunshine non è installato. <a href="#" data-open="https://github.com/LizardByte/Sunshine/releases">Scaricalo</a>, poi riapri questa scheda.</p>`
     : `<p class="small">${s.service === "running"
       ? `✅ Sunshine è in esecuzione${s.start_mode && s.start_mode !== "auto" ? ` · ⚠ ma non parte con Windows: dopo un riavvio Moonlight non troverà il PC. <button class="btn" id="sun-start">Avvia sempre con Windows</button>` : ""}`
@@ -2530,7 +2544,7 @@ function showTab(tab) {
   document.querySelectorAll("[data-pane]").forEach((p) => p.classList.toggle("active", p.dataset.pane === tab));
   if (tab === "health") loadHealth();
   else if (tab === "about") loadAbout();
-  else if (tab === "scan") { loadScan(); renderCustomConsoles(); }
+  else if (tab === "scan") { loadScan(); renderCustomConsoles(); loadPower(); }
   else if (tab === "emu") loadEmu();
   else if (tab === "remote") loadRemote();
   else if (tab === "acc") { loadAccounts(); loadPcStores(); }
@@ -2542,6 +2556,7 @@ function showTab(tab) {
     const pane = document.querySelector(`[data-pane="${CSS.escape(tab)}"]`);
     if (t && pane) { pane.innerHTML = ""; Promise.resolve(t.render(pane, GS)).catch((e) => { pane.textContent = e.message; }); }
   } else { api("/api/status").then(showStatus); loadBackups(); loadSync(); loadSaveDir(); }
+  if (tab === "remote") startPadTest(); else stopPadTest();  // la prova controller gira solo mentre la scheda e' aperta
 }
 
 /* ---- impostazioni › integrazioni (Discord) */
@@ -2564,6 +2579,52 @@ function renderIntegrations(d) {
 
 async function loadIntegrations() {
   try { renderIntegrations(await api("/api/integrations")); } catch (e) { toast(e.message, true); }
+  try {
+    const n = await api("/api/app/notify");
+    $("#nt-on").checked = !!n.enabled;
+    $("#nt-state").textContent = n.available ? "" : "Le notifiche di Windows sono disponibili solo su Windows.";
+  } catch { /* niente: la scheda Discord funziona lo stesso */ }
+}
+
+/* ---- prova controller: ultimo stato ricevuto da ogni telefono (la scheda «Telefono e streaming») */
+let padTestT = 0;
+function stopPadTest() { clearTimeout(padTestT); padTestT = 0; }
+function startPadTest() {
+  stopPadTest();
+  const tick = async () => {
+    const box = $("#pads-test");
+    if (!box || !$("#settings").open || SET.tab !== "remote") return stopPadTest();
+    try { renderPads(await api("/api/phone/pads")); } catch (e) { box.textContent = e.message; }
+    padTestT = setTimeout(tick, 400);
+  };
+  tick();
+}
+const PAD_BTN_LABEL = { a: "A", b: "B", x: "X", y: "Y", lb: "LB", rb: "RB", ls: "L3", rs: "R3",
+  up: "▲", down: "▼", left: "◀", right: "▶", start: "Start", back: "Select", guide: "Guide" };
+function renderPads(d) {
+  const box = $("#pads-test");
+  if (!box) return;
+  const pads = d.pads || [];
+  if (!pads.length) { box.innerHTML = `<p class="muted small">Nessun telefono collegato come controller (apri 🎮 sul telefono).</p>`; return; }
+  const dot = (x, y) => `<i style="left:${50 + x * 45}%;top:${50 - y * 45}%"></i>`;
+  box.innerHTML = pads.map((p) => `<div class="pad-t" style="--pc:${esc(p.color)}">
+    <div><b>Giocatore ${p.player}</b> <span class="muted small">${esc(p.name)}${p.motion ? " · 🌀" : ""}${p.connected ? "" : " · controller virtuale non attivo"}</span></div>
+    <div class="pad-k">${Object.entries(PAD_BTN_LABEL).map(([k, l]) => `<i class="${p.buttons.includes(k) ? "on" : ""}">${l}</i>`).join("")}</div>
+    <div class="pad-x"><span class="stick">${dot(p.lx, p.ly)}</span><span class="stick">${dot(p.rx, p.ry)}</span>
+      <label class="trig">LT<i><b style="width:${Math.round(p.lt * 100)}%"></b></i></label>
+      <label class="trig">RT<i><b style="width:${Math.round(p.rt * 100)}%"></b></i></label>
+      <button class="btn" type="button" data-pad-rumble="${p.slot}">📳 Vibra</button></div>
+  </div>`).join("");
+}
+
+/* ---- al termine delle operazioni: sospendi o spegni il PC */
+async function loadPower() {
+  try {
+    const p = await api("/api/app/power");
+    $("#pw-after").value = p.after_jobs || "none";
+    $("#pw-abort").hidden = !p.seconds;
+    $("#pw-state").textContent = p.seconds ? `${p.mode === "sleep" ? "Sospensione" : "Spegnimento"} tra ${p.seconds} s` : "";
+  } catch { /* niente */ }
 }
 
 /* ---- info: versione, aggiornamenti, novita' */
@@ -3135,6 +3196,18 @@ function bind() {
     catch (err) { return toast(err.message, true); }
     pollStoreRefresh();
   });
+  // integrazioni: notifiche di Windows
+  $("#nt-on").onchange = async (e) => {
+    try { await api("/api/app/notify", { body: { enabled: e.target.checked } }); toast(e.target.checked ? "Notifiche attive" : "Notifiche spente"); }
+    catch (err) { toast(err.message, true); }
+  };
+  // a coda vuota: sospendi o spegni
+  $("#pw-after").onchange = async (e) => {
+    try { await api("/api/app/power", { body: { after_jobs: e.target.value } }); loadPower(); } catch (err) { toast(err.message, true); }
+  };
+  $("#pw-abort").onclick = async () => {
+    try { await api("/api/app/power/abort", { body: {} }); loadPower(); toast("Annullato"); } catch (err) { toast(err.message, true); }
+  };
   // integrazioni: presenza su Discord
   $("#dc-save").onclick = async () => {
     const body = { enabled: $("#dc-on").checked, client_id: $("#dc-id").value.trim(), show_time: $("#dc-time").checked };
@@ -3488,6 +3561,8 @@ function bind() {
     const t = e.target;
     if (t.id === "ph-mouse") phoneSet({ mouse: t.checked });
     if (t.id === "ph-touch") phoneSet({ touchscreen: t.checked });
+    else if (t.id === "ph-public") phoneSet({ public_url: t.value });
+    else if (t.id === "ph-video") phoneSet({ video_addr: t.value });
     else if (t.id === "ph-touch-idle") { const v = Math.min(600, Math.max(5, Number(t.value) || 30)); phoneSet({ screen_idle: v }); }
     else if (t.id === "ph-mic") phoneSet({ mic_device: t.value });
     else if (t.dataset.swap && t.value !== "") {
@@ -3497,6 +3572,14 @@ function bind() {
   });
   $('[data-pane="remote"]').addEventListener("click", async (e) => {
     const t = e.target;
+    const rb = t.closest("[data-pad-rumble]");
+    if (rb) {
+      try {
+        await api("/api/phone/pads/rumble", { body: { slot: +rb.dataset.padRumble } });
+        toast("📳 Vibrazione inviata al telefono");
+      } catch (err) { toast(err.message, true); }
+      return;
+    }
     const o = t.closest("[data-open]");
     if (o) { e.preventDefault(); api("/api/open", { body: { url: o.dataset.open } }); return; }
     if (t.dataset.es) {
@@ -3515,6 +3598,12 @@ function bind() {
       return;
     }
     if (t.id === "ph-newcode") { e.preventDefault(); await api("/api/phone/code", { body: {} }); loadRemote(); }
+    else if (t.id === "ph-invite") {
+      e.preventDefault();
+      t.disabled = true;
+      try { await api("/api/phone/invite", { body: {} }); } catch (err) { toast(err.message, true); }
+      loadRemote();
+    }
     else if (t.dataset.revoke) {
       if (!confirm("Revocare questo telefono? Dovrà essere abbinato di nuovo.")) return;
       await api(`/api/phone/devices/${t.dataset.revoke}`, { method: "DELETE" }); loadRemote();

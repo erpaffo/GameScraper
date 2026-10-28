@@ -173,6 +173,21 @@ class Sunshine:
     def apps(self) -> list[dict]:
         return self._check(self.c.get("/api/apps")).json().get("apps", [])
 
+    def pin(self, pin: str, name: str = "") -> dict:
+        """Abbina un client Moonlight che ha mostrato il PIN, senza aprire l'interfaccia web di Sunshine.
+
+        Le versioni recenti vogliono l'id della richiesta in attesa (GET /api/pin); con quelle vecchie basta il PIN.
+        """
+        try:
+            pending = self._check(self.c.get("/api/pin")).json().get("pairings") or []
+        except Exception:  # versione vecchia (niente elenco) o risposta inattesa: si prova il modulo semplice
+            pending = []
+        body = {"pin": str(pin), "name": name or "GameScraper"}
+        if pending:
+            body["pairing_id"] = pending[-1].get("id", "")
+        self._check(self.c.post("/api/pin", json=body))
+        return {"pending": len(pending)}
+
     def save(self, app: dict, index: int = -1):
         self._check(self.c.post("/api/apps", json={**app, "index": index}))
 

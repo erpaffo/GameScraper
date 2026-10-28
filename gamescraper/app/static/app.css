@@ -601,6 +601,22 @@ kbd { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18);
 .lb-seat b { color: var(--pc); }
 .lb-seat select { font-size: 12px; }
 .emusetup { align-items: flex-end; gap: 8px; }
+
+/* telefono: prova controller (tasti premuti, levette, grilletti, vibrazione) */
+.pads-test { display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
+.pad-t { border: 1px solid var(--pc); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.pad-t b { color: var(--pc); }
+.pad-k { display: flex; flex-wrap: wrap; gap: 4px; }
+.pad-k i { font-style: normal; font-size: 11px; padding: 2px 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,.15);
+  opacity: .45; min-width: 26px; text-align: center; }
+.pad-k i.on { opacity: 1; background: var(--pc); color: #111; border-color: var(--pc); font-weight: 700; }
+.pad-x { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pad-x .stick { position: relative; width: 46px; height: 46px; border-radius: 50%; border: 1px solid rgba(255,255,255,.2); }
+.pad-x .stick i { position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%;
+  background: var(--pc); transform: translate(0, 0); }
+.pad-x .trig { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted, #9aa); }
+.pad-x .trig i { display: block; width: 80px; height: 8px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; }
+.pad-x .trig i b { display: block; height: 100%; background: var(--pc); }
 .wl-spark { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--accent, #5b8cff); margin-top: 2px; }
 
 /* migliori giochi */

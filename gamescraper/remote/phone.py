@@ -7,7 +7,9 @@ Sicurezza: l'app desktop resta solo su 127.0.0.1. Il telefono usa un secondo ser
     volta, con al massimo 10 tentativi sbagliati; il telefono riceve un token (cookie HttpOnly) e il
     PC ne conserva solo l'impronta SHA-256; i telefoni si revocano dalle impostazioni;
   - anche abbinati, si raggiungono solo le funzioni per il telefono (libreria, avvio/chiusura,
-    schermate, controller): mai impostazioni, file, cartelle o apertura di indirizzi sul PC.
+    schermate, controller): mai impostazioni, file, cartelle o apertura di indirizzi sul PC;
+  - l'ospite a distanza («gioca con un amico») entra con un invito suo, diverso dal codice dei telefoni, e
+    ottiene solo il controller: niente libreria, niente mouse, niente scambio dei posti.
 
 Controller: ogni telefono collegato (fino a 4) diventa un controller Xbox virtuale (ViGEmBus) e, se il
 giroscopio e' attivo, uno slot del server DSU (movimento per Cemu, Ryujinx, Dolphin, Azahar...).
@@ -40,20 +42,73 @@ ALLOWED = [
     ("GET", r"/api/mobile/state"), ("POST", r"/api/mobile/action"),
     ("GET", r"/img/\d+/[a-z0-9_]+"), ("GET", r"/icons/(platform|store)/[^/]+"), ("GET", r"/coll-img/[^/]+/(icon|cover)"),
     ("GET", r"/shots/\d+"), ("GET", r"/m/api/me"), ("POST", r"/m/api/logout"), ("WS", r"/m/ws"), ("WS", r"/m/mic"),
-    ("WS", r"/m/screen"),
+    ("WS", r"/m/screen"), ("GET", r"/m/api/pad"), ("POST", r"/m/api/pad"),
 ]
 PLAYER_COLORS = ["#4aa3ff", "#ff5f5f", "#3ddc84", "#f5c518"]  # giocatore 1..4 (come i LED dei controller)
 PUBLIC = [("GET", r"/m/?"), ("GET", r"/m/static/[\w.-]+"), ("GET", r"/m/manifest\.webmanifest"), ("POST", r"/m/api/pair"),
-          ("GET", r"/m/api/hello"), ("POST", r"/api/sync/pair")]
+          ("GET", r"/m/api/hello"), ("POST", r"/api/sync/pair"), ("GET", r"/m/sw\.js")]
 # un altro PC abbinato per la sincronizzazione (kind "pc") raggiunge solo lo scambio dei dati, nient'altro
 PC_ALLOWED = [("POST", r"/api/sync/exchange")]
+# l'ospite a distanza (kind "guest") ha solo il controller: niente libreria, mouse o scambio dei posti
+GUEST_ALLOWED = [("GET", r"/m/api/me"), ("POST", r"/m/api/logout"), ("GET", r"/api/running"), ("WS", r"/m/ws"),
+                 ("POST", r"/g/api/pin")]
+# pagine che anche un ospite non ancora entrato deve poter aprire
+GUEST_PUBLIC = [("GET", r"/g/?"), ("GET", r"/g/api/hello"), ("POST", r"/g/api/join")]
 _ALLOWED = [(m, re.compile(p + r"$")) for m, p in ALLOWED]
 _PC_ALLOWED = [(m, re.compile(p + r"$")) for m, p in PC_ALLOWED]
+_GUEST_ALLOWED = [(m, re.compile(p + r"$")) for m, p in GUEST_ALLOWED]
+_GUEST_PUBLIC = [(m, re.compile(p + r"$")) for m, p in GUEST_PUBLIC]
 _PUBLIC = [(m, re.compile(p + r"$")) for m, p in PUBLIC]
 
 
 def _sha(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+# impostazioni del pad che il telefono puo' salvare sul PC: solo queste voci, con valori nei limiti
+PAD_LAYOUTS = {"xbox", "ps", "switch", "gc", "arcade", "wii", "wiis", "nunchuk", "buzz", "wheel", "guitar", "gun", "mic", "ds"}
+PAD_ENUM = {"gyro": {"off", "dsu", "aim"}, "src": {"auto", "touch", "gamepad"}, "layout": PAD_LAYOUTS}
+PAD_NUM = {"sens": (0.2, 3.0), "scale": (0.8, 1.3)}
+PAD_BOOL = ("invx", "invy", "vib", "rumble", "autoLayout", "nlabel")
+PAD_POS_KEYS = {"l2", "l1", "r1", "r2", "ls", "rs", "dpad", "face", "mid"}
+
+
+def _clean_pad(body: dict) -> dict:
+    """Tiene solo le voci previste, con i valori riportati nei limiti: il telefono e' un confine di fiducia."""
+    if len(json.dumps(body)) > 20000:
+        raise ValueError("Impostazioni del controller troppo grandi")
+    out: dict = {}
+    for k, allowed in PAD_ENUM.items():
+        if str(body.get(k)) in allowed:
+            out[k] = str(body[k])
+    for k, (lo, hi) in PAD_NUM.items():
+        try:
+            out[k] = round(min(hi, max(lo, float(body[k]))), 3)
+        except (KeyError, TypeError, ValueError):
+            pass
+    for k in PAD_BOOL:
+        if k in body:
+            out[k] = bool(body[k])
+    pos = body.get("pos")
+    if isinstance(pos, dict):
+        clean: dict = {}
+        for lay, vals in list(pos.items())[:12]:
+            if lay not in PAD_LAYOUTS or not isinstance(vals, dict):
+                continue
+            row = {}
+            for name, c in list(vals.items())[:12]:
+                if name not in PAD_POS_KEYS or not isinstance(c, dict):
+                    continue
+                try:
+                    row[name] = {"x": round(min(95, max(0, float(c["x"]))), 2),
+                                 "y": round(min(95, max(0, float(c["y"]))), 2),
+                                 "k": round(min(1.8, max(0.6, float(c.get("k", 1)))), 3)}
+                except (KeyError, TypeError, ValueError):
+                    continue
+            if row:
+                clean[lay] = row
+        out["pos"] = clean
+    return out
 
 
 def _cookie(scope) -> str | None:
@@ -79,12 +134,14 @@ class PhoneGate:
         method = "WS" if scope["type"] == "websocket" else scope.get("method", "GET")
         if method == "HEAD":
             method = "GET"
-        if any(m == method and r.match(path) for m, r in _PUBLIC):
+        if any(m == method and r.match(path) for m, r in _PUBLIC + _GUEST_PUBLIC):
             return await self.app(scope, receive, send)
         dev = self.hub.device_for(_cookie(scope))
         if not dev:
             return await self._deny(scope, receive, send, 401, "Telefono non abbinato")
-        if not any(m == method and r.match(path) for m, r in (_PC_ALLOWED if dev.get("kind") == "pc" else _ALLOWED)):
+        kind = dev.get("kind")
+        rules = _PC_ALLOWED if kind == "pc" else _GUEST_ALLOWED if kind == "guest" else _ALLOWED
+        if not any(m == method and r.match(path) for m, r in rules):
             return await self._deny(scope, receive, send, 403, "Funzione non disponibile da questo dispositivo")
         scope.setdefault("state", {})["phone_device"] = dev["id"]
         return await self.app(scope, receive, send)
@@ -109,6 +166,9 @@ class PhoneHub:
         self.code: str | None = None
         self.code_until = 0.0
         self.fails = 0
+        self.guest_code: str | None = None  # invito per un amico a distanza (separato dal codice dei telefoni)
+        self.guest_until = 0.0
+        self.guest_fails = 0
         self.server = None
         self.thread = None
         self.error = ""
@@ -129,8 +189,10 @@ class PhoneHub:
         # mouse: il telefono puo' muovere il mouse del PC (touchpad / pistola ottica); spento finche' non lo attiva il PC
         # touchscreen: nei giochi DS/3DS il telefono fa da schermo inferiore (se e' collegato all'avvio)
         # screen_idle: secondi senza tocchi dopo i quali lo schermo inferiore torna sul PC
+        # public_url: indirizzo pubblico del PC (tunnel) per il link d'invito dell'ospite a distanza
+        # video_addr: indirizzo da scrivere in Moonlight (per esempio quello di Tailscale) mostrato all'ospite
         return {"enabled": False, "port": PORT, "devices": [], "mouse": False, "mic_device": "", "touchscreen": True,
-                "screen_idle": 30, **(self.cfg.app.get("phone") or {})}
+                "screen_idle": 30, "public_url": "", "video_addr": "", **(self.cfg.app.get("phone") or {})}
 
     def _save(self, **kw):
         c = {**self.conf, **kw}
@@ -179,6 +241,49 @@ class PhoneHub:
                "created": time.time(), "last": time.time(), "kind": kind}
         self._save(devices=[*self.conf["devices"], dev])
         return token
+
+    # ------------------------------------------------------------ amico a distanza
+    def new_invite(self) -> str:
+        """Codice d'invito per l'ospite (6 cifre, 10 minuti, un ospite): diverso da quello dei telefoni,
+        perche' questo lo si manda a qualcuno che non e' in casa."""
+        with self.lock:
+            self.guest_code = f"{secrets.randbelow(1_000_000):06d}"
+            self.guest_until = time.time() + CODE_TTL
+            self.guest_fails = 0
+            return self.guest_code
+
+    def join(self, code: str, name: str) -> str:
+        """Token dell'ospite; ValueError se il codice e' sbagliato, scaduto o gia' usato."""
+        with self.lock:
+            if not self.guest_code or time.time() > self.guest_until or self.guest_fails >= MAX_FAILS:
+                raise ValueError("Invito scaduto: sul PC ne serve uno nuovo")
+            if not secrets.compare_digest(str(code).strip(), self.guest_code):
+                self.guest_fails += 1
+                raise ValueError("Codice sbagliato")
+            self.guest_code = None
+        token = secrets.token_urlsafe(32)
+        dev = {"id": secrets.token_hex(6), "name": (name or "Ospite").strip()[:40], "token": _sha(token),
+               "created": time.time(), "last": time.time(), "kind": "guest"}
+        self._save(devices=[*self.conf["devices"], dev])
+        return token
+
+    def base_url(self) -> str:
+        """Indirizzo con cui si raggiunge il PC da fuori: quello pubblico (tunnel) se c'e', altrimenti la rete di casa."""
+        pub = str(self.conf.get("public_url") or "").strip().rstrip("/")
+        if pub:
+            return pub if "://" in pub else f"https://{pub}"
+        urls = self.urls()
+        return urls[0].removesuffix("/m/") if urls else f"https://127.0.0.1:{self.conf['port']}"
+
+    def invite_link(self) -> str:
+        code = f"#code={self.guest_code}" if self.guest_code else ""
+        return f"{self.base_url()}/g/{code}"
+
+    def invite(self) -> dict:
+        """Invito attivo (o nessun codice): lo mostra la scheda del PC."""
+        live = bool(self.guest_code) and time.time() <= self.guest_until
+        return {"code": self.guest_code if live else None, "until": self.guest_until if live else 0.0,
+                "link": self.invite_link()}
 
     def revoke(self, did: str):
         self._save(devices=[d for d in self.conf["devices"] if d["id"] != did])
@@ -389,11 +494,62 @@ class PhoneHub:
             pass
         return None
 
+    def pad_settings(self) -> dict:
+        """Aspetto del pad, sensibilità e posizioni dei tasti: stanno sul PC (valgono per tutti i telefoni e
+        finiscono nei backup), non nel browser del singolo telefono."""
+        return self.conf.get("pad") or {}
+
+    def set_pad_settings(self, body: dict) -> dict:
+        pad = _clean_pad(body or {})
+        self._save(pad=pad)
+        return pad
+
+    def key_input(self, name: str):
+        """Tasto o tasto multimediale sul PC (telecomando dal telefono); ValueError se non e' previsto."""
+        from .keyboard import press
+        press(name)
+
+    def pad_state(self) -> list[dict]:
+        """Stato degli ultimi comandi ricevuti da ogni telefono: serve alla pagina «Prova controller» del PC."""
+        from .vigem import BUTTONS
+        out = []
+        for n, c in sorted(self.slots.items()):
+            pad = c.get("pad")
+            r = getattr(pad, "report", None) if pad else None
+            axes = (round((r.sThumbLX if r else 0) / 32767, 3), round((r.sThumbLY if r else 0) / 32767, 3),
+                    round((r.sThumbRX if r else 0) / 32767, 3), round((r.sThumbRY if r else 0) / 32767, 3))
+            out.append({"slot": n, "player": self.player(n), "name": c["name"],
+                        "color": PLAYER_COLORS[(self.player(n) - 1) % 4], "connected": bool(pad),
+                        "motion": bool(c.get("motion")),
+                        "buttons": [k for k, bit in BUTTONS.items() if r and r.wButtons & bit],
+                        "lt": round((r.bLeftTrigger if r else 0) / 255, 3),
+                        "rt": round((r.bRightTrigger if r else 0) / 255, 3),
+                        "lx": axes[0], "ly": axes[1], "rx": axes[2], "ry": axes[3]})
+        return out
+
+    def rumble_test(self, slot: int):
+        """Fa vibrare il telefono di quel posto per un attimo: serve a capire se la vibrazione arriva."""
+        c = self.slots.get(slot)
+        if not c or not c.get("rumble"):
+            raise ValueError("Nessun telefono collegato in questo posto")
+
+        def stop():
+            cur = self.slots.get(slot)
+            if cur and cur.get("rumble"):
+                cur["rumble"](0, 0)
+
+        c["rumble"](255, 255)
+        threading.Timer(0.7, stop).start()
+
     def status(self) -> dict:
         from .vigem import available
         ok, err = available()
         return {"enabled": self.conf["enabled"], "running": self.running(), "error": self.error, "port": self.conf["port"],
-                "urls": self.urls(), "devices": [d for d in self.devices() if d.get("kind") != "pc"], "vigem": ok, "vigem_error": err,
+                "urls": self.urls(), "devices": [d for d in self.devices() if d.get("kind") not in ("pc", "guest")],
+                "guests": [d for d in self.devices() if d.get("kind") == "guest"],
+                "public_url": self.conf.get("public_url", ""), "video_addr": self.conf.get("video_addr", ""),
+                "invite": self.invite(),
+                "vigem": ok, "vigem_error": err,
                 "dsu": bool(self.dsu), "dsu_error": self.dsu_error, "mouse": bool(self.conf.get("mouse")),
                 "touchscreen": bool(self.conf.get("touchscreen")),
                 "screen_idle": int(self.conf.get("screen_idle") or 30),
@@ -418,16 +574,84 @@ def register(app, hub: PhoneHub, static_dir: Path):
             raise HTTPException(404)
         return FileResponse(p, headers={"Cache-Control": "no-cache"})
 
+    @app.get("/m/sw.js")
+    def m_sw():
+        """Service worker servito dalla radice di /m (cosi' il suo ambito copre tutta l'app del telefono)."""
+        return FileResponse(mdir / "sw.js", headers={"Service-Worker-Allowed": "/m/", "Cache-Control": "no-cache"})
+
     @app.get("/m/manifest.webmanifest")
     def m_manifest():
-        return JSONResponse({"name": "GameScraper", "short_name": "GameScraper", "start_url": "/m/", "display": "standalone",
+        return JSONResponse({"id": "/m/", "scope": "/m/", "start_url": "/m/", "name": "GameScraper",
+                             "short_name": "GameScraper", "display": "standalone",
                              "background_color": "#0f1117", "theme_color": "#0f1117",
-                             "icons": [{"src": "/m/static/icon.png", "sizes": "512x512", "type": "image/png"}]},
+                             "icons": [{"src": "/m/static/icon-192.png", "sizes": "192x192", "type": "image/png"},
+                                       {"src": "/m/static/icon.png", "sizes": "512x512", "type": "image/png"}]},
                             media_type="application/manifest+json")
+
+    @app.get("/m/api/pad")
+    def m_pad():
+        """Aspetto, sensibilità e posizione dei tasti del controller: salvati sul PC, uguali per tutti i telefoni."""
+        return hub.pad_settings()
+
+    @app.post("/m/api/pad")
+    def m_pad_set(body: dict = Body(...)):
+        try:
+            return hub.set_pad_settings(body)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
 
     @app.get("/m/api/hello")
     def m_hello(request: Request):
-        return {"paired": bool(hub.device_for(request.cookies.get(COOKIE))) or request.client.host == "127.0.0.1"}
+        d = hub.device_for(request.cookies.get(COOKIE))
+        return {"paired": bool(d) or request.client.host == "127.0.0.1", "guest": bool(d and d.get("kind") == "guest")}
+
+    # ------------------------------------------------------------ ospite a distanza
+    gdir = static_dir / "g"
+
+    @app.get("/g")
+    @app.get("/g/")
+    def g_index():
+        return FileResponse(gdir / "index.html", headers={"Cache-Control": "no-cache"})
+
+    @app.get("/g/api/hello")
+    def g_hello(request: Request):
+        """Per la pagina dell'ospite: e' gia' entrato? che indirizzo deve scrivere in Moonlight?"""
+        d = hub.device_for(request.cookies.get(COOKIE))
+        return {"paired": bool(d and d.get("kind") == "guest"), "video": hub.conf.get("video_addr", "")}
+
+    @app.post("/g/api/join")
+    def g_join(request: Request, body: dict = Body(...)):
+        """L'ospite entra con il codice dell'invito: diventa un altro controller (giocatore 2, 3...)."""
+        try:
+            token = hub.join(str(body.get("code") or ""), str(body.get("name") or ""))
+        except ValueError as e:
+            raise HTTPException(403, str(e))
+        r = JSONResponse({"ok": True})
+        # vale mezza giornata: l'ospite e' di passaggio, se torna domani serve un invito nuovo
+        r.set_cookie(COOKIE, token, max_age=12 * 3600, httponly=True, secure=request.url.scheme == "https",
+                     samesite="strict", path="/")
+        return r
+
+    @app.post("/g/api/pin")
+    def g_pin(request: Request, body: dict = Body(...)):
+        """Il PIN che Moonlight mostra all'ospite: lo conferma il PC, cosi' nessuno deve aprire Sunshine."""
+        from .sunshine import Sunshine
+        conf = hub.cfg.app.get("sunshine") or {}
+        pin = str(body.get("pin") or "").strip()
+        if not re.fullmatch(r"\d{4}", pin):
+            raise HTTPException(400, "Il PIN di Moonlight ha 4 cifre")
+        if not (conf.get("user") and conf.get("password")):
+            raise HTTPException(409, "Il PC non ha le credenziali di Sunshine: vanno salvate in Impostazioni › Telefono e streaming")
+        dev = hub.device_for(request.cookies.get(COOKIE)) or {}
+        s = Sunshine(conf["user"], conf["password"])
+        try:
+            return {"ok": True, **s.pin(pin, dev.get("name", ""))}
+        except PermissionError as e:
+            raise HTTPException(401, str(e))
+        except Exception as e:
+            raise HTTPException(502, f"Sunshine non risponde: {e}")
+        finally:
+            s.close()
 
     @app.post("/m/api/pair")
     def m_pair(request: Request, body: dict = Body(...)):
@@ -461,6 +685,7 @@ def register(app, hub: PhoneHub, static_dir: Path):
         await ws.accept()
         dev = ws.scope.get("state", {}).get("phone_device") or "locale"
         name = next((d["name"] for d in hub.conf["devices"] if d["id"] == dev), "Telefono")
+        guest = next((d.get("kind") for d in hub.conf["devices"] if d["id"] == dev), "") == "guest"
         n = hub.open_slot(dev, name)
         if n is None:
             await ws.send_json({"t": "err", "msg": "Gia' 4 controller collegati"})
@@ -470,7 +695,7 @@ def register(app, hub: PhoneHub, static_dir: Path):
         err0 = await asyncio.to_thread(hub.ensure_pad, n)
         from .mouse import screen_size
         await ws.send_json({"t": "ok", "slot": n, "player": hub.player(n), "dsu": bool(hub.dsu), "dsu_error": hub.dsu_error,
-                            "screen": list(screen_size()), "mouse": bool(hub.conf.get("mouse"))})
+                            "screen": list(screen_size()), "guest": guest, "mouse": bool(hub.conf.get("mouse")) and not guest})
         told = set()
         if err0:
             told.add(err0)
@@ -505,9 +730,9 @@ def register(app, hub: PhoneHub, static_dir: Path):
                     err = hub.pad_input(n, m)
                 elif t == "m" and isinstance(m.get("a"), list) and isinstance(m.get("g"), list):
                     hub.motion(n, m["a"][:3], m["g"][:3])
-                elif t == "mouse":
+                elif t == "mouse" and not guest:
                     err = hub.mouse_input(n, m)
-                elif t == "swap" and str(m.get("slot", "")).isdigit():
+                elif t == "swap" and not guest and str(m.get("slot", "")).isdigit():
                     try:
                         hub.swap(n, int(m["slot"]))
                     except ValueError as e:
@@ -643,6 +868,10 @@ def register(app, hub: PhoneHub, static_dir: Path):
             hub._save(screen_idle=min(600, max(5, secs)))
         if "mic_device" in body:
             hub._save(mic_device=str(body["mic_device"] or "")[:64])
+        if "public_url" in body:
+            hub._save(public_url=str(body["public_url"] or "").strip().rstrip("/")[:120])
+        if "video_addr" in body:
+            hub._save(video_addr=str(body["video_addr"] or "").strip()[:64])
         if "enabled" in body:
             on = bool(body["enabled"])
             hub._save(enabled=on)
@@ -656,6 +885,15 @@ def register(app, hub: PhoneHub, static_dir: Path):
     def api_phone_code(request: Request):
         _local(request)
         hub.new_code()
+        return api_phone(request)
+
+    @app.post("/api/phone/invite")
+    def api_phone_invite(request: Request):
+        """Link e codice per far entrare un amico a distanza (accende il server HTTPS se serve)."""
+        _local(request)
+        if not hub.running() and not hub.start(app):
+            raise HTTPException(500, hub.error or "Server di rete non avviato")
+        hub.new_invite()
         return api_phone(request)
 
     @app.delete("/api/phone/devices/{did}")
@@ -672,6 +910,22 @@ def register(app, hub: PhoneHub, static_dir: Path):
         except (TypeError, ValueError) as e:
             raise HTTPException(400, str(e) or "Posti non validi")
         return api_phone(request)
+
+    @app.get("/api/phone/pads")
+    def api_phone_pads(request: Request):
+        """Ultimo stato ricevuto da ogni telefono collegato: pulsanti premuti, grilletti e levette (pagina di prova)."""
+        _local(request)
+        st = hub.status()
+        return {"pads": hub.pad_state(), "vigem": st["vigem"], "error": st["vigem_error"]}
+
+    @app.post("/api/phone/pads/rumble")
+    def api_phone_rumble(request: Request, body: dict = Body(...)):
+        _local(request)
+        try:
+            hub.rumble_test(int(body.get("slot", 0)))
+        except (TypeError, ValueError) as e:
+            raise HTTPException(400, str(e) or "Posto non valido")
+        return {"ok": True}
 
     @app.post("/api/phone/emusetup")
     def api_phone_emusetup(request: Request, body: dict = Body(...)):

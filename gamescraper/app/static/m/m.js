@@ -9,6 +9,7 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem("gsm." + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem("gsm." + k, JSON.stringify(v)); } catch { /* niente */ } },
 };
+const GUEST = { on: false };  // ospite a distanza: solo il controller
 const SHORT = { megadrive: "MD", mastersystem: "SMS", gamegear: "GG", psx: "PS1", ps2: "PS2", ps3: "PS3", psp: "PSP", psvita: "VITA",
   gc: "GC", wiiu: "WII U", switch: "SWITCH", xbox360: "X360", dreamcast: "DC", saturn: "SAT", nds: "DS", "3ds": "3DS", n64: "N64", windows: "PC" };
 const STORE_SHORT = { steam: "STEAM", epic: "EPIC", gog: "GOG", amazon: "AMAZON", battlenet: "B.NET", xbox: "XBOX", minecraft: "MINECRAFT", manual: "PC" };
@@ -17,7 +18,7 @@ async function api(path, opts = {}) {
   const init = { method: opts.method || "GET", headers: { "Content-Type": "application/json" }, credentials: "same-origin" };
   if (opts.body !== undefined) { init.body = JSON.stringify(opts.body); init.method = opts.method || "POST"; }
   const r = await fetch(path, init);
-  if (r.status === 401) { showPair(); throw new Error("Telefono non abbinato"); }
+  if (r.status === 401) { if (GUEST.on) { location.href = "/g/"; throw new Error("Invito scaduto"); } showPair(); throw new Error("Telefono non abbinato"); }
   if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch { /* */ } throw new Error(m); }
   return r.status === 204 ? null : r.json();
 }
@@ -320,6 +321,7 @@ function saveCustom(k, patch) {
   const lay = $("#pad").dataset.lay, all = customPos(lay);
   all[k] = { ...(all[k] || {}), ...patch };
   store.set(`padpos_${lay}`, all);
+  pushPad();
 }
 function editKey(el) { return Object.keys(MOVABLE).find((k) => el.matches(MOVABLE[k])); }
 function startEdit() {
@@ -521,6 +523,32 @@ function connectPad() {
   };
 }
 function send(obj) { if (PAD.ws && PAD.ws.readyState === 1) PAD.ws.send(JSON.stringify(obj)); }
+
+/* ---- impostazioni del pad salvate sul PC (non nel browser): valgono per tutti i telefoni e finiscono nei backup.
+   Restano solo in locale le cose legate a QUESTO telefono (dimensione dei tasti, vibrazione alla pressione,
+   sorgente dei comandi), che dipendono dal suo schermo e dai suoi accessori. */
+const PADKEYS = ["gyro", "sens", "invx", "invy", "rumble", "layout", "nlabel", "autoLayout"];
+let padPushT = 0;
+function pushPad() {
+  clearTimeout(padPushT);
+  padPushT = setTimeout(() => {
+    const pos = {};
+    for (const lay of [...Object.keys(LAYOUTS), ...Object.keys(SPECIAL)]) {
+      const p = store.get(`padpos_${lay}`, {});
+      if (p && Object.keys(p).length) pos[lay] = p;
+    }
+    const body = { pos };
+    for (const k of PADKEYS) body[k] = SET[k];
+    api("/m/api/pad", { body }).catch(() => { /* senza rete resta la copia locale */ });
+  }, 700);
+}
+async function pullPad() {
+  let d;
+  try { d = await api("/m/api/pad"); } catch { return; }  // non abbinato o offline: si usano i valori locali
+  for (const k of PADKEYS) if (d[k] !== undefined) SET[k] = d[k];
+  for (const k of PADKEYS) store.set(k, SET[k]);
+  for (const [lay, pos] of Object.entries(d.pos || {})) store.set(`padpos_${lay}`, pos);
+}
 
 /* ---- sala giocatori: numero e colore del giocatore (come i LED dei controller), scambio dei posti */
 const PCOLOR = ["#4aa3ff", "#ff5f5f", "#3ddc84", "#f5c518"];
@@ -950,6 +978,7 @@ $("#ps-close").onclick = async () => {
   SET.autoLayout = $("#ps-auto").checked; SET.rumble = $("#ps-rumble").checked;
   if (!SET.rumble) rumble(0, 0);
   for (const k of Object.keys(SET)) store.set(k, SET[k]);
+  pushPad();  // aspetto, sensibilità e inversione valgono anche sugli altri telefoni
   if (SET.gyro !== "off" && !(await enableMotion())) SET.gyro = "off";
   $("#pad-gyro").textContent = GYRO_LABEL[SET.gyro];
   $("#pad").style.setProperty("--s", SET.scale);
@@ -972,6 +1001,7 @@ $("#pe-reset").onclick = () => {
   if (!confirm("Rimettere tutti i tasti nella posizione e dimensione originale per questo aspetto?")) return;
   store.set(`padpos_${$("#pad").dataset.lay}`, {});
   applyCustom($("#pad").dataset.lay);
+  pushPad();
   selectEdit(null);
 };
 $("#ps-layout").onchange = (e) => { $("#ps-nlabel-row").hidden = e.target.value !== "switch"; layoutHelp(); };
@@ -1025,8 +1055,11 @@ $("#v-act").onclick = async (e) => {
   const action = b.dataset.act;
   if (action === "stop-game" && !confirm("Chiudere il gioco sul PC?")) return;
   b.disabled = true;
-  try { renderActivity((await api("/api/mobile/action", { body: { action } })).state); }
-  catch (err) { toast(err.message, true); }
+  try {
+    const body = { action };
+    if (action === "key") body.key = b.dataset.key;  // telecomando: volume, play/pausa, Esc, Invio, Alt+Tab
+    renderActivity((await api("/api/mobile/action", { body })).state);
+  } catch (err) { toast(err.message, true); }
   b.disabled = false;
   loadActivity();
 };
@@ -1059,7 +1092,13 @@ $("#lib-chips").onclick = (e) => {
 
 async function start() {
   $("#pair").hidden = true; $("#main").hidden = false;
-  try { decode(await api("/api/library?part=owned")); } catch (e) { if (!$("#pair").hidden) return; toast(e.message, true); return; }
+  try { decode(await api("/api/library?part=owned")); }
+  catch (e) {  // senza rete e senza cache: la Home lo dice, invece di restare vuota
+    if (!$("#pair").hidden) return;
+    $("#v-home").innerHTML = `<p class="empty">Libreria non disponibile: ${esc(e.message)}</p>`;
+    toast(e.message, true); return;
+  }
+  await pullPad();  // aspetto del pad e posizioni dei tasti: stanno sul PC
   $("#grid").innerHTML = "";  // libreria ricaricata: la Libreria si ridisegna alla prossima apertura
   L.shown = 0;
   renderHome(); renderLibTools();
@@ -1068,7 +1107,26 @@ async function start() {
 }
 
 (async function main() {
-  let h;
-  try { h = await (await fetch("/m/api/hello", { credentials: "same-origin" })).json(); } catch { h = { paired: false }; }
+  // service worker: rende l'app installabile e lascia la libreria consultabile quando il Wi-Fi va e viene
+  if ("serviceWorker" in navigator) {
+    try { await navigator.serviceWorker.register("/m/sw.js", { scope: "/m/" }); } catch { /* niente: la pagina funziona lo stesso */ }
+  }
+  let h = null;
+  try { h = await (await fetch("/m/api/hello", { credentials: "same-origin" })).json(); } catch { h = null; }
+  if (h && !h.guest) store.set("paired", !!h.paired);            // ricordato: senza rete il telefono resta abbinato
+  else if (!h) h = { paired: store.get("paired", false) };
+  if (h.guest) return startGuest();
   if (!h.paired || /code=\d{6}/.test(location.hash)) showPair(); else start();
 })();
+
+/* l'ospite a distanza ha solo il controller: libreria, schermate e scambio dei posti restano al PC */
+function startGuest() {
+  GUEST.on = true;
+  $("#pair").hidden = true;
+  document.querySelector(".tabbar").hidden = true;
+  $("#pad-players").hidden = true;
+  $("#pad-shot").hidden = true;
+  $("#pad-exit").title = "Istruzioni per il video";
+  $("#pad-exit").onclick = () => { closePad(); location.href = "/g/"; };
+  openPad();
+}

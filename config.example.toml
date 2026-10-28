@@ -146,3 +146,5 @@ exclude = []                 # franchise da non mostrare, es. ["Disney", "NBA"]
 # [app]
 # theme = "oled"              # tema (si sceglie anche da Impostazioni › Aspetto)
 # exit_combo = true           # Select/View + Start/Menu tenuti 2 s chiudono il gioco in esecuzione
+# notify = false              # notifiche di Windows (prezzi, giochi gratis, port aggiornati, lavori finiti)
+# after_jobs = "sleep"        # al termine delle operazioni lunghe: "sleep", "shutdown" o "none"

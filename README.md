@@ -58,6 +58,11 @@ D:/ROM/
 - **Giroscopio**: modalità *Movimento* = protocollo DSU/cemuhook su `127.0.0.1:26760` per Cemu, Ryujinx, Dolphin, Azahar/Citra (nell'emulatore scegli la sorgente di movimento DSU); modalità *Mira* = l'inclinazione muove la levetta destra, per i giochi senza giroscopio.
 - **Libreria completa dal telefono**: ricerca, filtro per console, ordinamento (titolo, anno, valutazione, tempo di gioco, ultimo avviato), scheda del gioco con copertina e descrizione, avvio sul PC o con il telefono come controller.
 - **⏳ Attività**: i lavori del PC in corso (aggiornamento store, copertine e descrizioni, durate, migliori giochi, ricostruzione della libreria) con avanzamento, più i comandi **Aggiorna store**, **Cerca nuovi giochi**, **Ricostruisci libreria** e **Chiudi gioco**. Così si governa tutto dal divano, senza tornare al PC.
+- **Doppio schermo DS e 3DS**: il telefono collegato fa da schermo inferiore con il touch sul PC, che mostra solo lo schermo superiore a schermo intero; il secondo schermo ricompare sul PC, in un riquadro, se il telefono si scollega o non lo si usa per un po' (tempo scelto in Impostazioni › Telefono). Col telefono in verticale i tasti stanno sotto lo schermo, in orizzontale i comandi stanno sopra lo schermo.
+- **🎛 Telecomando del PC**: dalla scheda Attività si premono sul PC volume, muto, play/pausa, precedente e successivo, Esc, Invio, ⌫, Alt+Tab, F11 e Start, uno alla volta (mai testo libero).
+- **🎮 Prova controller** (Impostazioni › Telefono): il PC mostra in tempo reale i tasti premuti sui telefoni, la posizione delle levette e la pressione di LT/RT, e **📳 Vibra** fa vibrare un telefono.
+- **🎮 Gioca con un amico a distanza**: un invito (link + codice di 6 cifre, 10 minuti, un ospite) fa entrare un amico dal suo telefono come altro giocatore, con il solo controller; il video lo manda Moonlight e il PC conferma il PIN. Da fuori casa serve un tunnel (Cloudflare, ngrok o Tailscale Funnel).
+- **App installabile e anche senza rete**: un service worker tiene sul telefono la pagina e le ultime copertine, così la libreria si consulta anche quando il Wi-Fi va e viene; per avviare un gioco serve la rete.
 - La prima apertura mostra l'avviso "connessione non privata" (certificato del tuo PC): *Avanzate › Procedi*. Windows può chiedere di consentire l'app sulle reti private.
 
 **Streaming da remoto** con [Sunshine](https://app.lizardbyte.dev/Sunshine) (sul PC) e [Moonlight](https://moonlight-stream.org) (telefono, tablet, TV, altro PC): *Pubblica in Moonlight* aggiunge a Sunshine "GameScraper Big Picture" e i tuoi giochi principali con le copertine (le altre app di Sunshine restano). Moonlight avvia `gamescraper-cli play --key …`, che resta aperto finché giochi: lo streaming si chiude da solo a fine partita.
@@ -225,6 +230,14 @@ rimandato e perché), l'apertura/chiusura di ogni elenco e **ogni pagina letta**
 `… pagina 51/147 — 50 giochi`), gli errori con tipo e messaggio. Si tronca a 8 MB (`…​.log.old`).
 Il percorso attivo è mostrato anche in Impostazioni › Store accanto agli elenchi.
 
+## Salvataggi dei giochi
+
+Nel dettaglio di ogni gioco, **💾 Salvataggi** crea una versione **prima e dopo ogni partita** (fino a 1 GB), con **↶ Annulla l'ultima partita**, il ripristino di una versione qualsiasi (i salvataggi attuali vengono prima copiati, quindi si può tornare indietro), le versioni **fissate** con una nota e il **confronto** con i file attuali. Si tengono le ultime 20 versioni per gioco; quelle fissate non contano.
+
+- Le copie sono nel **formato di Ludusavi**: scegliendo la stessa cartella di Ludusavi (Impostazioni › Libreria › Salvataggi dei giochi) i due programmi vedono e ripristinano le stesse copie.
+- Per i **giochi PC** le posizioni dei salvataggi arrivano dal **manifest di Ludusavi** (oltre 50.000 giochi, aggiornato una volta a settimana); le chiavi di registro di Windows non sono gestite.
+- Salvataggi riconosciuti per Eden/yuzu, Ryujinx, RetroArch, Dolphin, PCSX2, DuckStation, PPSSPP, RPCS3, Vita3K, melonDS, Azahar/Citra, Cemu, Flycast e shadPS4; per xemu e Xenia il percorso si indica a mano.
+
 ## Big Picture (controller)
 
 Pulsante **🎮 Big Picture** in alto, oppure `python -m gamescraper app --bigpicture` per avviare direttamente a schermo intero, ad esempio su un PC collegato alla TV.
@@ -250,6 +263,17 @@ di sessione. Usa il **canale locale** di Discord (named pipe): nessun dato esce 
 Serve solo l'**ID applicazione** (gratis: `discord.com/developers/applications` › *New Application* › copia
 l'*Application ID*) e il client Discord aperto. Le immagini non sono mostrabili: Discord accetta solo asset caricati
 sull'applicazione, non indirizzi web.
+
+**🔔 Notifiche di Windows** (Impostazioni › 🧩 Integrazioni): avvisi per i giochi della lista desideri scesi sotto la
+soglia, i giochi gratis nuovi, gli aggiornamenti dei port PC installati e i lavori finiti (nuovi giochi, store,
+copertine, durate, database locali). Restano nel centro notifiche; lo stesso avviso non si ripete per la stessa offerta
+o versione. Giochi gratis e port si controllano in sottofondo ogni 6 e 12 ore.
+
+## Al termine delle operazioni
+
+**Impostazioni › ⟳ Nuovi giochi › 🌙 Al termine delle operazioni**: a coda vuota — scraping, aggiornamento degli store,
+download dei port — il PC si **sospende** o si **spegne**, con 60 secondi per annullare (**✕ Annulla**). Con un gioco
+aperto non succede niente finché non lo chiudi.
 
 ## Esportare la libreria come pagina web
 

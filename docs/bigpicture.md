@@ -34,6 +34,19 @@ Big Picture è l'interfaccia a **schermo intero per il controller**, pensata per
 Funzionano i controller Xbox, PlayStation, Switch Pro e gli altri riconosciuti dal sistema. La combinazione per
 chiudere il gioco funziona anche mentre il gioco è in primo piano, con i controller XInput (Xbox).
 
+## Accessibilità
+
+Nella scheda **Aspetto** di Big Picture:
+
+- **palette per il daltonismo**: deuteranopia, protanopia, tritanopia;
+- **alto contrasto**;
+- tre **dimensioni dei testi**;
+- **suoni dell'interfaccia** per spostamento, conferma, indietro ed errore;
+- **lettura vocale** di ciò che si seleziona (regione `aria-live`): funziona con l'Assistente vocale di Windows e con i
+  lettori di schermo.
+
+Le scelte restano salvate sul PC.
+
 ## Tema
 
 Big Picture usa il tema scelto in **Impostazioni › Aspetto**. Un tema può avere un foglio di stile apposito per

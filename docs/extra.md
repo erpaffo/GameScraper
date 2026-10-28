@@ -115,3 +115,23 @@ limite di richieste a GitHub.
 
 - **Mod** da Thunderstore: installa e rimuovi dalla pagina del port. GameBanana è disponibile solo come link.
 - I **salvataggi** del port entrano nelle copie dei salvataggi per gioco (vedi [Giocare](giocare.md#salvataggi)).
+
+## Avvisi di Windows
+
+Con **Impostazioni › 🧩 Integrazioni › 🔔 Notifiche di Windows** attive (lo sono di base) GameScraper avvisa con una
+notifica di Windows — che resta nel centro notifiche — quando:
+
+- un gioco della lista desideri scende sotto la soglia di prezzo;
+- esce un gioco gratis nuovo (Steam, Epic, Prime, store online);
+- un port PC installato ha un aggiornamento;
+- finisce una ricerca o un aggiornamento (nuovi giochi, store, copertine, durate, database locali…).
+
+I giochi gratis e gli aggiornamenti dei port si controllano in sottofondo ogni 6 e 12 ore, senza dover aprire quelle
+pagine. Lo stesso avviso non viene ripetuto per la stessa offerta o la stessa versione.
+
+## Spegnere o sospendere il PC a fine lavori
+
+**Impostazioni › ⟳ Nuovi giochi › 🌙 Al termine delle operazioni**: quando non c'è più niente in corso — scraping,
+aggiornamento degli store, download di un port — il PC si **sospende** o si **spegne**. Parte un conto alla rovescia
+di 60 secondi con il pulsante **✕ Annulla**, nella stessa pagina. Con un gioco aperto non succede niente finché non lo
+chiudi: un gioco non viene mai chiuso da uno spegnimento.

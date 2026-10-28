@@ -86,23 +86,80 @@ l'app sul PC se ne accorge entro pochi secondi.
 Per i giochi PC avviati tramite un launcher (Steam, Epic…) il tempo viene registrato riconoscendo il processo del
 gioco nella sua cartella. Steam fornisce anche il suo tempo totale, mostrato a parte.
 
+## Mostrare su Discord cosa stai giocando
+
+In **Impostazioni › 🧩 Integrazioni** si attiva la **presenza su Discord**: il tuo profilo mostra *«Sto giocando a …»*
+con titolo, console e tempo di sessione. Serve solo l'**ID applicazione** — gratis, da
+`discord.com/developers/applications` › *New Application* — e il client Discord aperto.
+
+Usa il **canale locale** di Discord (`named pipe`): nessun dato esce dal PC, nessun server, nessuna chiave. Le immagini
+non si possono mostrare, perché Discord accetta solo asset caricati sull'applicazione e non indirizzi web.
+
 ## Salvataggi
 
-Nel dettaglio, **💾 Salvataggi** tiene copie dei salvataggi del gioco:
+Nel dettaglio, **💾 Salvataggi** tiene una **versione prima e una dopo ogni partita** (se i salvataggi non superano
+1 GB; oltre quella misura solo a mano, per non riempire il disco in silenzio), più:
 
-- una **copia automatica a ogni fine partita** (se i salvataggi non superano 1 GB);
 - **Copia adesso** per farne una a mano;
-- **Ripristina**, che prima copia i salvataggi attuali (così si può tornare indietro). Il ripristino riscrive i file
-  della copia ma non cancella quelli creati dopo.
+- **↶ Annulla l'ultima partita**, che riporta i salvataggi a com'erano prima dell'ultima partita;
+- **Ripristina** su una versione qualsiasi: prima copia i salvataggi attuali, quindi si può tornare indietro; il
+  ripristino riscrive i file della copia ma non cancella quelli creati dopo. A gioco aperto il ripristino è bloccato,
+  perché l'emulatore riscriverebbe i suoi file;
+- **★** fissa una versione (non viene mai cancellata), **✎** le aggiunge una nota (per esempio «prima del boss»),
+  **Confronta** dice quali file cambierebbero rispetto ai salvataggi attuali.
 
-Si tengono le ultime 10 copie per gioco in `<cache>/saves`. Gli emulatori supportati sono quelli in cui i salvataggi
-si riconoscono per singolo gioco:
+Si tengono le ultime **20 versioni** per gioco; quelle fissate non contano. Le versioni stanno nella cartella scelta
+in **Impostazioni › Libreria › Salvataggi dei giochi** (di base `<cache>/saves`), una cartella per gioco.
+
+Quando un gioco ha **file condivisi con altri giochi** — le memory card di PCSX2, DuckStation, Dolphin o le VMU di
+Flycast — l'app lo segnala: ripristinando torna indietro anche il salvataggio degli altri giochi.
+
+### Dove stanno i salvataggi
+
+I salvataggi si riconoscono per singolo gioco, così le copie non si mescolano:
 
 | Emulatore | Come si riconoscono i salvataggi |
 |---|---|
-| Eden, yuzu | Title ID nel percorso |
-| Ryujinx | Title ID in `ExtraData0` |
-| RetroArch | File `.srm` e `.state` con il nome della ROM |
+| Eden, yuzu (e suyu, citron) | Title ID nel percorso: `nand/user/save/…/<TITLEID>` |
+| Ryujinx | Title ID nei primi byte di `ExtraData0` |
+| RetroArch | `.srm` e `.state*` con il nome della ROM, anche nelle sottocartelle per core |
+| Dolphin | memory card `.gci` (`GC/<regione>/Card ?`) e `Wii/title/00010000/<ID>`, più `StateSaves/` |
+| PCSX2 | stati `sstates/<seriale> (<crc>)`; le memory card `.ps2` sono condivise |
+| DuckStation | memory card e stati col nome o il seriale del gioco; `shared_card_*` è condivisa |
+| PPSSPP | `PSP/SAVEDATA/<seriale>*` e `PSP/PPSSPP_STATE/<seriale>*` |
+| RPCS3 | `dev_hdd0/home/00000001/savedata/<TITLEID>*` |
+| Vita3K | `ux0/user/00/savedata/<TITLEID>` |
+| melonDS | `<ROM>.sav` e `<ROM>.ml*` accanto alla ROM |
+| Azahar, Lime3DS, Citra | `sdmc/Nintendo 3DS/…/title/00040000/<id>/data` e `states/<TITLEID>.*` |
+| Cemu | `mlc01/usr/save/00050000/<id>` |
+| Flycast | `<ROM>_vmu_save_*.bin`, `<ROM>.nvmem*` (le `vmu_save_*.bin` sono condivise) |
+| shadPS4 | `user/savedata/1/<CUSA…>` |
+
+Per **xemu** (un unico disco) e **Xenia** (l'ID non si ricava dal file) il percorso va indicato a mano.
+
+### Percorsi aggiunti a mano
+
+Se l'app non trova i salvataggi, nel riquadro **💾 Salvataggi** si scrive la cartella (o il file) dove li tiene il
+gioco, per esempio `%APPDATA%\Gioco\Saves`; le variabili `%VARIABILE%` funzionano anche su Linux e macOS. Vale anche
+per i **giochi PC**.
+
+A fine partita, se i salvataggi del gioco non erano ancora noti, l'app propone le cartelle cambiate mentre giocavi:
+**Sono i salvataggi** le aggiunge, **Ignora** la scarta.
+
+### Giochi PC: le posizioni del manifest di Ludusavi
+
+Per i giochi PC le posizioni dei salvataggi arrivano dal **manifest di Ludusavi** (oltre 50.000 giochi, aggiornato
+ogni settimana, scaricato in sottofondo una volta a settimana). L'app riconosce il gioco per ID Steam o GOG, per titolo
+o per cartella di installazione, e copia solo i file che il manifest indica come salvataggi. Le chiavi di registro di
+Windows non sono gestite: in quel caso il percorso si aggiunge a mano.
+
+### Formato delle copie: compatibile con Ludusavi
+
+Le versioni sono nel **formato di Ludusavi**: per ogni gioco una cartella con `mapping.yaml` e i file
+`backup-<data>.zip`, con dentro i percorsi originali, l'hash SHA-1 e la dimensione di ogni file. Scegliendo in
+**Impostazioni › Libreria › Salvataggi dei giochi** la **stessa cartella** di Ludusavi (*Backup mode › Backup target*),
+i due programmi vedono e ripristinano le stesse copie. Si vedono solo le copie **complete** (le differenziali di
+Ludusavi no). Le copie già fatte nel formato precedente vengono convertite da sole al primo avvio.
 
 Per i port PC vengono copiati i file della cartella del port che non vengono dalla release. Le copie si disattivano
 con `[app] save_backups = false`.

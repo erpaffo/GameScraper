@@ -1,7 +1,6 @@
 # Changelog
 
-## Non rilasciato
-
+## 0.7.0 (2026-10-28)
 ### Corretto
 
 - macOS: l'app non resta piu' bloccata cercando gli indirizzi del PC per il telefono, gli indirizzi si leggono dal sistema senza risolvere il nome host
@@ -19,10 +18,18 @@
 ### Aggiunto
 
 - Giochi DS e 3DS sul telefono anche in orizzontale: lo schermo touch prende tutta l'altezza e i comandi ci stanno sopra, semitrasparenti
+- App del telefono installabile (service worker): libreria e copertine consultabili anche senza rete
+- Telecomando del PC dal telefono: volume, play/pausa, Esc, Invio, Alt+Tab, schermo intero
+- Prova controller sul PC: tasti, levette, grilletti e vibrazione in tempo reale
+- Notifiche di Windows per prezzi sotto soglia, giochi gratis nuovi, port da aggiornare e lavori finiti
+- Sospensione o spegnimento del PC al termine di scraping, aggiornamenti e download dei port
+- «Gioca con un amico a distanza»: invito con link e codice, l'ospite entra dal suo telefono come altro giocatore (solo il controller: niente libreria, mouse o scambio dei posti)
+- Ospite a distanza: link sull'indirizzo pubblico (tunnel) e PIN di Moonlight confermato dal PC, senza aprire Sunshine
 
 ### Cambiato
 
 - Giocando col telefono lo schermo inferiore non compare piu' sul PC: ricompare in un riquadro solo se il telefono si scollega o se non lo si tocca per 30 secondi, tempo modificabile in Impostazioni > Telefono
+- Aspetti del controller, sensibilità e posizione dei tasti salvati sul PC (valgono per tutti i telefoni e finiscono nei backup)
 
 ## 0.6.4 (2026-10-28)
 

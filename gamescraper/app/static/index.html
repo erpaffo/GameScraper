@@ -186,6 +186,20 @@
           Funziona sulla rete di casa (Wi-Fi), con connessione cifrata e abbinamento: nessun altro sulla rete può usarla.</p>
         <label class="chk"><input type="checkbox" id="ph-on"> Attiva l'accesso dal telefono</label>
         <div id="ph-box"></div>
+        <h3>🎮 Prova controller</h3>
+        <p class="muted small">Ultimi comandi ricevuti dai telefoni collegati, aggiornati mentre questa scheda è aperta:
+          serve a capire quale tasto arriva al PC e se la vibrazione funziona.</p>
+        <div id="pads-test" class="pads-test"></div>
+        <h3>🎮 Gioca con un amico a distanza</h3>
+        <p class="muted small">Un amico apre un link da casa sua, scrive il codice e diventa un altro giocatore: il pad è
+          il suo telefono, il video lo manda Moonlight. Da fuori casa il PC va raggiunto con un tunnel: incolla qui
+          l'indirizzo (Cloudflare: <code>cloudflared tunnel --url https://localhost:8766</code>, oppure ngrok, Tailscale
+          Funnel). Vuoto = vale solo sulla rete di casa.</p>
+        <div class="row wrap">
+          <label>Indirizzo pubblico del PC <input class="field" id="ph-public" placeholder="https://amico.trycloudflare.com" autocomplete="off"></label>
+          <label>Indirizzo per Moonlight <input class="field" id="ph-video" placeholder="100.101.102.103 (Tailscale)" autocomplete="off"></label>
+        </div>
+        <div id="guest-box"></div>
         <h3>📡 Streaming: gioca da remoto con Moonlight</h3>
         <p class="muted small">Lo streaming usa <a href="#" data-open="https://app.lizardbyte.dev/Sunshine">Sunshine</a> sul PC e
           <a href="#" data-open="https://moonlight-stream.org">Moonlight</a> (gratis per Android, iPhone, tablet, TV, PC, Mac) dove vuoi giocare.
@@ -232,6 +246,11 @@
 
       <!-- ---------------- integrazioni esterne -->
       <section data-pane="integ">
+        <h3>🔔 Notifiche di Windows</h3>
+        <p class="muted small">Un avviso quando un gioco scende sotto la soglia di prezzo, esce un gioco gratis,
+          un port PC ha un aggiornamento o finisce una ricerca. Restano nel centro notifiche di Windows.</p>
+        <label class="chk"><input type="checkbox" id="nt-on"> Attiva le notifiche</label>
+        <p class="muted small" id="nt-state"></p>
         <h3>💬 Discord — «Sto giocando a …»</h3>
         <p class="muted small">Il tuo profilo Discord mostra il gioco in corso (titolo, console e tempo di gioco) finché
           GameScraper è aperto. Usa il canale locale di Discord: <b>nessun dato esce dal PC</b> e non serve un server.
@@ -299,6 +318,16 @@
         <div id="scan-plan-box"></div>
         <div id="scan-progress"></div>
         <pre id="scan-log" class="log"></pre>
+        <h3>🌙 Al termine delle operazioni</h3>
+        <p class="muted small">Vale per scraping, aggiornamento degli store e download dei port: quando non c'è più niente
+          in corso, il PC si sospende o si spegne (60 secondi per annullare da qui o dal telefono). Con un gioco aperto
+          non succede niente finché non lo chiudi.</p>
+        <div class="row wrap">
+          <select class="field" id="pw-after"><option value="none">Non fare niente</option>
+            <option value="sleep">Sospendi il PC</option><option value="shutdown">Spegni il PC</option></select>
+          <button class="btn" id="pw-abort" type="button" hidden>✕ Annulla</button>
+          <span class="muted small" id="pw-state"></span>
+        </div>
       </section>
 
       <!-- ---------------- fonti dei dati -->

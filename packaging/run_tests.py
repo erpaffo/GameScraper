@@ -34,6 +34,9 @@ TESTS = [
     "test_version.py",
     "test_sync.py",
     "test_dualscreen.py",
+    "test_guests.py",
+    "test_phone_extras.py",
+    "test_guests.py",
 ]
 
 

@@ -21,6 +21,7 @@ copertine, descrizioni, valutazioni e durate, e li avvia con un doppio clic.
 | TV | Interfaccia a schermo intero per il controller | [Big Picture](bigpicture.md) |
 | Personalizzazione | Temi (solo CSS) e plugin (JavaScript e Python) | [Temi e plugin](ESTENSIONI.md) |
 | Più PC e più persone | Sincronizzazione dei dati tra due PC (cartella condivisa o rete locale) e profili utente separati | [Dati e manutenzione](manutenzione.md#sincronizzazione-tra-pc), [Profili](libreria.md#profili-utente) |
+| Integrazioni | Presenza su Discord con il gioco in corso, avvisi di Windows, libreria esportata come pagina web statica | [Giocare](giocare.md#mostrare-su-discord-cosa-stai-giocando), [Avvisi](extra.md#avvisi-di-windows), [Dati e manutenzione](manutenzione.md#esportare-per-altri-frontend) |
 | Manutenzione | Copie di sicurezza, pagina Salute, cartelle rinominate, esportazione | [Dati e manutenzione](manutenzione.md) |
 
 ## Come è fatta l'app

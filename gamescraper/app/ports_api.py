@@ -13,10 +13,13 @@ from .. import config as C
 from .. import platforms as P
 from .. import ports as PT
 
+# stato dell'installazione/aggiornamento di un port (uno alla volta); lo legge anche il controllo dei lavori in corso
+PORT_JOB: dict = {"status": "idle", "log": [], "slug": "", "done": 0, "total": 0}
+
 
 def register(app, cfg, lib, launcher, start_store_job):
     """Registra le route /api/ports*. Ritorna port_links(), usata dal dettaglio del gioco."""
-    port_job: dict = {"status": "idle", "log": [], "slug": "", "done": 0, "total": 0}
+    port_job = PORT_JOB  # fuori dalla chiusura: server.py deve sapere se un port si sta scaricando
     start_lock = threading.Lock()
     port_links: dict = {"key": None, "by_slug": {}, "by_grp": {}}
 

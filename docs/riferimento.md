@@ -110,6 +110,8 @@ args = ["-L", "{core}", "{rom}", "-f"]
 | `save_backups` | Copie automatiche dei salvataggi (default `true`) |
 | `skip_duplicates` | Mostra una sola versione per gioco (default `true`) |
 | `port` | Porta del server locale (default 8765) |
+| `notify` | Notifiche di Windows per prezzi, giochi gratis, port aggiornati e lavori finiti (default `true` su Windows) |
+| `after_jobs` | Al termine delle operazioni lunghe: `none`, `sleep` o `shutdown` (default `none`) |
 
 ### Variabili d'ambiente
 
@@ -137,6 +139,11 @@ Lo scrive l'app; si può modificare a mano con l'app chiusa. Le sezioni più uti
 | `app` | Tema, plugin, collezioni intelligenti (`smart_collections`), pianificazioni e altre scelte dell'app |
 | `app.profiles`, `app.profile` | Profili utente e profilo attivo |
 | `app.sync` | Sincronizzazione: cartella condivisa (`folder`), cosa sincronizzare (`what`: `personal` o `all`), PC abbinati, identità di questo PC |
+| `app.phone` | Telefono: `touchscreen` (secondo schermo nei giochi DS e 3DS), `screen_idle` (secondi senza tocchi prima che lo schermo inferiore torni sul PC), `mouse`, `mic_device`, `public_url` (indirizzo del tunnel per l'ospite), `video_addr` (indirizzo per Moonlight), `pad` (aspetto, sensibilità e posizioni dei tasti, comuni a tutti i telefoni) |
+| `app.discord` | Presenza su Discord: `enabled`, `client_id`, `show_time` |
+| `app.notify` | Notifiche di Windows (`false` per spegnerle; di base attive su Windows) |
+| `app.after_jobs` | Al termine delle operazioni lunghe: `none`, `sleep` o `shutdown` |
+| `app.save_dir` | Cartella delle versioni dei salvataggi (vuota = `<cache>/saves`); mettendoci quella di Ludusavi le copie sono condivise |
 
 ## Comandi da terminale
 
