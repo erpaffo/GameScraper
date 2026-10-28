@@ -85,7 +85,7 @@
       "min_app": "0.7.1",
       "base": "minerva/",
       "files": {
-        "backend.py": "7552c3f6d6a4fe3ce45d4033f3877084df0692ef31b546f296795a814d6635f7",
+        "backend.py": "18b462835823b8108ee9d60ddc4da31338e4639ac3cc1bb01109e621e28a8960",
         "frontend.js": "31844804e69cba619a494ab3d8840cb02dba5b65495043963b9dffe692684a2f",
         "plugin.toml": "afa9710f436bb81751454be5da3b7d717f51c511adc2f0664616e34e6da7ed23"
       }
