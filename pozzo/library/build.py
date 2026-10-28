@@ -24,6 +24,7 @@ import re
 import sqlite3
 import time
 from collections import Counter, defaultdict
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -362,8 +363,11 @@ def _platform_exts(pid: str) -> set[str]:
 # rumore dei siti di ROM in fondo al titolo: "Gioco Switch NSP (eShop)", "Gioco XCI", "Gioco - NSP"
 _STORE_NOISE = re.compile(r"\s*(?:[-–|:]\s*)?(?:\bswitch\s+)?\b(?:nsp|xci|eshop|nsz)\b.*$", re.I | re.S)
 _STORE_VERSION = re.compile(r"\s+v\d+(?:\.\d+)*$", re.I)
+# console in fondo al titolo (superpsx e simili): "Gioco PS4", "Gioco PS2-PS4 Ported", "Gioco PS5 FPKG"
+_STORE_CONSOLE = re.compile(r"\s+\(?ps[1-5](?:\s*[-/+&]\s*ps[1-5])*\)?(?:\s+(?:ported|port|fpkg|pkg))*\s*$", re.I)
 
 
+@lru_cache(maxsize=300_000)  # stesse voci a ogni ricostruzione della libreria
 def _store_title(stem: str) -> str:
     """Titolo leggibile di una voce online: via «Switch NSP (eShop)» e la versione finale.
 
@@ -372,6 +376,7 @@ def _store_title(stem: str) -> str:
     """
     base = _STORE_NOISE.sub("", stem).strip(" -–|:")
     base = _STORE_VERSION.sub("", base).strip()
+    base = _STORE_CONSOLE.sub("", base).strip() or base
     return clean_title(base) or base or stem
 
 
@@ -426,6 +431,7 @@ def _catalog_entries(cfg, cache, merged: dict) -> tuple[list[dict], dict]:
         return n
 
     lb = LaunchBoxDB(cfg.cache)
+    lb_ready = lb.ready()  # una volta sola: e' un accesso al disco, per voce costava ~10 s su 150.000 voci
     pc_stores = [x for x in (getattr(cfg, "pc_stores", None) or []) if x.get("url")]
     with_cat = set(getattr(cfg, "catalogs", {}) or {}) | ({"windows"} if pc_stores else set())
     owned: dict[str, set[str]] = defaultdict(set)
@@ -448,7 +454,7 @@ def _catalog_entries(cfg, cache, merged: dict) -> tuple[list[dict], dict]:
             if n:
                 owned_titles[pid].add(n)
                 owned_title_key.setdefault((pid, n), g.key)
-        if lb.ready():
+        if lb_ready:
             r = lb.find(pid, [t for t in names if t], files=[g.stem], fuzzy=0)
             if r:
                 owned_lb[pid].add(r["id"])
@@ -532,7 +538,7 @@ def _catalog_entries(cfg, cache, merged: dict) -> tuple[list[dict], dict]:
             e = _catalog_to_store_game(it, pid)
             if kind:
                 e["kind"] = kind
-            if lb.ready():
+            if lb_ready:
                 r = lb.find(pid, [title], files=[stem], fuzzy=0)
                 if r and r["id"] in owned_lb[pid]:
                     remember_owned(owned_lb_key.get((pid, r["id"])), source)

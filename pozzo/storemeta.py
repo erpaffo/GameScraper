@@ -363,7 +363,7 @@ def coverage(cache) -> dict:
 
 
 async def fill(cfg, cache, tdb=None, log=print, limit: int = 0, cancelled=None,
-               search_site: str | None = "ziperto.com", stats: dict | None = None) -> dict:
+               search_site: str | None = "ziperto.com", stats: dict | None = None, only: list[str] | None = None) -> dict:
     """Completa copertine e descrizioni delle voci degli store online.
 
     1. GameTDB (offline): per ogni voce senza dati, copertina/descrizione/giocatori/editore;
@@ -377,7 +377,7 @@ async def fill(cfg, cache, tdb=None, log=print, limit: int = 0, cancelled=None,
 
     entries: dict[str, tuple[str, CatalogItem]] = {}
     for pid, urls in (getattr(cfg, "catalogs", {}) or {}).items():
-        if pid not in P.PLATFORMS:
+        if pid not in P.PLATFORMS or (only and pid not in only):  # only: solo le console scelte
             continue
         for url in urls or []:
             info = cached_info(cache, pid, url)
@@ -395,8 +395,9 @@ async def fill(cfg, cache, tdb=None, log=print, limit: int = 0, cancelled=None,
         return stats
 
     # via i dati rimasti da voci che non sono piu' schede di gioco (nomi di file, vecchi esperimenti)
-    stale = [k for (k,) in cache.db.execute("SELECT k FROM kv WHERE k LIKE ?", (CACHE_PREFIX + "%",))
-             if k[len(CACHE_PREFIX):] not in entries]
+    # (solo a giro completo: con `only` le voci delle altre console non sono in `entries` ma restano valide)
+    stale = [] if only else [k for (k,) in cache.db.execute("SELECT k FROM kv WHERE k LIKE ?", (CACHE_PREFIX + "%",))
+                             if k[len(CACHE_PREFIX):] not in entries]
     for k in stale:
         cache.db.execute("DELETE FROM kv WHERE k=?", (k,))
     if stale:

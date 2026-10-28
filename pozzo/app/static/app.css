@@ -671,3 +671,12 @@ kbd { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18);
 #mb-drop .mk { width: 14px; color: var(--accent); }
 #mb-drop .ch { padding: 6px 10px 2px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
 #mb-drop hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+#mb-act { margin-left: auto; background: none; border: 0; color: var(--muted); padding: 4px 10px; border-radius: 6px; cursor: pointer; font: inherit; }
+#mb-act:hover { background: var(--bg-3); color: var(--text); }
+#mb-act.busy { color: var(--accent); }
+#mb-act-n:not(:empty) { margin-left: 4px; padding: 0 6px; border-radius: 9px; background: var(--accent); color: #fff; font-size: 11px; }
+#act-pop { position: fixed; z-index: 80; top: 34px; right: 12px; width: 440px; height: min(560px, 80vh); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.4); overflow: hidden; }
+#act-pop .ah { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
+#act-pop .ah button { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 2px 6px; border-radius: 5px; }
+#act-pop .ah button:hover { background: var(--bg-3); color: var(--text); }
+#act-pop iframe { flex: 1; border: 0; width: 100%; background: var(--bg); }

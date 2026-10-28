@@ -177,9 +177,19 @@ def test_cancello_del_telefono(tmp_path):
     print("ok  cancello del telefono: libreria, copertine e Attivita' passano, il resto no")
 
 
+def test_attivita(tmp_path):
+    api = client(make_cfg(tmp_path))
+    assert api.get("/api/activity").json()["jobs"] == []
+    assert api.post("/api/activity/build/stop").status_code == 400   # non interrompibile
+    r = api.post("/api/activity/hltb/stop")                             # interrompibile anche se fermo
+    assert r.status_code == 200 and "jobs" in r.json(), r.text
+    assert "Attività" in api.get("/activity").text
+    print("ok  /api/activity: elenco, stop e pagina")
+
+
 if __name__ == "__main__":
     for fn in (test_stato_compaito, test_comando_sconosciuto, test_aggiorna_store_senza_store,
-               test_aggiorna_store_accoda, test_chiudi_gioco_senza_gioco, test_cancello_del_telefono):
+               test_aggiorna_store_accoda, test_chiudi_gioco_senza_gioco, test_cancello_del_telefono, test_attivita):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
             fn(Path(t))
     print("TUTTI I TEST OK")

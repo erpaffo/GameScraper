@@ -6,6 +6,7 @@ dopo una normalizzazione che gestisce articoli, numeri romani, punteggiatura e s
 
 from __future__ import annotations
 
+from functools import lru_cache
 import re
 import unicodedata
 
@@ -25,6 +26,7 @@ ROMAN = {"ii": "2", "iii": "3", "iv": "4", "v": "5", "vi": "6", "vii": "7", "vii
 _TAGS = re.compile(r"[\(\[][^\)\]]*[\)\]]")
 
 
+@lru_cache(maxsize=500_000)  # chiamata milioni di volte sugli stessi titoli (libreria + store online)
 def normalize(title: str) -> str:
     t = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode().lower()
     t = _TAGS.sub(" ", t)

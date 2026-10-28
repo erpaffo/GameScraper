@@ -11,6 +11,7 @@ from __future__ import annotations
 import sqlite3
 import zipfile
 import xml.etree.ElementTree as ET
+from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
 
@@ -80,6 +81,28 @@ class LaunchBoxDB(BulkDB):
     refresh_days = 7
     description = "190.000 giochi con valutazioni della community, descrizioni, generi, ESRB e immagini"
 
+    def con(self) -> sqlite3.Connection:
+        if self._con is None and self.ready():
+            self._map_new_platforms()
+        return super().con()
+
+    def _map_new_platforms(self):
+        """Console aggiunte a PLATFORMS dopo l'indicizzazione (es. PS5): le loro righe hanno pid vuoto e non si
+        troverebbero fino al prossimo download (7 giorni). Si assegnano qui, senza rifare l'indice."""
+        try:
+            db = sqlite3.connect(self.db_path)
+            try:
+                todo = [p for (p,) in db.execute("SELECT DISTINCT platform FROM games WHERE pid IS NULL")
+                        if p in PLATFORMS]
+                if todo:
+                    db.executemany("UPDATE games SET pid=? WHERE platform=? AND pid IS NULL",
+                                   [(PLATFORMS[p], p) for p in todo])
+                    db.commit()
+            finally:
+                db.close()
+        except sqlite3.Error:  # database in uso o in sola lettura: si riprova alla prossima apertura
+            pass
+
     def build_index(self, raw: Path, out: Path, log) -> int:
         db = sqlite3.connect(out)
         db.executescript(SCHEMA)
@@ -141,27 +164,45 @@ class LaunchBoxDB(BulkDB):
         rows = self.con().execute("SELECT norm, id FROM games WHERE pid=?", (pid,)).fetchall()
         return [r[0] for r in rows], [r[1] for r in rows]
 
+    def _index(self, pid: str) -> dict:
+        """Nomi file, titoli e titoli alternativi della console in memoria: una query per console invece di tre per gioco
+        (la libreria ne cerca decine di migliaia per gli store online)."""
+        cache = self.__dict__.setdefault("_idx", {})
+        if pid not in cache:
+            c = self.con()
+            files, norm, alt = {}, defaultdict(list), defaultdict(list)
+            for f, name in c.execute("SELECT file, name FROM files WHERE pid=?", (pid,)):
+                files.setdefault(f, name)  # come fetchone(): la prima riga
+            for n, gid in c.execute("SELECT norm, id FROM games WHERE pid=?", (pid,)):
+                norm[n].append(gid)
+            for n, gid in c.execute("SELECT a.norm, g.id FROM alt a JOIN games g ON g.id=a.id WHERE g.pid=?", (pid,)):
+                alt[n].append(gid)
+            cur = c.execute("SELECT * FROM games WHERE pid=?", (pid,))
+            self.__dict__["_cols"] = [d[0] for d in cur.description]
+            rows = {r[0]: r for r in cur.fetchall()}  # tuple (id e' la prima colonna): il dict solo per i giochi trovati
+            cache[pid] = {"files": files, "norm": dict(norm), "alt": dict(alt), "rows": rows}
+        return cache[pid]
+
     def find(self, pid: str, titles: list[str], files: list[str] = (), year: int | None = None,
              steam_appid: str | None = None, fuzzy: int = 92) -> dict | None:
         """Cerca un gioco: SteamAppId, nome file (Files.xml), nome esatto/alternativo, poi fuzzy."""
         pid = ALIASES.get(pid, pid)
         c = self.con()
+        ix = self._index(pid)
         ids: list[int] = []
         if steam_appid:
             ids = [r[0] for r in c.execute("SELECT id FROM games WHERE steam_appid=?", (str(steam_appid),))]
         for f in files:
             if ids:
                 break
-            r = c.execute("SELECT name FROM files WHERE pid=? AND file=?", (pid, f.lower())).fetchone()
-            if r:
-                ids = [x[0] for x in c.execute("SELECT id FROM games WHERE pid=? AND norm=?", (pid, normalize(r[0])))]
+            name = ix["files"].get(f.lower())
+            if name is not None:
+                ids = list(ix["norm"].get(normalize(name), ()))
         norms = [normalize(t) for t in titles if t]
         for n in norms:
             if ids:
                 break
-            ids = [r[0] for r in c.execute("SELECT id FROM games WHERE pid=? AND norm=?", (pid, n))]
-            if not ids:
-                ids = [r[0] for r in c.execute("SELECT g.id FROM alt a JOIN games g ON g.id=a.id WHERE a.norm=? AND g.pid=?", (n, pid))]
+            ids = list(ix["norm"].get(n, ())) or list(ix["alt"].get(n, ()))
         if not ids and norms and fuzzy:
             try:
                 from rapidfuzz import fuzz, process
@@ -174,8 +215,10 @@ class LaunchBoxDB(BulkDB):
                 pass
         if not ids:
             return None
-        cols = [d[0] for d in c.execute("SELECT * FROM games LIMIT 0").description]
-        rows = [dict(zip(cols, r)) for r in c.execute(f"SELECT * FROM games WHERE id IN ({','.join('?' * len(ids))})", ids)]
+        rows = [dict(zip(self._cols, ix["rows"][i])) for i in dict.fromkeys(ids) if i in ix["rows"]]
+        if len(rows) < len(set(ids)):  # SteamAppId di un'altra console: non e' nell'indice
+            cols = [d[0] for d in c.execute("SELECT * FROM games LIMIT 0").description]
+            rows = [dict(zip(cols, r)) for r in c.execute(f"SELECT * FROM games WHERE id IN ({','.join('?' * len(ids))})", ids)]
         if year:
             rows.sort(key=lambda r: (abs(int((r["release"] or "0")[:4] or 0) - year) if r["release"] else 99, -(r["rating_count"] or 0)))
         else:

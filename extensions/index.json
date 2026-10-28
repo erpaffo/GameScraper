@@ -79,15 +79,15 @@
     {
       "id": "minerva",
       "name": "Store Minerva + Switch",
-      "version": "1.3",
+      "version": "1.4",
       "author": "Pozzo Launcher",
-      "description": "Riempie lo «Store online» di ogni console con le cartelle di minerva-archive.org elencate su r-roms.github.io e preimposta gli store Switch (NXBrew, Ziperto NSP e XCI), PS4 e PS5 (superpsx).",
+      "description": "Aggiunge allo «Store online» di ogni console le cartelle di minerva-archive.org elencate su r-roms.github.io e gli store preimpostati (Switch: NXBrew, Ziperto; PS4 e PS5: superpsx), senza leggerli. Un pulsante «Leggi» per console scarica gli elenchi dei giochi.",
       "min_app": "0.7.1",
       "base": "minerva/",
       "files": {
-        "backend.py": "1fdb4f4f310f76b5a11a97c13333d7148a609fba3fe99761f55bb54d304b094c",
-        "frontend.js": "02dc720f0ec3679e0676e0e07f861ed80d62c1ba95e9874171da56d1dd1b1a9c",
-        "plugin.toml": "49a2b1c63f1aabb927c2a0b1416f9ec1478e3c18e02b780e55cb5d1e7a1bbad4"
+        "backend.py": "9d45cd88fefb55490cecad34468aa05eeb68867226a7510dfef4ae1cb49bf609",
+        "frontend.js": "acf9f4107e3f5534bd730dc9053dece9f0a0f142cc2ae52f3d7b9f1f41ac7bbe",
+        "plugin.toml": "52e174db2694f2168ca3cb0ebcd9d5d27886e97d6d944591827d85559f8c52b1"
       }
     },
     {

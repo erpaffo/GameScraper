@@ -3539,7 +3539,7 @@ function bind() {
   window.addEventListener("blur", closeCtx);
   window.addEventListener("focus", syncLibrary);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) syncLibrary(); });
-  setInterval(syncLibrary, 8000);
+  setInterval(syncLibrary, 3000); // libreria ricostruita da un lavoro in sottofondo: compare entro 3 s
   scroller.addEventListener("scroll", scheduleRender, { passive: true });
   new ResizeObserver(() => { layout(); render(); }).observe(scroller);
 

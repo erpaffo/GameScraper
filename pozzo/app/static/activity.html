@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="it" data-mode="desktop">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attività · Pozzo Launcher</title>
+<link rel="stylesheet" href="/static/app.css?v={{v}}">
+<style>
+  html, body { overflow: auto; }
+  body { padding: 12px; }
+  h1 { font-size: 16px; margin: 0 0 10px; display: flex; justify-content: space-between; align-items: center; }
+  .act { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 8px; }
+  .act .top { display: flex; align-items: center; gap: 8px; }
+  .act .name { font-weight: 600; flex: 1; }
+  .act .phase, .act .last { font-size: 12px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .act .times { display: flex; justify-content: space-between; font-size: 12px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .bar { height: 6px; border-radius: 3px; background: var(--bg-3); overflow: hidden; margin-top: 8px; }
+  .bar i { display: block; height: 100%; background: var(--accent); transition: width .4s; }
+  .bar.indet i { width: 30%; animation: indet 1.2s ease-in-out infinite; }
+  @keyframes indet { from { margin-left: -30%; } to { margin-left: 100%; } }
+  .act.done .bar i { background: var(--good); } .act.error .bar i { background: var(--bad); } .act.cancelled .bar i { background: var(--warn); }
+  .badge { font-size: 11px; padding: 1px 7px; border-radius: 9px; background: var(--bg-3); color: var(--muted); }
+  .act.running .badge { color: var(--accent); } .act.error .badge { color: var(--bad); } .act.done .badge { color: var(--good); }
+  .stop { background: var(--bg-3); border: 1px solid var(--line); border-radius: 6px; padding: 2px 10px; cursor: pointer; color: var(--bad); }
+  .stop:hover { border-color: var(--bad); }
+  .empty { text-align: center; padding: 40px 0; }
+</style>
+</head>
+<body>
+<h1><span>Attività</span><span class="muted" id="sum"></span></h1>
+<div id="list"></div>
+<script>
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmt = (s) => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60;
+  return (h ? `${h}:${String(m).padStart(2, "0")}` : `${m}`) + `:${String(x).padStart(2, "0")}`; };
+const LABEL = { running: "in corso", done: "completato", error: "errore", cancelled: "interrotto" };
+let data = { jobs: [], now: 0 }, skew = 0;
+
+function render() {
+  const now = Date.now() / 1000 - skew;
+  const run = data.jobs.filter((j) => j.status === "running").length;
+  document.getElementById("sum").textContent = run ? `${run} in corso` : "";
+  document.getElementById("list").innerHTML = data.jobs.length ? data.jobs.map((j) => {
+    const end = j.status === "running" ? now : (j.finished || now);
+    const el = j.started ? end - j.started : null;
+    const p = j.progress;
+    // tempo rimanente stimato dal ritmo finora: solo dopo un minimo di avanzamento, prima e' troppo ballerino
+    const eta = j.status === "running" && el && p > 0.02 && p < 1 ? el * (1 - p) / p : null;
+    const width = j.status === "running" ? (p ?? 0) * 100 : 100;
+    return `<div class="act ${esc(j.status)}">
+      <div class="top"><span class="name">${esc(j.name)}</span><span class="badge">${esc(LABEL[j.status] || j.status)}</span>
+        ${j.stoppable ? `<button class="stop" data-id="${esc(j.id)}" title="Interrompi: i progressi gia' fatti restano salvati">■ Stop</button>` : ""}</div>
+      ${j.phase ? `<div class="phase muted" title="${esc(j.phase)}">${esc(j.phase)}</div>` : ""}
+      ${j.last && j.last !== j.phase ? `<div class="last muted" title="${esc(j.last)}">${esc(j.last)}</div>` : ""}
+      <div class="bar ${j.status === "running" && p == null ? "indet" : ""}"><i style="width:${width}%"></i></div>
+      <div class="times muted"><span>${p != null && j.status === "running" ? Math.floor(p * 100) + "% · " : ""}${el != null ? "⏱ " + fmt(el) : ""}</span>
+        <span>${eta != null ? "mancano ~" + fmt(eta) : ""}</span></div>
+    </div>`;
+  }).join("") : `<div class="empty muted">Nessuna operazione in corso</div>`;
+}
+
+async function poll() {
+  try {
+    data = await (await fetch("/api/activity")).json();
+    skew = Date.now() / 1000 - data.now;
+  } catch { /* server non raggiungibile: si riprova */ }
+  render();
+}
+
+document.getElementById("list").onclick = async (e) => {
+  const b = e.target.closest(".stop");
+  if (!b) return;
+  b.disabled = true;
+  try { data = await (await fetch(`/api/activity/${b.dataset.id}/stop`, { method: "POST" })).json(); } catch { /* si vede al prossimo giro */ }
+  render();
+};
+
+(async () => {  // stesso tema dell'app
+  try {
+    const ext = await (await fetch("/api/extensions")).json();
+    const t = ext.themes.find((x) => x.id === ext.active_theme);
+    if (t?.desktop) document.head.insertAdjacentHTML("beforeend", `<link rel="stylesheet" href="${esc(t.desktop)}">`);
+    document.documentElement.dataset.theme = ext.active_theme || "default";
+  } catch { /* tema predefinito */ }
+})();
+if (self !== top) document.querySelector("h1").hidden = true; // nel pannello dell'app il titolo c'e' gia'
+poll();
+setInterval(poll, 1500);
+setInterval(render, 1000);
+</script>
+</body>
+</html>

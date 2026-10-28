@@ -58,6 +58,23 @@ class ProgressSink:
                     for t in self.tasks if t.visible]
 
 
+def _library_keys(cfg) -> set[str] | None:
+    """Chiavi dei giochi gia' nella libreria (None se non c'e' ancora): per non ricostruirla se non e' cambiato niente."""
+    import sqlite3
+    from pathlib import Path
+    p = Path(cfg.cache) / "library.db"
+    if not p.exists():
+        return None
+    try:
+        db = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+        try:
+            return {k for (k,) in db.execute("SELECT key FROM games WHERE store IS NULL")}
+        finally:
+            db.close()
+    except sqlite3.Error:
+        return None
+
+
 def _plain(s) -> str:
     return re.sub(r"\[/?[a-z ]*\]", "", str(s))
 
@@ -115,12 +132,15 @@ class ScrapeJob:
             self.say(f"{len(games):,} file in {len({g.platform.id for g in games})} console")
             if self._cancel:
                 raise asyncio.CancelledError
-            if after_scan and not self.keys:
+            known = _library_keys(cfg)
+            new_files = known is None or any(g.key not in known for g in games)
+            if after_scan and not self.keys and new_files:
                 cache.commit()
                 self.phase = "Aggiornamento libreria"
                 after_scan(build(cfg, log=self.say))
 
             self.phase = "Scraping"
+            n_before = len(self.progress.tasks)
 
             async def main():
                 self._loop = asyncio.get_running_loop()
@@ -133,9 +153,14 @@ class ScrapeJob:
             cache = None
             if self._cancel:
                 raise asyncio.CancelledError
-            self.phase = "Aggiornamento libreria"
-            stats = build(cfg, log=self.say)
-            after_build(stats)
+            with self.progress.lock:
+                scraped = any(t.completed for t in self.progress.tasks[n_before:])
+            if scraped or (new_files and (self.keys or not after_scan)):
+                self.phase = "Aggiornamento libreria"
+                stats = build(cfg, log=self.say)
+                after_build(stats)
+            else:  # niente di nuovo ne' di scaricato: la libreria e' gia' giusta (ricostruirla costa minuti)
+                self.say("Niente da aggiornare: libreria gia' completa")
             self.status = "done"
             self.phase = "Completato"
         except (asyncio.CancelledError, KeyboardInterrupt):
@@ -232,6 +257,7 @@ class NetMetaJob(StoreJob):
     limit: int = 0  # 0 = tutte le voci
     search_ziperto: bool = True
     stop: bool = False
+    only: list[str] | None = None  # console scelte: None = tutte
 
     def run(self, cfg, after_build):
         from ..library.build import build
@@ -249,7 +275,7 @@ class NetMetaJob(StoreJob):
             self.phase = "Copertine e descrizioni"
             asyncio.run(storemeta.fill(
                 cfg, cache, tdb, log=self.say, limit=self.limit, stats=self.summary,
-                cancelled=lambda: self.stop, search_site="ziperto.com" if self.search_ziperto else None))
+                cancelled=lambda: self.stop, search_site="ziperto.com" if self.search_ziperto else None, only=self.only))
             cache.close()
             cache = None
             self.phase = "Aggiornamento libreria"

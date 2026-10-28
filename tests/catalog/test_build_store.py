@@ -24,7 +24,12 @@ def test_store_title():
     # «Switch» come parola vera del titolo resta
     assert B._store_title("1-2-Switch") == "1-2-Switch"
     assert B._store_title("Nintendo Switch Sports") == "Nintendo Switch Sports"
-    print("ok  titoli online: «Switch NSP (eShop)» rimosso, titoli veri intatti")
+    # superpsx: la console in fondo impediva di trovare il gioco in LaunchBox
+    assert B._store_title("MLB The Show 21 PS4") == "MLB The Show 21"
+    assert B._store_title("Silent Hill 2 PS2-PS4 Ported") == "Silent Hill 2"
+    assert B._store_title("Battlefield 6 PS5 FPKG") == "Battlefield 6"
+    assert B._store_title("PS4 Pro Test") == "PS4 Pro Test"  # in testa al titolo resta
+    print("ok  titoli online: «Switch NSP (eShop)» e «PS4/PS5» in fondo rimossi, titoli veri intatti")
 
 
 def test_catalog_entries_merge(tmp_path):

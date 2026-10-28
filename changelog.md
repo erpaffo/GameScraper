@@ -6,18 +6,26 @@
 
 - Port PC: il catalogo si apre subito dalla copia salvata (anche in memoria) e si aggiorna in background; a fine aggiornamento la pagina si ridisegna da sola
 - Store Minerva: gli store già presenti per una console non vengono duplicati né riletti, si aggiungono e si leggono solo i nuovi
+- Libreria ricostruita in circa metà del tempo con molti store online (177 s → 83 s su 164.000 voci); l'interfaccia mostra la libreria nuova entro 3 secondi
 
 ### Corretto
 
 - Store online PS4/PS5: copertine, descrizioni, generi, data e peso letti dalle pagine del sito (prima solo Switch/NDS)
 - Console preferite (e le altre preferenze dell'interfaccia: filtri, ordinamenti, ultimo punto visto) sparivano alla chiusura dell'app: la finestra ora conserva i suoi dati tra un avvio e l'altro
 - Store estensioni: lo store ufficiale dava errore 404 (il vecchio repository gamescraper-extensions non esiste più); ora legge l'elenco dal repository dell'app
+- «Nuovi giochi» sembrava non finire mai: la libreria veniva ricostruita due volte anche senza niente di nuovo. Ora si ricostruisce solo se ci sono file nuovi o dati scaricati
+- Store online PS4/PS5: quasi nessun gioco aveva i dati, perché «PS4»/«PS5» in fondo al titolo impediva di trovarlo in LaunchBox (PS4: da 9 a circa 1600 giochi su 2000; PS5 riconosciuta anche nel database LaunchBox già scaricato)
+- «Copertine e descrizioni» di uno store online lavorava su tutte le console: ora solo su quella da cui lo avvii
 
 ### Aggiunto
 
 - PlayStation 5: cartelle «ps5» riconosciute e giochi avviati con SharpEmu (eboot.bin)
 - Store online PS5: superpsx preimpostato dal plugin Minerva, schede lette con copertina, generi, data e peso
 - Icona di Pozzo Launcher nell'area di notifica di Windows (vicino a volume e rete): un clic riapre la finestra, tasto destro per «Apri» ed «Esci»
+
+### Cambiato
+
+- Estensione Store Minerva 1.4: «Importa store» compila solo la sezione «Store online» di ogni console, senza leggerla; un pulsante «Leggi» per console (o per tutti quelli mai letti) scarica gli elenchi
 
 ## 0.9.2 (2026-10-28)
 ### Corretto

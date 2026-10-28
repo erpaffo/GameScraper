@@ -1,13 +1,14 @@
 """Plugin Minerva: riempie gli "Store online" di ogni console con i link a minerva-archive.org
 elencati su https://r-roms.github.io (gli altri siti linkati da r-roms vengono ignorati), più gli
 store preimpostati (Switch: NXBrew e Ziperto; PS4 e PS5: superpsx).
-Uno store già presente per la console non si aggiunge e non si rilegge.
+Uno store già presente per la console non si aggiunge. L'importazione non legge gli store: si leggono a richiesta.
 
-POST /plugin-api/minerva/importa  -> avvia l'importazione (in background)
+POST /plugin-api/minerva/importa  -> aggiunge gli store alle console (in background), senza leggerli
 GET  /plugin-api/minerva/stato    -> stato e log
+GET  /plugin-api/minerva/console  -> store online di ogni console e giochi già letti
+La lettura degli elenchi passa dalla coda degli store dell'app (POST /api/store-refresh/run {"ids": [...]}).
 """
 
-import asyncio
 import html
 import re
 import threading
@@ -156,14 +157,13 @@ def collect(get) -> dict[str, list[str]]:
 
 def register(gs):
     cfg = gs.cfg
-    job = {"status": "idle", "log": [], "found": {}}
+    job = {"status": "idle", "log": [], "found": {}, "todo": {}}
 
     def run():
         import httpx
 
         from pozzo import catalog
         from pozzo.cache import Cache
-        from pozzo.net import make_client
         say = lambda m: job["log"].append(str(m))  # noqa: E731
         try:
             say("Lettura di r-roms.github.io…")
@@ -179,44 +179,52 @@ def register(gs):
                         cur.append(u)
                         have.add(store_key(u))
             job["found"] = {k: len(v) for k, v in found.items()}
-            say(f"{sum(map(len, found.values()))} link Minerva per {len(found)} console")
-            if pre.get("switch"):
-                say(f"Switch: {len(pre['switch'])} store preimpostati (NXBrew, Ziperto NSP, Ziperto XCI)")
-            say("Store PS4 e PS5: superpsx")
+            say(f"{sum(map(len, found.values()))} store per {len(found)} console (Minerva + Switch, PS4, PS5)")
             cats = C.read_settings(cfg).get("catalogs", {})
             c = Cache(cfg.cache)
             try:
-                # si aggiungono solo gli store che la console non ha già, e si leggono solo quelli
+                # si aggiungono solo gli store che la console non ha già
                 cats, added, todo = merge_catalogs(
                     cats, found, lambda pid, u: bool(catalog.cached_info(c, pid, u)["entries"]), say=say)
-                if added:
-                    C.set_setting(cfg, "catalogs", cats)
-                n_new = sum(map(len, added.values()))
-                n_read = sum(map(len, todo.values()))
-                say(f"Store nuovi: {n_new} · da leggere: {n_read} (i già presenti non si rifanno)")
-                async def go():
-                    async with make_client() as client:
-                        for pid, urls in todo.items():
-                            for u in urls:
-                                try:
-                                    await catalog.fetch(cfg, c, client, P.PLATFORMS[pid], u, log=say)
-                                except Exception as e:
-                                    say(f"{u}: {e}")
-                asyncio.run(go())
             finally:
                 c.close()
-            job["status"] = "done"  # il frontend avvia la ricostruzione della libreria
+            if added:
+                C.set_setting(cfg, "catalogs", cats)
+            job["todo"] = todo
+            say(f"Store aggiunti: {sum(map(len, added.values()))} · mai letti: {sum(map(len, todo.values()))}")
+            say("Gli elenchi dei giochi non vengono scaricati: usa «Leggi» sulla console che ti interessa.")
+            job["status"] = "done"
         except Exception as e:
             say(f"Errore: {type(e).__name__}: {e}")
             job["status"] = "error"
 
     @gs.route("importa", methods=("POST",))
     def importa():
+        """Solo la sezione «Store online» di ogni console: nessuna lettura degli store, nessuna ricostruzione."""
         if job["status"] != "running":
-            job.update(status="running", log=[], found={})
+            job.update(status="running", log=[], found={}, todo={})
             threading.Thread(target=run, daemon=True).start()
         return job
 
     @gs.route("stato")
     def stato():
         return job
+
+    @gs.route("console")
+    def console():
+        """Store online di ogni console, con quanti giochi sono già stati letti (per i pulsanti «Leggi»)."""
+        from pozzo import catalog
+        from pozzo.cache import Cache
+        c = Cache(cfg.cache)
+        try:
+            out = []
+            for pid, urls in sorted(cfg.catalogs.items(), key=lambda kv: getattr(P.PLATFORMS.get(kv[0]), "name", kv[0])):
+                if pid not in P.PLATFORMS or not urls:
+                    continue
+                stores = [{"id": f"{pid}:{u}", "url": u, "games": len(catalog.cached_info(c, pid, u)["entries"])}
+                          for u in urls]
+                out.append({"platform": pid, "name": P.PLATFORMS[pid].name, "stores": stores,
+                            "games": sum(x["games"] for x in stores), "unread": sum(1 for x in stores if not x["games"])})
+            return {"consoles": out}
+        finally:
+            c.close()

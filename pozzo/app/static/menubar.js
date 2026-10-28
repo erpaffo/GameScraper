@@ -69,6 +69,31 @@
   bar.innerHTML = Object.keys(MENUS).map((k) => `<button type="button" class="mb-top" data-m="${k}">${k}</button>`).join("");
   document.getElementById("main").prepend(bar);
 
+  // Attivita': tutte le operazioni in sottofondo (pannello qui sotto o finestra separata)
+  bar.insertAdjacentHTML("beforeend", `<button type="button" id="mb-act" title="Operazioni in corso">⚙ Attività <span id="mb-act-n"></span></button>`);
+  const actBtn = document.getElementById("mb-act");
+  const popOut = () => (window.pywebview?.api?.open_activity ? window.pywebview.api.open_activity()
+    : window.open("/activity", "pozzo-activity", "popup,width=520,height=640"));
+  actBtn.onclick = () => {
+    const pan = document.getElementById("act-pop");
+    if (pan) return pan.remove();
+    document.body.insertAdjacentHTML("beforeend", `<div id="act-pop">
+      <div class="ah"><b>Attività</b><span><button type="button" id="act-out" title="Apri in una finestra separata">⧉ Finestra separata</button>
+      <button type="button" id="act-x" title="Chiudi">✕</button></span></div><iframe src="/activity"></iframe></div>`);
+    document.getElementById("act-out").onclick = () => { document.getElementById("act-pop").remove(); popOut(); };
+    document.getElementById("act-x").onclick = () => document.getElementById("act-pop").remove();
+  };
+  document.addEventListener("mousedown", (e) => { if (!e.target.closest("#act-pop, #mb-act")) document.getElementById("act-pop")?.remove(); });
+  const count = async () => {
+    try {
+      const n = (await api("/api/activity")).jobs.filter((j) => j.status === "running").length;
+      document.getElementById("mb-act-n").textContent = n || "";
+      actBtn.classList.toggle("busy", n > 0);
+    } catch { /* riprova al prossimo giro */ }
+  };
+  count();
+  setInterval(count, 3000);
+
   let open = null;
   const close = () => { document.getElementById("mb-drop")?.remove(); bar.querySelectorAll(".on").forEach((b) => b.classList.remove("on")); open = null; };
 

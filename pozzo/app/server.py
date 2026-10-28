@@ -341,7 +341,7 @@ def create_app(cfg) -> FastAPI:
         _ds_restore()
     plugin_errors = X.load_backends(app, cfg, events)
     thumbs_dir = Path(cfg.cache) / "thumbs"
-    state = {"building": False, "build_log": [], "build_stats": None, "thumbs_total": 0, "thumbs_done": 0}
+    state = {"building": False, "build_log": [], "build_stats": None, "thumbs_total": 0, "thumbs_done": 0, "thumbs_started": 0, "build_started": 0}
     job: dict = {"current": J.ScrapeJob(), "stores": J.StoreJob(), "storemeta": J.StoreMetaJob(),
                  "hltb": J.HltbJob(), "collart": J.CollArtJob(), "netmeta": J.NetMetaJob(),
                  "pcstores": J.PcStoreJob(), "top": J.TopGamesJob(), "store_refresh": J.StoreRefreshJob()}
@@ -1536,7 +1536,7 @@ def create_app(cfg) -> FastAPI:
         if pid not in P.PLATFORMS:
             raise HTTPException(404, "Console sconosciuta")
         limit = int(body.get("limit") or 0)  # 0 = tutte le voci (circa 2 richieste al secondo)
-        if not _claim("netmeta", J.NetMetaJob(limit=max(0, min(limit, 50000)),
+        if not _claim("netmeta", J.NetMetaJob(limit=max(0, min(limit, 50000)), only=[pid],
                                               search_ziperto=bool(body.get("ziperto", True)))):
             return job["netmeta"].state()
         threading.Thread(target=lambda: job["netmeta"].run(cfg, lambda stats: lib.load()),
@@ -2654,7 +2654,7 @@ def create_app(cfg) -> FastAPI:
     def _rebuild():
         if job["current"].status == "running":
             return
-        state["building"] = True
+        state["building"], state["build_started"] = True, time.time()
         state["build_log"] = []
         try:
             state["build_stats"] = build(cfg, log=lambda m: state["build_log"].append(_plain(str(m))))
@@ -2777,7 +2777,7 @@ def create_app(cfg) -> FastAPI:
         with lib.lock:
             srcs = [Path(cfg.cache) / g["media"]["cover"] for g in lib.games
                     if "cover" in g["media"] and not g["media"]["cover"].startswith("url:")]
-        state["thumbs_total"], state["thumbs_done"] = len(srcs), 0
+        state["thumbs_total"], state["thumbs_done"], state["thumbs_started"] = len(srcs), 0, time.time()
 
         def one(s):
             try:
@@ -2846,13 +2846,20 @@ def create_app(cfg) -> FastAPI:
                 prog = (done / tot) if tot else None
             elif state.get("total"):
                 prog = (state.get("done") or 0) / state["total"]
+            log = state.get("log") or []
             return {"id": jid, "name": name, "kind": kind, "status": state.get("status"),
                     "phase": state.get("phase") or state.get("message") or "",
-                    "progress": round(prog, 3) if prog is not None else None}
+                    "progress": round(prog, 3) if prog is not None else None,
+                    "started": state.get("started") or 0, "finished": state.get("finished") or 0,
+                    "stoppable": jid in job_stops and state.get("status") == "running"
+                    and state.get("stoppable", True) and not state.get("stopping"),
+                    "last": log[-1] if log else ""}
 
         rows = [
             row("scan", "Ricerca nuovi giochi", job["current"].state()),
             row("stores", "Store ufficiali", job["stores"].state()),
+            row("storemeta", "Metadati degli store", job["storemeta"].state()),
+            row("pcstores", "Store PC", job["pcstores"].state()),
             row("catalogs", "Store online", job["store_refresh"].state()),
             row("netmeta", "Copertine e descrizioni", job["netmeta"].state()),
             row("hltb", "Durate (HowLongToBeat)", job["hltb"].state()),
@@ -2862,8 +2869,39 @@ def create_app(cfg) -> FastAPI:
         ]
         if state["building"]:
             rows.append({"id": "build", "name": "Libreria", "kind": "build", "status": "running",
-                         "phase": "Ricostruzione della libreria", "progress": None})
+                         "phase": "Ricostruzione della libreria", "progress": None, "started": state["build_started"],
+                         "finished": 0, "stoppable": False, "last": (state["build_log"] or [""])[-1]})
+        if state["thumbs_done"] < state["thumbs_total"]:
+            rows.append({"id": "thumbs", "name": "Miniature", "kind": "build", "status": "running",
+                         "phase": f"{state['thumbs_done']:,} / {state['thumbs_total']:,}",
+                         "progress": round(state["thumbs_done"] / state["thumbs_total"], 3),
+                         "started": state["thumbs_started"], "finished": 0, "stoppable": False, "last": ""})
         return [r for r in rows if r]
+
+    def _stop_flag(name):
+        return lambda: setattr(job[name], "stop", True)
+
+    # id della riga -> come interromperla (gli altri lavori non hanno un punto di arresto sicuro)
+    job_stops = {"scan": lambda: job["current"].cancel(), "catalogs": lambda: job["store_refresh"].stop_now(),
+                 **{k: _stop_flag(k) for k in ("storemeta", "netmeta", "hltb", "top", "collart")}}
+
+    @app.get("/api/activity")
+    def api_activity():
+        """Tutte le operazioni in corso o appena finite (pannello Attivita' e sua finestra separata)."""
+        return {"jobs": _job_rows(), "now": time.time()}
+
+    @app.post("/api/activity/{jid}/stop")
+    def api_activity_stop(jid: str):
+        if jid not in job_stops:
+            raise HTTPException(400, "Questa operazione non si puo' interrompere")
+        job_stops[jid]()
+        return api_activity()
+
+    @app.get("/activity")
+    def activity_page():
+        from .. import __version__
+        html = (STATIC / "activity.html").read_text(encoding="utf-8").replace("{{v}}", str(__version__))
+        return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
     @app.get("/api/mobile/state")
     def api_mobile_state():
@@ -3828,6 +3866,18 @@ def run(cfg, port: int = 8765, browser: bool = False, bigpicture: bool = False):
                     state_fs["on"] = bool(on)
                 return state_fs["on"]
 
+            def open_activity(self):
+                """Finestra separata con le operazioni in corso; se e' gia' aperta torna in primo piano."""
+                w = activity_win.get("w")
+                if w is not None and w in webview.windows:
+                    w.restore()
+                    w.show()
+                    return True
+                activity_win["w"] = webview.create_window("Attività · Pozzo Launcher", f"{url}activity", width=520,
+                                                          height=640, min_size=(360, 300), background_color="#111318",
+                                                          js_api=api)
+                return True
+
             def pick_folder(self):
                 win = webview.windows[0]
                 kind = getattr(getattr(webview, "FileDialog", None), "FOLDER", None) or webview.FOLDER_DIALOG
@@ -3835,13 +3885,16 @@ def run(cfg, port: int = 8765, browser: bool = False, bigpicture: bool = False):
                 return r[0] if r else None
 
         state_fs = {"on": bigpicture}
+        activity_win: dict = {}
         api = Api()
         WINDOW_FOCUS["fn"] = api.focus_window
         from .. import notify
         ico = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2])) / "packaging" / "icon.ico"
         notify.start_tray(str(ico), api.focus_window, lambda: webview.windows[0].destroy())  # icona vicino a volume e rete
-        webview.create_window("Pozzo Launcher", start_url, width=1500, height=940, min_size=(960, 600),
-                              background_color="#111318", js_api=api, fullscreen=bigpicture)
+        main_win = webview.create_window("Pozzo Launcher", start_url, width=1500, height=940, min_size=(960, 600),
+                                         background_color="#111318", js_api=api, fullscreen=bigpicture)
+        # chiusa la finestra principale si chiude anche quella delle attivita' (altrimenti l'app resta aperta)
+        main_win.events.closed += lambda: activity_win.get("w") and activity_win["w"].destroy()
         # private_mode=False + cartella fissa: senza, la finestra butta via il localStorage alla chiusura
         # (console preferite, filtri, ordinamenti...)
         webview.start(private_mode=False, storage_path=str(Path(cfg.cache).parent / "webview"))
