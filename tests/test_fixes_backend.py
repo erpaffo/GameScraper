@@ -81,6 +81,25 @@ def test_update_manual(tmp: Path):
     print("ok  aggiornamento rapido dei soli giochi manuali")
 
 
+def test_replace_retry(tmp: Path):
+    from pozzo import config as C
+    real, calls = os.replace, []
+
+    def flaky(a, b):  # come Windows con il file aperto da un altro thread: due rifiuti, poi riesce
+        calls.append(1)
+        if len(calls) <= 2:
+            raise PermissionError(5, "Access is denied")
+        return real(a, b)
+    (tmp / "a.tmp").write_text("nuovo", encoding="utf-8")
+    C.os.replace = flaky
+    try:
+        C._replace(tmp / "a.tmp", tmp / "a.json")
+    finally:
+        C.os.replace = real
+    assert (tmp / "a.json").read_text(encoding="utf-8") == "nuovo" and len(calls) == 3
+    print("ok  settings.json: riprova se il file e' aperto da un altro thread")
+
+
 if __name__ == "__main__":
     test_not_a_game()
     test_magnet_per_file()
@@ -90,4 +109,6 @@ if __name__ == "__main__":
         test_media_override(Path(d))
     with tempfile.TemporaryDirectory() as d:
         test_update_manual(Path(d))
+    with tempfile.TemporaryDirectory() as d:
+        test_replace_retry(Path(d))
     print("test_fixes_backend: OK")

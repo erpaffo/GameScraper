@@ -7,6 +7,7 @@ import os
 import shutil
 import sys
 import threading
+import time
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -258,8 +259,20 @@ def _update_settings(cfg: Config, change):
         change(s)
         tmp = p.with_suffix(".tmp")
         tmp.write_text(json.dumps(s, indent=2, ensure_ascii=False), encoding="utf-8")
-        os.replace(tmp, p)
+        _replace(tmp, p)
         apply_settings(cfg)
+
+
+def _replace(src: Path, dst: Path, tries: int = 40):
+    """os.replace con riprovo: su Windows fallisce (accesso negato) se in quell'istante un altro thread sta
+    leggendo dst, o se l'antivirus/OneDrive lo tiene aperto. Di solito basta qualche millisecondo."""
+    for i in range(tries):
+        try:
+            return os.replace(src, dst)
+        except PermissionError:
+            if i == tries - 1:
+                raise
+            time.sleep(0.05)
 
 
 def set_setting(cfg: Config, key: str, value):
