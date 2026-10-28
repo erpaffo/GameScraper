@@ -29,9 +29,9 @@ jobs:
           - { name: macos-arm64, os: macos-latest }
           - { name: linux-x64, os: ubuntu-22.04 }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -66,6 +66,7 @@ jobs:
           python tests/test_ports.py
           python tests/test_version.py
           python tests/test_sync.py
+          python tests/test_dualscreen.py
 
       - name: Build
         run: pyinstaller packaging/gamescraper.spec --noconfirm --distpath dist --workpath build
@@ -152,7 +153,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/download-artifact@v8
         with:
@@ -163,7 +164,7 @@ jobs:
           skip-decompress: true
 
       # manuale in PDF tra i file della release (stesso testo del sito, vedi docs.yml)
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
