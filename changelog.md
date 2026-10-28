@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.3 (2026-10-28)
+### Migliorato
+
+- Impostazioni: la finestra si adatta alla larghezza delle schede e, se non ci sta nello schermo (per esempio con le schede delle estensioni), passa a tutto schermo. Scorrono in orizzontale solo le schede (rotella, trascinamento o dito, con sfumatura ai lati); il contenuto di ogni scheda non scorre mai di lato
+
 ## 0.7.2 (2026-10-28)
 ### Aggiunto
 

@@ -2576,6 +2576,65 @@ function openSettings(tab) {
   }
   if (!dlg.open) dlg.showModal();
   showTab(typeof tab === "string" ? tab : SET.tab);
+  fitSettings();
+}
+
+/** La finestra delle impostazioni si adatta a schede e pagina; se non ci sta nello schermo va a tutto schermo
+    e scorrono in orizzontale solo le schede (rotella, trascinamento, dito), mai il contenuto. */
+function fitSettings() {
+  const dlg = $("#settings");
+  if (!dlg.open) return;
+  const head = $(".dlg-head", dlg), tabs = $("#tabs"), body = $(".dlg-body", dlg);
+  const keep = body.scrollTop;                           // la rimisura non deve far saltare la pagina
+  dlg.classList.remove("full");
+  dlg.style.width = "";                                  // misura partendo dalla larghezza di base
+  const base = dlg.clientWidth;
+  const tabsW = [...tabs.children].reduce((w, t) => w + t.offsetWidth, 0) + 4 * Math.max(0, tabs.children.length - 1);
+  const chrome = head.clientWidth - tabs.clientWidth;    // padding e pulsante di chiusura
+  const need = Math.max(base, tabsW + chrome, base + body.scrollWidth - body.clientWidth);  // schede e contenuto piu' larghi
+  if (need > innerWidth * 0.94 || innerHeight < 560) dlg.classList.add("full");
+  else if (need > base) dlg.style.width = Math.ceil(need) + 2 + "px";   // +2: il bordo
+  body.scrollTop = keep;
+  fadeTabs();
+  scrollActiveTab();
+}
+
+function fadeTabs() {
+  const t = $("#tabs");
+  t.classList.toggle("can-l", t.scrollLeft > 1);
+  t.classList.toggle("can-r", t.scrollLeft + t.clientWidth < t.scrollWidth - 1);
+}
+
+function scrollActiveTab() {
+  const t = $("#tabs"), a = t.querySelector(".tab.active");
+  if (!a) return;
+  const r = a.getBoundingClientRect(), b = t.getBoundingClientRect();
+  if (r.left < b.left + 36) t.scrollLeft -= b.left + 36 - r.left;
+  else if (r.right > b.right - 36) t.scrollLeft += r.right - (b.right - 36);
+}
+
+function initSettingsLayout() {
+  const tabs = $("#tabs");
+  tabs.addEventListener("scroll", fadeTabs, { passive: true });
+  tabs.addEventListener("wheel", (e) => {              // rotella verticale = scorrimento delle schede
+    if (tabs.scrollWidth > tabs.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) { tabs.scrollLeft += e.deltaY; e.preventDefault(); }
+  }, { passive: false });
+  let drag = null, dragEnd = 0;
+  tabs.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse" && e.button === 0) drag = { x: e.clientX, l: tabs.scrollLeft, moved: false }; });
+  window.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x;
+    if (Math.abs(dx) > 5) drag.moved = true;
+    if (drag.moved) tabs.scrollLeft = drag.l - dx;
+  });
+  window.addEventListener("pointerup", () => { if (drag?.moved) dragEnd = performance.now(); drag = null; });
+  tabs.addEventListener("click", (e) => { if (performance.now() - dragEnd < 80) { e.stopPropagation(); e.preventDefault(); } }, true);  // dopo un trascinamento non si cambia scheda
+  tabs.addEventListener("focusin", scrollActiveTab);
+  // contenuto che arriva dopo (le schede caricano via rete) o finestra ridimensionata: si rimisura
+  let raf = 0;
+  const refit = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; fitSettings(); }); };
+  window.addEventListener("resize", refit);
+  new MutationObserver(refit).observe($("#settings .dlg-body"), { childList: true, subtree: true });
 }
 
 function showTab(tab) {
@@ -3486,7 +3545,8 @@ function bind() {
   checkUpdate(false, false); // subito all'avvio, in parallelo al caricamento dei giochi (la risposta resta in cache 12 ore)
   $("#health-list").addEventListener("click", (e) => { const b = e.target.closest(".hl-fix"); if (b) healthFix(SET.health[+b.dataset.i].fix); });
   $("#backup-list").addEventListener("click", (e) => { const b = e.target.closest(".bk-restore"); if (b) restoreBackup(b.dataset.name); });
-  $("#tabs").addEventListener("click", (e) => { const b = e.target.closest(".tab"); if (b) showTab(b.dataset.tab); });
+  $("#tabs").addEventListener("click", (e) => { const b = e.target.closest(".tab"); if (b) { showTab(b.dataset.tab); fitSettings(); } });
+  initSettingsLayout();
 
   // scraping
   $("#scan-start").onclick = startScan;
