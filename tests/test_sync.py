@@ -159,6 +159,33 @@ def test_lan_end_to_end():
     from fastapi.testclient import TestClient
 
     from gamescraper.app.server import create_app
+
+    def pick_port():
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            return s.getsockname()[1]
+
+    def new_code(client, cfg):
+        # sulla CI il bind della porta puo' fallire in modo transitorio: ritenta con una nuova porta locale
+        for _ in range(3):
+            r = client.post("/api/sync/code")
+            body = r.json()
+            if r.status_code == 200 and "code" in body:
+                return body["code"]
+            cfg.app.setdefault("phone", {})["port"] = pick_port()
+        assert False, body
+
+    def sync_now_until_ok(client, peer_id):
+        end = time.time() + 3
+        while True:
+            last = client.post("/api/sync/now").json().get("last") or {}
+            peer = (last.get("peers") or {}).get(peer_id)
+            if peer and peer.get("ok"):
+                return last
+            if time.time() >= end:
+                assert False, last
+            time.sleep(0.05)
+
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         apps = {}
         # Assegna porte libere distinte con SO_REUSEADDR
@@ -196,8 +223,7 @@ def test_lan_end_to_end():
             # dati diversi sui due PC, uno scambio da B li unisce su entrambi
             sync.open_profile(cfg_a, "default").set_flag("gba/A1", "favorite", 1)
             sync.open_profile(cfg_b, "default").set_flag("gba/B1", "favorite", 1)
-            last = cb.post("/api/sync/now").json()["last"]
-            assert last["peers"][peer["id"]].get("ok"), last
+            last = sync_now_until_ok(cb, peer["id"])
             for cfg in (cfg_a, cfg_b):
                 g = sync.open_profile(cfg, "default").games()
                 assert g["gba/A1"]["favorite"] == 1 and g["gba/B1"]["favorite"] == 1, g
