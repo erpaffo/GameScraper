@@ -6,6 +6,7 @@ Esegui: python tests/test_fixes_backend.py
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -73,8 +74,15 @@ def test_update_manual(tmp: Path):
     cache.kv_set("store:manual", [{**StoreGame(store="manual", id="7", title="Mio Gioco", installed=True,
                                                launch={"type": "exe", "target": "C:/g/mio.exe"}).to_dict(), "media": {}}])
     cache.close()
-    assert B.update_manual(cfg) and B.update_manual(cfg)  # due volte: nessun doppione
+    assert B.update_manual(cfg)
     db = sqlite3.connect(tmp / "library.db")
+    t1 = float(db.execute("SELECT v FROM meta WHERE k='built_at'").fetchone()[0])
+    db.close()
+    time.sleep(0.01)
+    assert B.update_manual(cfg)  # due volte: nessun doppione
+    db = sqlite3.connect(tmp / "library.db")
+    t2 = float(db.execute("SELECT v FROM meta WHERE k='built_at'").fetchone()[0])
+    assert t2 > t1, "built_at deve cambiare: la cache dell'elenco giochi si basa su di esso"
     rows = db.execute("SELECT key, title, store, is_primary FROM games").fetchall()
     db.close()
     assert rows == [("windows/manual:7", "Mio Gioco", "manual", 1)], rows

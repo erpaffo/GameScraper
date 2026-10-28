@@ -886,7 +886,8 @@ def create_app(cfg) -> FastAPI:
 
     @app.post("/api/running/stop")
     def api_running_stop():
-        return {"stopped": launcher.stop()}
+        stopped = launcher.stop()
+        return {"stopped": stopped, "found": launcher.stop_found}  # found=False: nessun processo trovato, interrotto solo nel launcher
 
     @app.post("/api/game/{gid}/open-folder")
     def api_open_folder(gid: int):

@@ -1215,7 +1215,7 @@ async function pollRunning() {
     bar.className = r.status === "extracting" ? "extracting" : "";
     const what = r.status === "extracting" ? (r.message || "Estrazione…") : r.status === "starting" ? "Avvio…" : `In esecuzione con ${esc(r.emulator)}`;
     bar.innerHTML = `<span class="dot"></span><b>${esc(r.title)}</b><span class="muted">${esc(what)}</span>`
-      + (r.status === "running" ? `<button class="btn" id="run-shot" title="Schermata del gioco (${esc(SHOTS.hotkey)} · controller: Select+R1)">📷${r.shots ? " " + r.shots : ""}</button>` : "");
+      + (r.status === "running" ? `<button class="btn" id="run-stop" title="Chiude il gioco in esecuzione">■ Chiudi gioco</button><button class="btn" id="run-shot" title="Schermata del gioco (${esc(SHOTS.hotkey)} · controller: Select+R1)">📷${r.shots ? " " + r.shots : ""}</button>` : "");
     if (S.running && r.status === "running" && (r.shots || 0) > (S.running.shots || 0)) toast("📷 Schermata salvata");
     pollTimer = setTimeout(pollRunning, 1500);
   } else {
@@ -3921,7 +3921,16 @@ function bind() {
   $("#pf-reset").onclick = () => saveProfile(true);
   $("#pf-exe-pick").onclick = async () => { const p = await pickPath("file"); if (p) { $("#pf-exe").value = p; pfRefresh(); } };
   $("#pf-comp-pick").onclick = async () => { const p = await pickPath("file"); if (p) $("#pf-comp-exe").value = p; };
-  $("#running").addEventListener("click", (e) => { if (e.target.closest("#run-shot")) api("/api/running/screenshot", { body: {} }); });
+  $("#running").addEventListener("click", async (e) => {
+    if (e.target.closest("#run-shot")) api("/api/running/screenshot", { body: {} });
+    if (!e.target.closest("#run-stop")) return;
+    if (!confirm(`Chiudere «${S.running?.title || "il gioco"}»? I progressi non salvati vanno persi.`)) return;
+    try {
+      const r = await api("/api/running/stop", { body: {} });
+      toast(r.found ? "Gioco chiuso" : "Gioco non trovato: esecuzione interrotta nel launcher", !r.found);
+    } catch (err) { toast(err.message, true); }
+    pollRunning();
+  });
   api("/api/shots").then((d) => {
     $("#cnt-shots").textContent = d.shots.length || "";
     SHOTS.hotkey = d.settings.hotkey ? d.settings.hotkey.split("+").map((k) => k[0].toUpperCase() + k.slice(1)).join("+") : "—";

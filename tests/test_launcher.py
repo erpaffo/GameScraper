@@ -105,6 +105,44 @@ def test_scripts_and_close_launcher(tmp: Path):
     print("ok  script prima/dopo (tutti i giochi + gioco) e chiusura del launcher")
 
 
+def test_stop_game(tmp: Path):
+    import time
+    cfg = C.Config()
+
+    def wait(ln, status, secs=15):
+        end = time.time() + secs
+        while ln.state.get("status") != status and time.time() < end:
+            time.sleep(0.05)
+        return ln.state.get("status") == status
+
+    # 1) gioco avviato direttamente: «Chiudi gioco» chiude il processo e lo stato diventa «finished»
+    user = FakeUser()
+    ln = L.Launcher(cfg, user)
+    ln.launch_pc("manual:1", "Lungo", {"type": "exe", "target": sys.executable, "args": ["-c", "import time; time.sleep(60)"]}, "", "manual")
+    assert wait(ln, "running"), ln.state
+    t0 = time.time()
+    assert ln.stop() and ln.stop_found
+    assert wait(ln, "finished") and time.time() - t0 < 10 and user.plays == ["manual:1"], ln.state
+
+    # 2) avviato da un launcher (uri), nessun processo da trovare: si interrompe comunque l'attesa del launcher
+    saved = (L.open_uri, L._procs_named, L.hide_launcher_windows, L.Launcher._game_procs)
+    # niente scansione dei processi veri (lenta sotto carico) ne' finestre da ridurre a icona
+    L.open_uri, L._procs_named, L.hide_launcher_windows = (lambda target: None), (lambda name: []), (lambda name: None)
+    L.Launcher._game_procs = staticmethod(lambda folder: [])
+    try:
+        ln = L.Launcher(cfg, FakeUser())
+        ln.launch_pc("steam:2", "Da Steam", {"type": "uri", "target": "steam://rungameid/2"}, str(tmp), "Steam", "steam")
+        assert wait(ln, "running"), ln.state
+        t0 = time.time()
+        assert ln.stop() and not ln.stop_found  # niente da chiudere, ma l'esecuzione finisce nel launcher
+        assert wait(ln, "finished") and time.time() - t0 < 10, ln.state
+    finally:
+        L.open_uri, L._procs_named, L.hide_launcher_windows, L.Launcher._game_procs = saved
+    # nessun gioco in esecuzione: niente da fermare
+    assert not ln.stop()
+    print("ok  Chiudi gioco: processo chiuso; se non si trova, l'esecuzione si interrompe comunque")
+
+
 def test_shortcut(tmp: Path):
     from pozzo.library import shortcut as SC
     assert SC.file_name('Zelda: Ocarina of Time? "3D"') == "Zelda Ocarina of Time 3D"
@@ -125,6 +163,8 @@ if __name__ == "__main__":
         test_eden_plan_and_command(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_scripts_and_close_launcher(Path(t))
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_stop_game(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_shortcut(Path(t))
     print("TUTTI I TEST OK")

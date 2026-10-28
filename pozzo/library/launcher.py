@@ -359,6 +359,10 @@ SCRIPT_KEYS = ("before", "after")  # script prima/dopo il gioco: in cfg.app["lau
 STORE_LAUNCHERS = {"steam": "steam.exe", "epic": "epicgameslauncher.exe", "gog": "galaxyclient.exe",
                    "battlenet": "battle.net.exe", "amazon": "amazon games.exe"}
 BEFORE_WAIT = 15  # secondi massimi di attesa di uno script «prima» del gioco, poi il gioco parte comunque
+LAUNCHER_START_WAIT = 40  # secondi massimi per veder comparire il processo del launcher (Battle.net) prima di lanciare il gioco
+LAUNCHER_SETTLE = 8       # secondi di pausa dopo la sua comparsa: il launcher deve essere attivo per accettare il comando
+LAUNCH_TRIES = 3          # tentativi di avvio di un gioco passato dal launcher
+LAUNCH_CHECK = 75         # secondi di attesa del processo del gioco prima di riprovare
 LAUNCHER_GRACE = 10 # secondi dopo la partita prima di chiudere il launcher: finisce la sincronizzazione dei salvataggi
 
 
@@ -427,6 +431,8 @@ class Launcher:
         self.on_event = on_event or (lambda name, data: None)
         self.shots = shots  # archivio delle schermate (screens.Shots)
         self.profile_of = profile_of or (lambda key: None)  # profilo di avvio del gioco
+        self._stop_evt = threading.Event()  # "Chiudi gioco": fa smettere di aspettare il gioco, anche se non si trova il processo
+        self.stop_found = False  # l'ultimo stop ha trovato (e chiuso) dei processi?
         self.state: dict = {}
         self.lock = threading.Lock()
         self._hotkey = None
@@ -501,8 +507,16 @@ class Launcher:
             shot_held = combo
             time.sleep(0.05)
 
+    def _wait_proc(self, proc):
+        """Aspetta la fine del processo, ma si ferma subito se l'utente preme «Chiudi gioco»."""
+        while proc.poll() is None and not self._stop_evt.is_set():
+            self._stop_evt.wait(0.5)
+
     def stop(self) -> bool:
-        """Chiude il gioco in esecuzione (es. Select+Start tenuti premuti nella Big Picture)."""
+        """Chiude il gioco in esecuzione (pulsante «Chiudi gioco», Select+Start nella Big Picture).
+        Se non trova nessun processo da chiudere (gioco avviato da un launcher, cartella sconosciuta...) interrompe
+        comunque l'attesa: il launcher smette di mostrarlo «in esecuzione». False solo se non c'era nessun gioco."""
+        self.stop_found = False
         if self.state.get("status") != "running":
             return False
         try:
@@ -535,7 +549,9 @@ class Launcher:
                     p.kill()
                 except Exception:
                     pass
-        return bool(procs) or bool(proc)
+        self.stop_found = bool(procs) or bool(proc)
+        self._stop_evt.set()  # l'attesa in _run_pc/_run finisce: tempo di gioco registrato e stato «finished»
+        return True
 
     def running(self) -> dict:
         return dict(self.state)
@@ -549,6 +565,7 @@ class Launcher:
                 cands = ", ".join(e + (f" (core {c})" if c else "") for e, c in PRESETS.get(platform.id, [])) or "nessun preset"
                 raise LaunchError(f"Nessun emulatore configurato per {platform.name}. Aggiungi in config.toml, "
                                   f"sezione [emulators], uno di: {cands}")
+            self._stop_evt.clear()
             self.state = {"key": key, "title": title, "status": "starting", "message": "", "emulator": pl["emulator"],
                           "emulator_id": pl["emulator"], "exe": pl["exe"], "profile": pl.get("profile", False),
                           "started": time.time(), "shots": 0}
@@ -563,6 +580,7 @@ class Launcher:
                 raise LaunchError(f"E' gia' in esecuzione: {self.state.get('title')}")
             if not launch or not launch.get("target"):
                 raise LaunchError("Questo gioco non ha un comando di avvio (prova ad aprirlo dallo store)")
+            self._stop_evt.clear()
             self.state = {"key": key, "title": title, "status": "starting", "message": "", "emulator": store,
                           "emulator_id": "", "exe": launch.get("target") if launch.get("type") != "uri" else None,
                           "started": time.time(), "shots": 0}
@@ -634,13 +652,28 @@ class Launcher:
         try:
             target, args = launch["target"], launch.get("args") or []
             t0 = time.time()
-            proc = None
-            if launch.get("type") == "uri":
-                open_uri(target)
-            else:
-                if not Path(target).exists() and Path(target).name.lower() not in self.LAUNCHER_EXES:
-                    raise LaunchError(f"Eseguibile non trovato: {target}")
-                proc = subprocess.Popen([target, *args], cwd=launch.get("cwd") or str(Path(target).parent))
+            is_uri = launch.get("type") == "uri"
+            if not is_uri and not Path(target).exists() and Path(target).name.lower() not in self.LAUNCHER_EXES:
+                raise LaunchError(f"Eseguibile non trovato: {target}")
+
+            def ensure_launcher():
+                """Battle.net: prima si apre da solo e si aspetta che sia attivo, poi riceve il comando del gioco."""
+                if store_id != "battlenet" or is_uri or not lname or _procs_named(lname):
+                    return
+                subprocess.Popen([target], cwd=launch.get("cwd") or str(Path(target).parent))
+                end = time.time() + LAUNCHER_START_WAIT
+                while time.time() < end and not _procs_named(lname) and not self._stop_evt.is_set():
+                    self._stop_evt.wait(1)
+                self._stop_evt.wait(LAUNCHER_SETTLE)
+
+            def start():
+                ensure_launcher()
+                if is_uri:
+                    open_uri(target)
+                    return None
+                return subprocess.Popen([target, *args], cwd=launch.get("cwd") or str(Path(target).parent))
+
+            proc = start()
             if quiet:
                 threading.Thread(target=hide_launcher_windows, args=(lname,), daemon=True).start()
             self._set(status="running", message=target)
@@ -649,15 +682,24 @@ class Launcher:
             via_launcher = proc is None or Path(target).name.lower() in self.LAUNCHER_EXES
             track = launch.get("track_dir") or install_dir
             if not via_launcher:
-                proc.wait()  # gioco avviato direttamente: si aspetta il suo processo
+                self._wait_proc(proc)  # gioco avviato direttamente: si aspetta il suo processo
             elif track and Path(track).is_dir():
-                # avviato tramite launcher: si aspetta che compaia un processo del gioco, poi che finisca
-                deadline = time.time() + 180
-                while time.time() < deadline and not self._game_procs(track):
-                    time.sleep(2)
+                # avviato tramite launcher: si controlla che il gioco parta davvero, altrimenti si riprova
+                # (start() riapre il launcher se nel frattempo e' stato chiuso)
+                for attempt in range(LAUNCH_TRIES):
+                    deadline = time.time() + LAUNCH_CHECK
+                    while time.time() < deadline and not self._game_procs(track) and not self._stop_evt.is_set():
+                        self._stop_evt.wait(2)
+                    if self._game_procs(track) or self._stop_evt.is_set() or attempt == LAUNCH_TRIES - 1:
+                        break
+                    self._set(message=f"Il gioco non e' partito: nuovo tentativo {attempt + 2}/{LAUNCH_TRIES}")
+                    proc = start()
+                    self._proc = proc
+                if lname and self._game_procs(track) and (self.cfg.app.get("launch") or {}).get("hide_launcher", True):
+                    threading.Thread(target=hide_launcher_windows, args=(lname, 15), daemon=True).start()  # il gioco passa avanti
                 t0 = time.time() if self._game_procs(track) else t0
-                while self._game_procs(track):
-                    time.sleep(3)
+                while self._game_procs(track) and not self._stop_evt.is_set():
+                    self._stop_evt.wait(3)
             played = time.time() - t0 if (not via_launcher or track) else 0
             self.user.record_play(key, played)
             self._end_companion(comp, key)
@@ -711,7 +753,7 @@ class Launcher:
             t0 = time.time()
             proc = subprocess.Popen(cmd, cwd=str(Path(pl["exe"]).parent))
             self._proc, self._track = proc, None
-            proc.wait()
+            self._wait_proc(proc)
             played = time.time() - t0
             self.user.record_play(key, played)
             self._end_companion(comp, key)

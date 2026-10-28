@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.2 (2026-10-28)
+### Corretto
+
+- Giochi aggiunti a mano: il gioco appena aggiunto non compariva nell'interfaccia (l'elenco in cache non veniva invalidato)
+
+### Aggiunto
+
+- Pulsante «Chiudi gioco» nella barra del gioco in esecuzione: chiude il gioco e, se non lo trova (per esempio avviato da un launcher), interrompe comunque l'esecuzione mostrata nel launcher
+
+### Migliorato
+
+- Giochi avviati da un launcher (Battle.net, Steam...): se il gioco non parte l'avvio viene ripetuto fino a 3 volte, riaprendo il launcher se si è chiuso. Hearthstone: prima si apre Battle.net e si attende che sia attivo, poi parte il gioco e Battle.net viene ridotto a icona
+
 ## 0.9.1 (2026-10-28)
 ### Corretto
 

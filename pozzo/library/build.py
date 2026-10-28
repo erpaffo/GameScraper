@@ -691,6 +691,9 @@ def update_manual(cfg) -> bool:
         db.executemany(INSERT_GAME, [_pc_row(e) for e in pc if e["store"] == "manual"])
         # un gioco a mano con lo stesso titolo di uno store puo' diventare (o smettere di essere) la versione principale
         db.executemany("UPDATE games SET is_primary=? WHERE key=?", [(e["primary"], e["key"]) for e in pc])
+        # il server e l'interfaccia riconoscono una libreria cambiata dall'orario di costruzione: senza, mostrano la vecchia lista
+        db.execute("INSERT OR REPLACE INTO meta VALUES('built_at', ?)", (str(time.time()),))
+        db.execute("INSERT OR REPLACE INTO meta VALUES('games', (SELECT COUNT(*) FROM games))")
         db.commit()
     finally:
         db.close()
