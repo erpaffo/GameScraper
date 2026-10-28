@@ -1,5 +1,24 @@
 # Changelog
 
+## Non rilasciato
+
+### Migliorato
+
+- Port PC: il catalogo si apre subito dalla copia salvata (anche in memoria) e si aggiorna in background; a fine aggiornamento la pagina si ridisegna da sola
+- Store Minerva: gli store già presenti per una console non vengono duplicati né riletti, si aggiungono e si leggono solo i nuovi
+
+### Corretto
+
+- Store online PS4/PS5: copertine, descrizioni, generi, data e peso letti dalle pagine del sito (prima solo Switch/NDS)
+- Console preferite (e le altre preferenze dell'interfaccia: filtri, ordinamenti, ultimo punto visto) sparivano alla chiusura dell'app: la finestra ora conserva i suoi dati tra un avvio e l'altro
+- Store estensioni: lo store ufficiale dava errore 404 (il vecchio repository gamescraper-extensions non esiste più); ora legge l'elenco dal repository dell'app
+
+### Aggiunto
+
+- PlayStation 5: cartelle «ps5» riconosciute e giochi avviati con SharpEmu (eboot.bin)
+- Store online PS5: superpsx preimpostato dal plugin Minerva, schede lette con copertina, generi, data e peso
+- Icona di Pozzo Launcher nell'area di notifica di Windows (vicino a volume e rete): un clic riapre la finestra, tasto destro per «Apri» ed «Esci»
+
 ## 0.9.2 (2026-10-28)
 ### Corretto
 

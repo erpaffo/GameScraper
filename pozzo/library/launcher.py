@@ -64,6 +64,7 @@ PRESETS: dict[str, list[tuple[str, str | None]]] = {
     "xbox": [("xemu", None)],
     "xbox360": [("xenia", None)],
     "ps4": [("shadps4", None)],
+    "ps5": [("sharpemu", None)],
     "pcengine": [(RA, "mednafen_pce_fast")],
     "pcenginecd": [(RA, "mednafen_pce_fast")],
     "pcfx": [(RA, "mednafen_pcfx")],
@@ -111,6 +112,7 @@ STANDALONE_ARGS = {
     "flycast": ["{rom}"],
     "vita3k": ["{rom}"],
     "shadps4": ["{rom}"],
+    "sharpemu": ["{rom}"],
 }
 
 # nomi degli eseguibili per la ricerca automatica degli emulatori in una cartella
@@ -133,6 +135,7 @@ KNOWN_EXES = {
     "xemu": ["xemu.exe", "xemu"],
     "flycast": ["flycast.exe", "flycast"],
     "shadps4": ["shadps4.exe", "shadps4"],
+    "sharpemu": ["sharpemu.exe", "sharpemu"],
 }
 
 
@@ -262,6 +265,11 @@ def resolve_target(platform: P.Platform, path: Path) -> Path:
     files = [f for f in path.rglob("*") if f.is_file()]
     if platform.id == "ps3":
         eboot = [f for f in files if f.name.upper() == "EBOOT.BIN" and f.parent.name.upper() == "USRDIR"]
+        if eboot:
+            return min(eboot, key=lambda f: len(f.parts))
+    if platform.id == "ps5":
+        # SharpEmu avvia l'eboot.bin del gioco, non la cartella che lo contiene
+        eboot = [f for f in files if f.name.lower() == "eboot.bin"]
         if eboot:
             return min(eboot, key=lambda f: len(f.parts))
     if platform.id == "xbox360":

@@ -25,7 +25,8 @@ CREDIT = "Immagini delle console: RetroArch assets (libretro), licenza CC BY 4.0
 # nomi delle immagini quando non coincidono con i nomi libretro della piattaforma
 EXTRA = {
     "wiiu": ["Nintendo - Wii U"], "switch": ["Nintendo - Switch", "Nintendo - Nintendo Switch"],
-    "ps3": ["Sony - PlayStation 3 (PSN)"], "ps4": ["Sony - PlayStation 4"], "psvita": ["Sony - PlayStation Vita"],
+    "ps3": ["Sony - PlayStation 3 (PSN)"], "ps4": ["Sony - PlayStation 4"], "ps5": ["Sony - PlayStation 5"],
+    "psvita": ["Sony - PlayStation Vita"],
     "xbox360": ["Microsoft - Xbox 360"], "xbox": ["Microsoft - Xbox"], "atomiswave": ["Atomiswave"],
     "atari800": ["Atari - 8-bit Family"], "gameandwatch": ["Nintendo - Game & Watch"], "neogeo": ["SNK - Neo Geo"],
     "arcade": ["MAME"], "fbneo": ["FBNeo - Arcade Games"], "cps1": ["MAME"], "cps2": ["MAME"], "cps3": ["MAME"],

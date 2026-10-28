@@ -63,12 +63,15 @@ _NOISE = re.compile(r"\b(nsp|xci|eshop|switch|update|dlc|repack|multi\d*|usa|eur
 _DESC_AFTER = re.compile(r"\bdescription\s*:\s*(.{40,}?)(?:\s+(?:switch\s|download links?|download now|"
                          r"password|credits|how to|install|note)\b|$)", re.I | re.S)
 _TITLE_ID = re.compile(r"title\s*id\s*:\s*([0-9a-f]{16})", re.I)
-_DATE = re.compile(r"release\s*date\s*:\s*(\d{4}-\d{2}-\d{2})", re.I)
+_DATE = re.compile(r"release\s*date\s*:\s*(\d{4}-\d{2}-\d{2}|[A-Za-z]{3,9}\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})",
+                   re.I)
+_MONTHS = {m: i for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun",
+                                       "jul", "aug", "sep", "oct", "nov", "dec"), 1)}
 _PUBLISHER = re.compile(r"publisher\s*:\s*(.{2,90}?)(?=\s+(?:type|format|title|category|language|size|version)\s*:|$)",
                         re.I | re.S)
-_CATEGORY = re.compile(r"categor(?:y|ies)\s*:\s*(.{2,90}?)(?=\s+(?:publisher|type|format|title|language|size)\s*:|$)",
-                       re.I | re.S)
-_SIZE = re.compile(r"title\s*size\s*:\s*([\d.,]+\s*[kmgt]i?b)", re.I)
+_CATEGORY = re.compile(r"(?:categor(?:y|ies)|genres?)\s*:\s*(.{2,90}?)(?=\s+(?:publisher|type|format|title|language|size|"
+                       r"mode|release)\s*:|$)", re.I | re.S)
+_SIZE = re.compile(r"(?:title\s*)?size\s*:\s*([\d.,]+\s*[kmgt]i?b)", re.I)
 _LANGS = re.compile(r"languages?\s*:\s*([a-zA-Z ,/&]{2,90})", re.I)
 _VERSION = re.compile(r"\bversion\s*:\s*(v?[\d.]+)", re.I)
 _SITE_SUFFIX = re.compile(r"\s+[-–|]\s+(?:[\w-]{2,30}\.(?:net|com|org|to|io)|nxbrew(?:\.net)?|ziperto(?:\.com)?)\s*$", re.I)
@@ -83,6 +86,16 @@ def clean_title(text: str) -> str:
     s = _NOISE.sub(" ", s)
     s = s.replace("™", " ").replace("®", " ")
     return re.sub(r"\s+", " ", s).strip(" -–—:")
+
+
+def _iso_date(text: str) -> str:
+    """«April 20, 2021» -> «2021-04-20»; le date gia' ISO restano come sono, quelle illeggibili spariscono."""
+    t = (text or "").strip()
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", t):
+        return t
+    m = re.fullmatch(r"([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})", t)
+    month = _MONTHS.get(m.group(1)[:3].lower()) if m else None
+    return f"{m.group(3)}-{month:02d}-{int(m.group(2)):02d}" if month else ""
 
 
 def _tokens(text: str) -> set[str]:
@@ -192,6 +205,16 @@ def _description(text: str, node, soup) -> str:
     return ""
 
 
+def _specs_text(soup) -> str:
+    """Elenchi <dt>/<dd> di una scheda (es. superpsx: Genre, Release Date, Size) come righe «Chiave: valore»,
+    così li leggono le stesse espressioni usate per i siti che scrivono «Genre: …» nel testo."""
+    out = []
+    for dl in soup.find_all("dl"):
+        for key, val in zip(dl.find_all("dt"), dl.find_all("dd")):
+            out.append(f"{_clean_text(key)}: {_clean_text(val)}")
+    return "\n".join(out)
+
+
 def _screenshots(node, cover: str, base_url: str, limit: int = 2) -> list[str]:
     out: list[str] = []
     if not hasattr(node, "select"):
@@ -212,6 +235,7 @@ def parse_detail(page: str, url: str) -> dict:
     rules = site_rules(url)
     soup = BeautifulSoup(page, "html.parser")
     text, node = _content_text(soup, rules)
+    text = "\n".join(x for x in (text, _specs_text(soup)) if x)
 
     title = ""
     og_title = soup.find("meta", attrs={"property": "og:title"})
@@ -234,6 +258,8 @@ def parse_detail(page: str, url: str) -> dict:
         m = regex.search(text)
         if m:
             data[key] = re.sub(r"\s+", " ", m.group(1)).strip(" ,;")
+    if data.get("release_date"):
+        data["release_date"] = _iso_date(data["release_date"])
     if data.get("size_text"):
         data["size"] = parse_size(data["size_text"])
         data.pop("size_text", None)
@@ -355,7 +381,7 @@ async def fill(cfg, cache, tdb=None, log=print, limit: int = 0, cancelled=None,
             continue
         for url in urls or []:
             info = cached_info(cache, pid, url)
-            if info["type"] not in ("type_a", "type_b"):
+            if info["type"] == "filelist":
                 continue  # indici di file (Minerva e simili): i metadati arrivano dallo scraper normale
             for it in info["entries"]:
                 entries.setdefault(it["url"], (pid, it))
@@ -452,7 +478,10 @@ async def fill(cfg, cache, tdb=None, log=print, limit: int = 0, cancelled=None,
 
                 # 3) ricerca su ziperto per i giochi rimasti senza copertina
                 if search_site and not stats["stopped"]:
-                    missing = [u for u in entries if not (data_by_url.get(u) or {}).get("cover")]
+                    # ziperto ha solo giochi Switch: cercare lì le altre console darebbe copertine sbagliate
+                    ziperto = "ziperto" in search_site
+                    missing = [u for u in entries if not (data_by_url.get(u) or {}).get("cover")
+                               and (not ziperto or entries[u][0] == "switch")]
                     if missing:
                         log(f"Ricerca su {search_site}: {len(missing):,} giochi senza copertina")
                     for i in range(0, len(missing), batch):

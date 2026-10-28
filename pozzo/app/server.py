@@ -3837,9 +3837,14 @@ def run(cfg, port: int = 8765, browser: bool = False, bigpicture: bool = False):
         state_fs = {"on": bigpicture}
         api = Api()
         WINDOW_FOCUS["fn"] = api.focus_window
+        from .. import notify
+        ico = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2])) / "packaging" / "icon.ico"
+        notify.start_tray(str(ico), api.focus_window, lambda: webview.windows[0].destroy())  # icona vicino a volume e rete
         webview.create_window("Pozzo Launcher", start_url, width=1500, height=940, min_size=(960, 600),
                               background_color="#111318", js_api=api, fullscreen=bigpicture)
-        webview.start()
+        # private_mode=False + cartella fissa: senza, la finestra butta via il localStorage alla chiusura
+        # (console preferite, filtri, ordinamenti...)
+        webview.start(private_mode=False, storage_path=str(Path(cfg.cache).parent / "webview"))
     except Exception as e:  # pywebview non disponibile: si usa il browser
         print(f"Finestra desktop non disponibile ({e}), apro il browser: {url}")
         import webbrowser
@@ -3847,6 +3852,11 @@ def run(cfg, port: int = 8765, browser: bool = False, bigpicture: bool = False):
         t.join()
     finally:
         server.should_exit = True
+        try:
+            from .. import notify
+            notify.remove()
+        except Exception:
+            pass
         t.join(timeout=3)  # spegnimento ordinato del server: telefono e controller virtuali
         # uscita immediata: senza, Python aspetta i lavori in sottofondo (lettura store, scraping) e la
         # finestra chiusa resta un processo che lavora; quei lavori riprendono da soli al prossimo avvio

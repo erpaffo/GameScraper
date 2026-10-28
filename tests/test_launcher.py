@@ -143,6 +143,40 @@ def test_stop_game(tmp: Path):
     print("ok  Chiudi gioco: processo chiuso; se non si trova, l'esecuzione si interrompe comunque")
 
 
+def test_sharpemu_ps5(tmp: Path):
+    """PS5: SharpEmu avvia l'eboot.bin del gioco (cartella), non la cartella."""
+    emu_dir = tmp / "SharpEmu"
+    emu_dir.mkdir(parents=True)
+    exe = emu_dir / "SharpEmu.exe"
+    exe.write_bytes(b"")
+
+    found = L.detect_emulators(tmp / "SharpEmu")
+    assert found == {"sharpemu": str(exe)}, found
+
+    cfg = C.Config()
+    cfg.emulators = found
+    ps5 = P.get("ps5")
+    assert ps5.name == "PlayStation 5" and ps5.exts == ("pkg",), ps5
+
+    pl = L.plan(cfg, ps5)
+    assert pl is not None and pl["emulator"] == "sharpemu", pl
+    assert pl["args"] == ["{rom}"], pl["args"]
+
+    game = tmp / "roms" / "ps5" / "Demon's Souls"
+    (game / "sce_sys").mkdir(parents=True)
+    (game / "eboot.bin").write_bytes(b"a" * 300)
+    (game / "sce_sys" / "param.sfo").write_bytes(b"b" * 500)  # piu' grande, ma non e' il gioco
+
+    target = L.resolve_target(ps5, game)
+    assert target == game / "eboot.bin", target
+    cmd = [pl["exe"], *[a.replace("{rom}", str(target)) for a in pl["args"]]]
+    assert cmd == [str(exe), str(game / "eboot.bin")], cmd
+
+    # ogni console con un preset deve esistere davvero nella tabella delle piattaforme
+    assert not [k for k in L.PRESETS if k not in P.PLATFORMS], [k for k in L.PRESETS if k not in P.PLATFORMS]
+    print("ok  PS5: SharpEmu avviato con l'eboot.bin del gioco (preset e ricerca dell'eseguibile)")
+
+
 def test_shortcut(tmp: Path):
     from pozzo.library import shortcut as SC
     assert SC.file_name('Zelda: Ocarina of Time? "3D"') == "Zelda Ocarina of Time 3D"
@@ -165,6 +199,8 @@ if __name__ == "__main__":
         test_scripts_and_close_launcher(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_stop_game(Path(t))
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_sharpemu_ps5(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_shortcut(Path(t))
     print("TUTTI I TEST OK")

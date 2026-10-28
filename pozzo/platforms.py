@@ -96,6 +96,8 @@ PLATFORMS: dict[str, Platform] = {p.id: p for p in [
        dir_games=True, **CD),
     _p("ps4", "PlayStation 4", "pkg", None, 48, None, (), ("playstation 4", "sony playstation 4"),
        dir_games=True, **CD),
+    _p("ps5", "PlayStation 5", "pkg", None, 167, None, (), ("playstation 5", "sony playstation 5"),
+       dir_games=True, **CD),
     # --- PC: giochi degli store (Steam, Epic, GOG...) e aggiunti a mano, non da cartelle ROM ---
     _p("windows", "PC (Windows)", "", None, 6, 1, (), (), virtual=True),
     # --- Microsoft ---

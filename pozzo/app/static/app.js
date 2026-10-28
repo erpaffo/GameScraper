@@ -1408,6 +1408,17 @@ const FREE_KIND = { "Free to keep": "Da tenere", "Free with Prime": "Con Prime",
 
 /* ---- pagina: port PC (ricompilazioni e decomp dal catalogo di Quiver Launcher) */
 const PORTS_F = { console: store.get("portsConsole", ""), mine: "", q: "", open: null };
+/** Il catalogo si apre subito dalla copia salvata e si aggiorna in background: a fine aggiornamento la pagina si ridisegna. */
+async function followPortsRefresh(pv) {
+  if (PORTS_F.following) return;
+  PORTS_F.following = true;
+  try {
+    let r;
+    do { await new Promise((ok) => setTimeout(ok, 1500)); r = await api("/api/ports/refreshing"); } while (r.refreshing);
+  } catch { return; } finally { PORTS_F.following = false; }
+  if (S.view.type === "ports" && pv.isConnected && !PORTS_F.open) { S.ports = null; renderPorts(pv); }
+}
+
 async function renderPorts(pv, force = false) {
   if (PORTS_F.open) return renderPort(pv, PORTS_F.open);
   pv.innerHTML = `<div class="page"><p class="muted">Leggo il catalogo dei port…</p></div>`;
@@ -1415,6 +1426,7 @@ async function renderPorts(pv, force = false) {
   try { d = await api(`/api/ports${force ? "?force=1" : ""}`); } catch (e) { pv.innerHTML = `<div class="page"><p>${esc(e.message)}</p></div>`; return; }
   S.ports = d;
   portsBadge(d);
+  if (d.refreshing) followPortsRefresh(pv);
   const rank = (i) => (i.installed?.update ? 0 : i.installed ? 1 : i.roms.length ? 2 : 3);
   d.items.sort((a, b) => rank(a) - rank(b) || b.recommended - a.recommended || collator.compare(a.name, b.name));
   const cons = Object.entries(d.consoles).map(([id, name]) => [id, name, d.items.filter((i) => i.consoles.includes(id)).length])

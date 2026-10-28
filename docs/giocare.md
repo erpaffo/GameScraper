@@ -6,7 +6,7 @@ Gli emulatori si configurano in **Impostazioni › Emulatori**, in due tabelle.
 
 **Programmi**: un percorso per emulatore, valido per tutte le console che lo usano. **🔍 Trova emulatori** cerca in
 una cartella gli eseguibili conosciuti: RetroArch, Ryujinx, Eden, melonDS, Dolphin, PCSX2, DuckStation, PPSSPP,
-RPCS3, Vita3K, Azahar, Cemu, Xenia, xemu, Flycast, shadPS4. **＋ Aggiungi un altro emulatore** aggiunge un programma
+RPCS3, Vita3K, Azahar, Cemu, Xenia, xemu, Flycast, shadPS4, SharpEmu. **＋ Aggiungi un altro emulatore** aggiunge un programma
 qualsiasi.
 
 **Emulatore per console**: per ogni console scegli
@@ -72,8 +72,8 @@ dall'app. Non è disponibile per i giochi degli store online, che non sono insta
 **▶ Gioca**, `Invio` o un doppio clic sulla copertina. L'app sceglie da sola il file giusto:
 
 - gli **ZIP di dischi** (per esempio i GameCube di Myrient) vengono estratti automaticamente prima dell'avvio;
-- per i **giochi a cartella** si avvia il file corretto (PS3 → `EBOOT.BIN`, Switch → il file del gioco base, non un
-  aggiornamento o un DLC);
+- per i **giochi a cartella** si avvia il file corretto (PS3 → `EBOOT.BIN`, PS5 → `eboot.bin` con SharpEmu,
+  Switch → il file del gioco base, non un aggiornamento o un DLC);
 - con un emulatore mancante il dettaglio lo dice chiaramente, con il collegamento alle impostazioni.
 
 Durante la partita la barra **In esecuzione** mostra il gioco in corso e permette di chiuderlo.

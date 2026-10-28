@@ -190,7 +190,7 @@ installano da lì, nella cartella `plugins/` accanto a `config.toml`. Dopo un'in
 
 Le estensioni arrivano dalle **fonti**, elencate in *Fonti delle estensioni* in cima alla pagina:
 
-- la prima è sempre lo **store ufficiale** ([pozzo-extensions](https://github.com/erpaffo/gamescraper-extensions)) e non si toglie;
+- la prima è sempre lo **store ufficiale** ([cartella `extensions/` del repository dell'app](https://github.com/erpaffo/Pozzo-Launcher/tree/main/extensions)) e non si toglie;
 - **Aggiungi** accetta il link di un repository GitHub (`https://github.com/utente/repo`, anche `/tree/<tag>`) o
   l'indirizzo https di un `index.json`. Se il link è il repository di un'estensione si aggiunge quell'estensione,
   se è un altro store si aggiunge tutto il suo elenco. L'app controlla che il link risponda e contenga estensioni;

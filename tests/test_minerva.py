@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 ROOT = Path(__file__).parent.parent
-_spec = importlib.util.spec_from_file_location("minerva", ROOT / "pozzo/app/plugins/minerva/backend.py")
+_spec = importlib.util.spec_from_file_location("minerva", ROOT / "extensions/minerva/backend.py")
 M = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(M)
 
@@ -54,22 +54,51 @@ def test_platform_hints():
     print("ok  console non riconosciute dal nome del set")
 
 
-def test_store_switch_preimpostati():
-    """I preset Switch: tre indirizzi di elenco completo e una copia indipendente dalla costante."""
+def test_store_preimpostati():
+    """I preset: Switch (tre elenchi completi), PS4 e PS5 (superpsx) — e una copia indipendente dalla costante."""
     pre = M.presets()
-    assert list(pre) == ["switch"], pre
     assert pre["switch"] == [
         "https://nxbrew.net/game-index/",
         "https://www.ziperto.com/nintendo-switch-nsp/",
         "https://www.ziperto.com/nintendo-switch-xci/",
     ], pre
+    assert pre["ps4"] == ["https://www.superpsx.com/category/ps4/"], pre
+    assert pre["ps5"] == ["https://www.superpsx.com/category/ps5/"], pre
     pre["switch"].append("https://esempio.test/")  # il chiamante non deve modificare PRESETS
     assert "https://esempio.test/" not in M.PRESETS["switch"], M.PRESETS
-    print("ok  preset Switch: NXBrew + Ziperto NSP + Ziperto XCI, copia indipendente")
+    print("ok  preset: Switch (NXBrew, Ziperto NSP/XCI), PS4 e PS5 (superpsx), copia indipendente")
+
+
+def test_merge_salta_store_presenti():
+    """Uno store già presente non si raddoppia né si rilegge: si legge solo quello nuovo."""
+    cats = {"switch": ["https://nxbrew.net/game-index/"],
+            "ps5": {"urls": ["https://www.superpsx.com/category/ps5/"], "type": "type_c"}}
+    found = {"switch": ["https://nxbrew.net/game-index/", "https://www.ziperto.com/nintendo-switch-xci/"],
+             "ps5": ["https://www.superpsx.com/category/ps5"],  # stessa pagina scritta senza la barra finale
+             "ps4": ["https://www.superpsx.com/category/ps4/"]}
+    cats, added, todo = M.merge_catalogs(cats, found, lambda pid, u: True)
+    assert added == {"switch": ["https://www.ziperto.com/nintendo-switch-xci/"],
+                     "ps4": ["https://www.superpsx.com/category/ps4/"]}, added
+    assert todo == added, todo
+    assert cats["ps5"] == {"urls": ["https://www.superpsx.com/category/ps5/"], "type": "type_c"}, cats["ps5"]
+    assert cats["switch"] == ["https://nxbrew.net/game-index/", "https://www.ziperto.com/nintendo-switch-xci/"], cats
+
+    # presente ma mai letto (nessun gioco in cache): non si aggiunge, però si legge
+    cats2, added2, todo2 = M.merge_catalogs({"ps5": ["https://www.superpsx.com/category/ps5/"]},
+                                            {"ps5": ["https://www.superpsx.com/category/ps5/"]},
+                                            lambda pid, u: False)
+    assert added2 == {} and todo2 == {"ps5": ["https://www.superpsx.com/category/ps5/"]}, (added2, todo2)
+    assert M.store_key("https://www.Esempx.test/a/b/") == M.store_key("http://esempx.test/a/b"), M.store_key("x")
+    # stessa pagina scritta in due modi tra le novità: si aggiunge una volta sola
+    _, added3, todo3 = M.merge_catalogs({}, {"ps5": ["https://esempx.test/p/", "https://www.esempx.test/p"]},
+                                        lambda pid, u: True)
+    assert added3 == {"ps5": ["https://esempx.test/p/"]} == todo3, (added3, todo3)
+    print("ok  merge: store già presenti saltati, si legge solo il nuovo (e quello mai letto)")
 
 
 if __name__ == "__main__":
     test_collect()
     test_platform_hints()
-    test_store_switch_preimpostati()
+    test_store_preimpostati()
+    test_merge_salta_store_presenti()
     print("TUTTI I TEST OK")

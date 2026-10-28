@@ -63,7 +63,10 @@ le schede, con due barre di avanzamento (copertine e descrizioni) e un pulsante 
    mancanti in una regione vengono cercate nelle altre.
 2. **Pagine dei siti**: per le voci ancora senza copertina o descrizione l'app legge la pagina del gioco (al massimo
    2 richieste al secondo) e ne ricava copertina, descrizione, Title ID, data, editore, generi, peso e schermate.
-3. **Ricerca per titolo** sui siti che la permettono, per le voci rimaste senza copertina.
+   Vanno bene sia i siti che scrivono «Genre: …» nel testo sia quelli con i dati in tabella (`<dl>` con `<dt>`/`<dd>`,
+   come superpsx); le date estese («April 20, 2021») diventano `AAAA-MM-GG`.
+3. **Ricerca per titolo** sui siti che la permettono, per le voci rimaste senza copertina (solo per le console del
+   sito: la ricerca di Ziperto, per esempio, vale solo per Switch).
 
 Il lavoro già fatto resta in cache (60 giorni): ogni esecuzione riprende da dove era rimasta. Gli elenchi di file
 (formato `filelist`) sono esclusi: i loro dati arrivano dallo scraping normale.
@@ -231,10 +234,13 @@ Plugin**, voce *Link → Store* nella barra laterale) legge una di queste pagine
 
 Il plugin **Store Minerva** (voce nella barra laterale) aggiunge allo store online di ogni console le cartelle di
 minerva-archive.org elencate su r-roms.github.io, poi ne legge l'elenco dei giochi. **Importa da r-roms** mostra il
-log dell'importazione; i link già presenti restano, e al termine la libreria si ricostruisce.
+log dell'importazione; i link già presenti restano e **non vengono riletti**: si aggiungono e si leggono solo gli store
+nuovi per quella console (più quelli presenti ma mai letti, per esempio dopo aver aggiunto una console). Al termine la
+libreria si ricostruisce.
 
 Per **Switch** aggiunge anche tre elenchi completi **preimpostati**: l'indice dei giochi di NXBrew (formato `type_b`),
-Ziperto NSP (`type_c`) e Ziperto XCI (`type_d`). Quando una console ha più elenchi di formati diversi, il plugin
+Ziperto NSP (`type_c`) e Ziperto XCI (`type_d`). Per **PS4** e **PS5** preimposta l'archivio di superpsx
+(`type_c`, letto come i siti di ROM). Quando una console ha più elenchi di formati diversi, il plugin
 toglie il tipo fisso da `settings.json`, così ogni pagina viene riconosciuta da sola.
 
 ## Per chi programma

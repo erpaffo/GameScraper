@@ -16,6 +16,8 @@ _NIF_MESSAGE, _NIF_ICON, _NIF_TIP, _NIF_INFO = 0x01, 0x02, 0x04, 0x10
 _NIM_ADD, _NIM_MODIFY, _NIM_DELETE = 0, 1, 2
 _NIIF_INFO = 0x1
 _IDI_APPLICATION = 32512
+_WM_LBUTTONUP, _WM_LBUTTONDBLCLK, _WM_RBUTTONUP = 0x202, 0x203, 0x205
+_TPM_RIGHTBUTTON, _TPM_RETURNCMD = 0x2, 0x100
 # shortcut: il clic sulla notifica non apre niente (nessuna azione); si aggiunge quando serve
 
 _queue: queue.Queue = queue.Queue()
@@ -23,6 +25,8 @@ _thread: threading.Thread | None = None
 _lock = threading.Lock()
 _ready = False  # l'icona nascosta esiste: si possono mostrare i fumetti
 _error = ""  # ultimo errore interno (per la diagnosi) 
+_tray: dict = {}  # icona sempre visibile: {"icon": percorso .ico, "on_open", "on_quit"} (start_tray)
+_stop, _gone = threading.Event(), threading.Event()  # remove(): l'icona va tolta prima di uscire, o resta un fantasma
 
 
 def enabled(cfg) -> bool:
@@ -43,6 +47,26 @@ def send(cfg_or_title, title: str = "", body: str = "") -> bool:
         return True
     except Exception:  # mai un errore per una notifica
         return False
+
+
+def start_tray(icon: str, on_open, on_quit) -> bool:
+    """Icona dell'app nell'area di notifica (quella con volume e rete): clic = apre la finestra, tasto destro = menu.
+    Da chiamare prima di qualsiasi avviso, che usa la stessa icona."""
+    if sys.platform != "win32":
+        return False
+    _tray.update(icon=icon, on_open=on_open, on_quit=on_quit)
+    try:
+        _ensure_thread()
+        return True
+    except Exception:
+        return False
+
+
+def remove():
+    """Toglie l'icona dall'area di notifica (prima di uscire)."""
+    if _thread is not None and _thread.is_alive():
+        _stop.set()
+        _gone.wait(1)
 
 
 def _ensure_thread() -> queue.Queue:
@@ -91,7 +115,45 @@ def _loop():
         user32.LoadIconW.restype = wintypes.HICON
         shell32.Shell_NotifyIconW.argtypes = (wintypes.DWORD, ctypes.POINTER(NOTIFYICONDATAW))
         shell32.Shell_NotifyIconW.restype = wintypes.BOOL
-        proc = WNDPROC(lambda hwnd, msg, wparam, lparam: user32.DefWindowProcW(hwnd, msg, wparam, lparam))
+        user32.LoadImageW.argtypes = (wintypes.HINSTANCE, wintypes.LPCWSTR, wintypes.UINT, ctypes.c_int, ctypes.c_int, wintypes.UINT)
+        user32.LoadImageW.restype = wintypes.HANDLE
+        user32.CreatePopupMenu.restype = wintypes.HMENU
+        user32.AppendMenuW.argtypes = (wintypes.HMENU, wintypes.UINT, ctypes.c_size_t, wintypes.LPCWSTR)
+        user32.TrackPopupMenu.argtypes = (wintypes.HMENU, wintypes.UINT, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                                          wintypes.HWND, ctypes.c_void_p)
+        user32.DestroyMenu.argtypes = (wintypes.HMENU,)
+        user32.SetForegroundWindow.argtypes = (wintypes.HWND,)
+        user32.PeekMessageW.argtypes = (ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT, wintypes.UINT)
+        user32.DispatchMessageW.argtypes = (ctypes.POINTER(wintypes.MSG),)
+        user32.DispatchMessageW.restype = ctypes.c_ssize_t
+
+        def run(name: str):
+            fn = _tray.get(name)
+            if fn:
+                threading.Thread(target=fn, daemon=True).start()  # fuori dal ciclo dei messaggi: non lo blocca
+
+        def menu(hwnd):
+            m = user32.CreatePopupMenu()
+            user32.AppendMenuW(m, 0, 1, "Apri Pozzo Launcher")
+            user32.AppendMenuW(m, 0, 2, "Esci")
+            pt = wintypes.POINT()
+            user32.GetCursorPos(ctypes.byref(pt))
+            user32.SetForegroundWindow(hwnd)  # senza, il menu non si chiude cliccando fuori
+            cmd = user32.TrackPopupMenu(m, _TPM_RIGHTBUTTON | _TPM_RETURNCMD, pt.x, pt.y, 0, hwnd, None)
+            user32.DestroyMenu(m)
+            run({1: "on_open", 2: "on_quit"}.get(cmd, ""))
+
+        def wndproc(hwnd, msg, wparam, lparam):
+            if msg == _WM_APP + 1 and _tray:
+                ev = lparam & 0xFFFF
+                if ev in (_WM_LBUTTONUP, _WM_LBUTTONDBLCLK):
+                    run("on_open")
+                elif ev == _WM_RBUTTONUP:
+                    menu(hwnd)
+                return 0
+            return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
+
+        proc = WNDPROC(wndproc)
         cls = WNDCLASSW()
         cls.lpfnWndProc = proc
         cls.hInstance = kernel32.GetModuleHandleW(None)
@@ -101,7 +163,10 @@ def _loop():
                                       cls.hInstance, None)
         if not hwnd:
             return
-        icon = user32.LoadIconW(None, ctypes.c_void_p(_IDI_APPLICATION))  # MAKEINTRESOURCE: un numero, non una stringa
+        icon = None
+        if _tray.get("icon"):  # icona dell'app (16x16 dal .ico); se manca resta quella generica
+            icon = user32.LoadImageW(None, _tray["icon"], 1, user32.GetSystemMetrics(49), user32.GetSystemMetrics(50), 0x10)
+        icon = icon or user32.LoadIconW(None, ctypes.c_void_p(_IDI_APPLICATION))  # MAKEINTRESOURCE: un numero, non una stringa
         data = NOTIFYICONDATAW()
         data.cbSize = ctypes.sizeof(NOTIFYICONDATAW)
         data.hWnd, data.uID, data.hIcon = hwnd, 1, icon
@@ -113,9 +178,13 @@ def _loop():
         global _ready
         _ready = True
         try:
-            while True:
+            msg = wintypes.MSG()
+            while not _stop.is_set():
+                while user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 1):  # i clic sull'icona arrivano come messaggi
+                    user32.TranslateMessage(ctypes.byref(msg))
+                    user32.DispatchMessageW(ctypes.byref(msg))
                 try:
-                    title, body = _queue.get(timeout=0.25)
+                    title, body = _queue.get(timeout=0.05)
                 except queue.Empty:
                     continue
                 data.uFlags = _NIF_INFO
@@ -126,6 +195,7 @@ def _loop():
                     shell32.Shell_NotifyIconW(_NIM_ADD, ctypes.byref(data))
         finally:
             shell32.Shell_NotifyIconW(_NIM_DELETE, ctypes.byref(data))
+            _gone.set()
     except Exception as e:  # mai un errore per una notifica
         global _error
         _error = f"{type(e).__name__}: {e}"

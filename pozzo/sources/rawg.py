@@ -21,7 +21,7 @@ RAWG_NAMES = {
     "wiiu": ["wiiu"], "switch": ["nintendoswitch"], "megadrive": ["genesis"], "mastersystem": ["segamastersystem"],
     "gamegear": ["gamegear"], "segacd": ["segacd"], "sega32x": ["sega32x"], "saturn": ["segasaturn"],
     "dreamcast": ["dreamcast"], "psx": ["playstation"], "ps2": ["playstation2"], "ps3": ["playstation3"],
-    "ps4": ["playstation4"], "psp": ["psp"], "psvita": ["psvita"], "xbox": ["xbox"], "xbox360": ["xbox360"],
+    "ps4": ["playstation4"], "ps5": ["playstation5"], "psp": ["psp"], "psvita": ["psvita"], "xbox": ["xbox"], "xbox360": ["xbox360"],
     "windows": ["pc"], "dos": ["pc"], "atari2600": ["atari2600"], "atari7800": ["atari7800"], "atarilynx": ["atarilynx"],
     "atarijaguar": ["jaguar"], "neogeo": ["neogeo"], "3do": ["3do"], "pcengine": ["turbografx16", "pcengine"],
     "amiga": ["commodoreamiga"], "c64": ["commodore64"],

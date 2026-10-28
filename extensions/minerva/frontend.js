@@ -10,8 +10,9 @@ export default function (gs) {
     title: "Store Minerva + Switch",
     async render(el) {
       el.innerHTML = `<p class="muted">Aggiunge allo «Store online» di ogni console le cartelle di minerva-archive.org
-        elencate su r-roms.github.io, più gli store <b>Switch</b>: NXBrew, Ziperto NSP e Ziperto XCI.
-        Poi ne legge l'elenco dei giochi. I link già presenti restano.</p>
+        elencate su r-roms.github.io, più gli store preimpostati: <b>Switch</b> (NXBrew, Ziperto NSP e XCI),
+        <b>PS4</b> e <b>PS5</b> (superpsx). Poi ne legge l'elenco dei giochi. Gli store già presenti non si
+        toccano: si aggiungono e si leggono solo quelli nuovi.</p>
         <p><button class="btn primary" id="mv-go">Importa store</button></p>
         <pre id="mv-log" class="muted" style="white-space:pre-wrap;max-height:60vh;overflow:auto"></pre>`;
       const log = el.querySelector("#mv-log"), btn = el.querySelector("#mv-go");

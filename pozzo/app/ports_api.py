@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 import zipfile
 from collections import defaultdict
 from pathlib import Path
@@ -21,6 +22,7 @@ def register(app, cfg, lib, launcher, start_store_job):
     """Registra le route /api/ports*. Ritorna port_links(), usata dal dettaglio del gioco."""
     port_job = PORT_JOB  # fuori dalla chiusura: server.py deve sapere se un port si sta scaricando
     start_lock = threading.Lock()
+    refresh = {"running": False, "rel": 0.0}  # rel: ultimo controllo delle versioni dei port installati
     port_links: dict = {"key": None, "by_slug": {}, "by_grp": {}}
 
     def _port_links() -> dict:
@@ -82,15 +84,43 @@ def register(app, cfg, lib, launcher, start_store_job):
         threading.Thread(target=_run_port_job, args=(slug, fn), daemon=True).start()
         return port_job
 
+    def _refresh_catalog():
+        """Aggiorna catalogo e versioni dei port installati; la pagina li rilegge quando refreshing torna False."""
+        from ..cache import Cache
+        c = Cache(cfg.cache)
+        try:
+            PT.catalog(c)  # a catalogo scaduto lo riscarica
+            tok = PT._token(cfg)
+            for m in PT.all_installed(cfg).values():
+                PT.update_info(c, m, tok)
+        except Exception:  # rete assente: resta la copia salvata
+            pass
+        finally:
+            c.close()
+            refresh.update(running=False, rel=time.time())
+
+    def _start_refresh():
+        with start_lock:
+            if refresh["running"]:
+                return
+            refresh["running"] = True
+        threading.Thread(target=_refresh_catalog, daemon=True).start()
+
     @app.get("/api/ports")
     def api_ports(force: int = 0):
         from ..cache import Cache
         c = Cache(cfg.cache)
         try:
-            cat = PT.catalog(c, force=bool(force))
+            cached = PT.cached(c)
+            # catalogo gia' salvato: si apre subito con quello e si aggiorna in background (force = pulsante «Aggiorna», in attesa)
+            fast = bool(cached and cached.get("items") and not force)
             inst = PT.all_installed(cfg)
+            if fast and (time.time() - cached.get("time", 0) >= PT.TTL
+                         or inst and time.time() - refresh["rel"] >= PT.RELEASE_TTL):
+                _start_refresh()
+            cat = cached if fast else PT.catalog(c, force=bool(force))
             tok = PT._token(cfg)
-            upd = {s: PT.update_info(c, m, tok, bool(force)) for s, m in inst.items()}  # rete al massimo ogni 12 ore per repository
+            upd = {s: PT.update_info(c, m, tok, bool(force), offline=fast) for s, m in inst.items()}  # rete al massimo ogni 12 ore per repository
         finally:
             c.close()
         links = _port_links()
@@ -118,7 +148,12 @@ def register(app, cfg, lib, launcher, start_store_job):
         consoles = {cid: names.get(PT.platform_of(cid) or "", {"pc": "PC (DOS e vecchi giochi)", "mobile": "Mobile", "cdi": "Philips CD-i", "ps5": "PlayStation 5"}.get(cid, cid))
                     for i in items for cid in i["consoles"]}
         return {"items": items, "time": cat.get("time"), "error": cat.get("error"), "stale": cat.get("stale", False),
-                "consoles": consoles, "dir": str(PT.ports_dir(cfg)), "token": bool(PT._token(cfg))}
+                "consoles": consoles, "dir": str(PT.ports_dir(cfg)), "token": bool(PT._token(cfg)),
+                "refreshing": refresh["running"]}
+
+    @app.get("/api/ports/refreshing")
+    def api_ports_refreshing():
+        return {"refreshing": refresh["running"]}
 
     @app.get("/api/ports/job")
     def api_ports_job():

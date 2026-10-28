@@ -30,6 +30,7 @@ PLATFORMS = {
     "Sega 32X": "sega32x", "Sega CD": "segacd", "Sega Saturn": "saturn", "Sega Dreamcast": "dreamcast", "Sega SG-1000": "sg-1000",
     "Sega Naomi": "naomi", "Sammy Atomiswave": "atomiswave",
     "Sony Playstation": "psx", "Sony Playstation 2": "ps2", "Sony Playstation 3": "ps3", "Sony Playstation 4": "ps4",
+    "Sony Playstation 5": "ps5",
     "Sony PSP": "psp", "Sony Playstation Vita": "psvita",
     "Microsoft Xbox": "xbox", "Microsoft Xbox 360": "xbox360", "Windows": "windows", "MS-DOS": "dos",
     "Arcade": "arcade", "SNK Neo Geo AES": "neogeo", "SNK Neo Geo MVS": "neogeo", "SNK Neo Geo CD": "neogeocd",

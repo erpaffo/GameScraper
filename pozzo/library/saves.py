@@ -199,10 +199,10 @@ def game_ids(platform: str, rom: str | Path | None) -> dict:
             m = meta and re.search(r"<title_id[^>]*>\s*([0-9A-Fa-f]{16})", meta.read_text(encoding="utf-8", errors="ignore"))
             if m:
                 out = {"tid": m.group(1).upper()}
-        elif platform in ("ps3", "ps4", "psvita"):
+        elif platform in ("ps3", "ps4", "ps5", "psvita"):
             sfo = _near(rom, "PS3_GAME/PARAM.SFO", "PARAM.SFO", "sce_sys/param.sfo", "sce_sys/PARAM.SFO")
             tid = _sfo(sfo).get("TITLE_ID", "") if sfo else ""
-            m = tid or re.search(r"(?:[BN][CLP][A-Z]{2}\d{5}|CUSA\d{5}|PCS[A-H]\d{5})", str(rom).upper())
+            m = tid or re.search(r"(?:[BN][CLP][A-Z]{2}\d{5}|CUSA\d{5}|PCS[A-H]\d{5}|PPSA\d{5})", str(rom).upper())
             if m:
                 out = {"tid": tid or m.group(0)}
     except (OSError, ValueError, struct.error):

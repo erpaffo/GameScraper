@@ -88,14 +88,25 @@ def _fetch_catalog() -> list[dict]:
     raise err
 
 
+_MEM: dict = {}  # copia in memoria dell'ultimo catalogo: l'apertura non rilegge e non decodifica ogni volta il database
+
+
+def cached(cache) -> dict | None:
+    """Ultimo catalogo salvato, anche scaduto, senza rete."""
+    if not _MEM.get("cat"):
+        _MEM["cat"] = cache.kv_get("ports:catalog")
+    return _MEM["cat"]
+
+
 def catalog(cache, force: bool = False) -> dict:
     """{"items", "time", "error"?, "stale"?}: se l'API non risponde resta l'ultima copia."""
-    hit = cache.kv_get("ports:catalog")
+    hit = cached(cache)
     if hit and not force and time.time() - hit.get("time", 0) < TTL:
         return hit
     try:
         hit = {"time": time.time(), "items": [i for i in _fetch_catalog() if "windows" in (i.get("supportedOS") or [])]}
         cache.kv_set("ports:catalog", hit)
+        _MEM["cat"] = hit
         return hit
     except (httpx.HTTPError, ValueError) as e:
         msg = f"{type(e).__name__}: {e}"[:200]
@@ -458,13 +469,13 @@ def uninstall(cfg, slug: str):
 
 # ---------------------------------------------------------------- aggiornamenti (8.5)
 
-def latest(cache, man: dict, token: str = "", force: bool = False) -> dict | None:
+def latest(cache, man: dict, token: str = "", force: bool = False, offline: bool = False) -> dict | None:
     """Ultima release Windows del port: {"tag", "url"}; in cache 12 ore per repository."""
     if not man.get("repository"):
         return None
     key = f"ports:rel:{man.get('provider')}:{man['repository']}:{man.get('asset_filter') or ''}"
     hit = cache.kv_get(key)
-    if hit and not force and time.time() - hit.get("time", 0) < RELEASE_TTL:
+    if offline or (hit and not force and time.time() - hit.get("time", 0) < RELEASE_TTL):
         return hit
     try:
         got = pick_release(releases(man.get("provider"), man["repository"], token), man.get("asset_filter") or "")
@@ -475,8 +486,8 @@ def latest(cache, man: dict, token: str = "", force: bool = False) -> dict | Non
     return hit
 
 
-def update_info(cache, man: dict, token: str = "", force: bool = False) -> dict:
-    lt = latest(cache, man, token, force) or {}
+def update_info(cache, man: dict, token: str = "", force: bool = False, offline: bool = False) -> dict:
+    lt = latest(cache, man, token, force, offline) or {}
     tag = lt.get("tag") or ""
     newer = bool(tag) and tag != man.get("version") and tag != man.get("skip")
     return {"latest": tag, "latest_url": lt.get("url") or "", "update": newer}

@@ -36,7 +36,8 @@ from ..updates import parse
 from . import extensions as X
 
 STORE_ID = X.STORE_ID  # lo store stesso: incluso nell'app, non si disattiva ne' si rimuove
-OFFICIAL = "https://github.com/erpaffo/gamescraper-extensions"
+# lo store sta nel repository dell'app (cartella extensions/): il vecchio repository gamescraper-extensions non esiste piu'
+OFFICIAL = "https://raw.githubusercontent.com/erpaffo/Pozzo-Launcher/HEAD/extensions/index.json"
 _ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 _FILE = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,99}$")
 _GITHUB = re.compile(r"^https://github\.com/([\w.-]+)/([\w.-]+?)(?:\.git)?(?:/tree/([\w./-]+?))?/?$")
