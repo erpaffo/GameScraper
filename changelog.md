@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.2 (2026-10-28)
+### Aggiunto
+
+- Sincronizzazione tra due PC (Impostazioni › Libreria): con una cartella condivisa (OneDrive, Dropbox, NAS, Syncthing) o direttamente in rete locale con un codice di abbinamento. Preferiti, stati, note, voti, tempo di gioco (sommato, senza doppioni), collezioni e lista desideri; a scelta anche le impostazioni dell'app (mai percorsi, emulatori e account)
+- Profili utente (pulsante 👤 nella barra laterale): preferiti, tempo di gioco, stati, collezioni e lista desideri separati per ogni persona, con libreria ed emulatori comuni
+- Salvataggi: una versione prima e dopo ogni partita, «Annulla l'ultima partita», versioni fissate con nota, confronto con i file attuali, percorsi aggiunti a mano (anche per i giochi PC) e cartelle proposte quando i salvataggi cambiano giocando
+- Salvataggi riconosciuti anche per Dolphin, PCSX2, DuckStation, PPSSPP, RPCS3, Vita3K, melonDS, Azahar/Lime3DS/Citra, Cemu, Flycast e shadPS4 (memory card condivise segnalate)
+
 ## 0.6.0 (2026-10-28)
 ### Migliorato
 

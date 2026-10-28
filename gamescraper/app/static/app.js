@@ -794,7 +794,7 @@ async function openDetail(id) {
       + (v.primary ? `<span class="muted">principale</span>` : `<button class="btn" data-pref="${v.id}">Usa questa</button>`)
       + (v.store && !v.installed ? `<button class="btn" data-install="${v.id}">⬇</button>`
         : `<button class="btn" data-play="${v.id}" ${d.emulator ? "" : "disabled"}>▶</button>`) + `</div>`).join("")}</div>` : ""}
-    ${pc && d.store !== "ports" ? "" : `<div id="d-saves"></div>`}
+    <div id="d-saves"></div>
     <div id="d-ext"></div>
     <div class="d-h">File</div>
     <div class="files">${d.files.map(esc).join("<br>")}${d.crc ? `<br>CRC ${esc(d.crc)}` : ""}
@@ -804,7 +804,7 @@ async function openDetail(id) {
   $("#detail").scrollTop = 0;
   renderDetailSections(d);
   if (d.shots) loadDetailShots(d.id);
-  if (!pc || d.store === "ports") loadSaves(d);
+  loadSaves(d);
   if (d.platform === "switch") loadSwitchContents(d);
   if (!pc) loadRA(d);
   GS.emit("gameOpened", d);
@@ -844,28 +844,75 @@ async function loadSwitchContents(d) {
     r.dlc ? `<span class="tag">${r.dlc} DLC</span>` : ""].join(" ")}</dd>`);
 }
 
-/* ---- salvataggi del gioco: copie automatiche a fine partita, copia manuale e ripristino */
+/* ---- salvataggi del gioco: versioni prima e dopo ogni partita, rollback, percorsi manuali e rilevati */
+const SV_REASON = { "prima-della-partita": "prima della partita", "dopo-partita": "dopo la partita", manuale: "manuale",
+  "prima-del-ripristino": "prima del ripristino" };
 async function loadSaves(d) {
   let r;
   try { r = await api(`/api/game/${d.id}/saves`); } catch { return; }
   const box = $("#d-saves");
   if (!box || S.detail !== d) return;
-  if (!r.supported && !r.items.length) return; // emulatore senza salvataggi per singolo gioco: niente sezione
-  box.innerHTML = `<div class="d-h">💾 Salvataggi <span class="muted small">${r.paths.length ? `${r.paths.length} trovati con ${esc(r.emulator)}` : "nessuno trovato"}</span></div>
-    <div class="saves">${r.paths.length ? `<button class="btn" id="sv-now">Copia adesso</button>` : ""}
-      ${r.items.map((b) => `<div class="sv-row"><span>${esc(fmtDate(b.time))}</span><span class="muted small">${esc(b.name.replace(/^\d{8}-\d{6}-?|\.zip$/g, "").replace(/-/g, " "))} · ${esc(fmtSize(b.size))}</span>`
-        + `<button class="btn sv-restore" data-name="${esc(b.name)}">Ripristina</button></div>`).join("")
-      || `<p class="muted small">Ancora nessuna copia: se ne crea una a ogni fine partita.</p>`}</div>`;
-  box.onclick = async (e) => {
-    if (e.target.id === "sv-now") {
-      try { await api(`/api/game/${d.id}/saves`, { body: {} }); toast("Copia dei salvataggi creata"); } catch (err) { return toast(err.message, true); }
-      return loadSaves(d);
-    }
-    const rb = e.target.closest(".sv-restore");
-    if (!rb) return;
-    if (!confirm(`Ripristinare i salvataggi del ${rb.closest(".sv-row").firstChild.textContent}?\nQuelli attuali vengono prima copiati, quindi si può annullare.`)) return;
-    try { const x = await api(`/api/game/${d.id}/saves/restore`, { body: { name: rb.dataset.name } }); toast(`Salvataggi ripristinati (${x.written} file)`); }
+  const found = r.paths.length + r.shared.length + r.manual.length;
+  const url = `/api/game/${d.id}/saves`;
+  box.innerHTML = `<div class="d-h">💾 Salvataggi <span class="muted small">${r.paths.length ? `${r.paths.length} trovati con ${esc(r.emulator)}`
+      : found ? "" : "nessuno trovato: aggiungi la cartella qui sotto"}</span></div>
+    <div class="saves">
+      <div class="sv-actions">${found ? `<button class="btn" id="sv-now">Copia adesso</button>` : ""}
+        ${r.session ? `<button class="btn" id="sv-undo" title="Riporta i salvataggi a com'erano prima dell'ultima partita">↶ Annulla l'ultima partita</button>` : ""}</div>
+      ${r.shared.length ? `<p class="muted small">⚠ ${r.shared.length} file condivisi con altri giochi (memory card): ripristinando torna indietro anche il loro salvataggio.</p>` : ""}
+      ${r.suggested.map((p) => `<div class="sv-row sv-sug"><span>Cambiati nell'ultima partita</span><span class="small" title="${esc(p)}">${esc(p)}</span>`
+        + `<button class="btn" data-sug="${esc(p)}" data-ok="1">Sono i salvataggi</button><button class="btn" data-sug="${esc(p)}">Ignora</button></div>`).join("")}
+      ${r.items.map((b) => `<div class="sv-row" data-name="${esc(b.name)}"><span>${esc(fmtDate(b.time))}</span>`
+        + `<span class="muted small">${esc(SV_REASON[b.reason] || b.reason)} · ${esc(fmtSize(b.size))}${b.note ? ` · <i>${esc(b.note)}</i>` : ""}</span>`
+        + `<button class="btn sv-pin" title="${b.pinned ? "Fissata: non si cancella mai" : "Fissa: non verrà cancellata"}">${b.pinned ? "★" : "☆"}</button>`
+        + `<button class="btn sv-note" title="Nota">✎</button><button class="btn sv-diff">Confronta</button>`
+        + `<button class="btn sv-restore">Ripristina</button><button class="btn sv-del" title="Elimina">✕</button></div>`).join("")
+      || `<p class="muted small">Ancora nessuna versione: se ne crea una prima e dopo ogni partita.</p>`}
+      <details class="sv-paths"${r.paths.length ? "" : " open"}><summary class="small">Percorsi</summary>
+        ${[...r.paths, ...r.shared].map((p) => `<div class="small muted" title="${esc(p)}">${esc(p)}</div>`).join("")}
+        ${r.manual.map((p, i) => `<div class="sv-row small"><span class="muted">a mano</span><span title="${esc(p)}">${esc(p)}</span><button class="btn" data-unpath="${i}">✕</button></div>`).join("")}
+        <div class="sv-row"><input id="sv-path" placeholder="Cartella o file dei salvataggi, es. %APPDATA%\Gioco\Saves"><button class="btn" id="sv-add">Aggiungi</button></div>
+      </details></div>`;
+  const restore = async (name, what) => {
+    if (!confirm(`Ripristinare i salvataggi ${what}?\nQuelli attuali vengono prima copiati, quindi si può annullare.`
+      + (r.shared.length ? "\nAttenzione: anche le memory card condivise tornano indietro." : ""))) return;
+    try { const x = await api(`${url}/restore`, { body: { name } }); toast(`Salvataggi ripristinati (${x.written} file${x.removed ? `, ${x.removed} tolti` : ""})`); }
     catch (err) { return toast(err.message, true); }
+    loadSaves(d);
+  };
+  const setPaths = async (paths) => {
+    try { await api(`${url}/paths`, { body: { paths } }); } catch (err) { return toast(err.message, true); }
+    loadSaves(d);
+  };
+  box.onclick = async (e) => {
+    const t = e.target, row = t.closest(".sv-row[data-name]"), name = row?.dataset.name;
+    try {
+      if (t.id === "sv-now") {
+        const x = await api(url, { body: {} });
+        toast(x.unchanged ? "Nessuna modifica dall'ultima versione" : "Versione dei salvataggi creata");
+      } else if (t.id === "sv-undo") return restore(r.session, "di prima dell'ultima partita");
+      else if (t.id === "sv-add") { const v = $("#sv-path").value.trim(); if (v) return setPaths([...r.manual, v]); return; }
+      else if (t.dataset.unpath) return setPaths(r.manual.filter((_, i) => i !== +t.dataset.unpath));
+      else if (t.dataset.sug) await api(`${url}/suggest`, { body: { path: t.dataset.sug, accept: !!t.dataset.ok } });
+      else if (!row) return;
+      else if (t.classList.contains("sv-restore")) return restore(name, `del ${row.firstChild.textContent}`);
+      else if (t.classList.contains("sv-pin")) await api(`${url}/meta`, { body: { name, pinned: t.textContent === "☆" } });
+      else if (t.classList.contains("sv-note")) {
+        const note = prompt("Nota per questa versione (es. «prima del boss»):", r.items.find((b) => b.name === name)?.note || "");
+        if (note === null) return;
+        await api(`${url}/meta`, { body: { name, note } });
+      } else if (t.classList.contains("sv-del")) {
+        if (!confirm(`Eliminare la versione del ${row.firstChild.textContent}?`)) return;
+        await api(`${url}/delete`, { body: { name } });
+      } else if (t.classList.contains("sv-diff")) {
+        const x = await api(`${url}/diff?name=${encodeURIComponent(name)}`);
+        const list = (k, label) => x[k].length ? `<div><b>${label} (${x[k].length})</b>${x[k].map((f) => `<div title="${esc(f)}">${esc(f)}</div>`).join("")}</div>` : "";
+        row.nextElementSibling?.classList.contains("sv-diffbox") && row.nextElementSibling.remove();
+        row.insertAdjacentHTML("afterend", `<div class="sv-diffbox small muted">${list("changed", "Diversi da adesso") + list("missing", "Non più sul disco")
+          + list("extra", "Nuovi, verrebbero tolti") || `Identica ai salvataggi attuali (${x.same} file).`}</div>`);
+        return;
+      } else return;
+    } catch (err) { return toast(err.message, true); }
     loadSaves(d);
   };
 }
@@ -2488,7 +2535,7 @@ function showTab(tab) {
     const t = GS.ui.settingsTabs.find((x) => "ext:" + x.id === tab);
     const pane = document.querySelector(`[data-pane="${CSS.escape(tab)}"]`);
     if (t && pane) { pane.innerHTML = ""; Promise.resolve(t.render(pane, GS)).catch((e) => { pane.textContent = e.message; }); }
-  } else { api("/api/status").then(showStatus); loadBackups(); }
+  } else { api("/api/status").then(showStatus); loadBackups(); loadSync(); }
 }
 
 /* ---- info: versione, aggiornamenti, novita' */
@@ -2625,6 +2672,104 @@ async function loadBackups() {
         + `<td><button class="btn bk-restore" data-name="${esc(b.name)}">Ripristina</button></td></tr>`).join("") + `</table>`
       + `<p class="muted small">Cartella: <code>${esc(d.folder)}</code></p>`
     : `<p class="muted small">Ancora nessuna copia.</p>`;
+}
+
+/* ---- profili utente: dati personali separati (preferiti, tempo di gioco, collezioni...), libreria comune */
+async function loadProfile() {
+  try { S.profiles = await api("/api/profiles"); } catch { return; }
+  $("#profile-name").textContent = S.profiles.profiles.find((x) => x.id === S.profiles.active)?.name || "Principale";
+}
+
+async function switchProfile(id) {
+  S.profiles = await api("/api/profiles/active", { body: { id } });
+  await loadProfile();
+  await reload(true);
+  toast(`Profilo: ${$("#profile-name").textContent}`);
+}
+
+function profileMenu(anchor) {
+  const st = S.profiles || { profiles: [], active: "default" };
+  const cur = st.profiles.find((x) => x.id === st.active) || { name: "" };
+  const p = $("#popover");
+  p.innerHTML = `<div class="opts">${st.profiles.map((x) => `<div class="opt${x.id === st.active ? " hl" : ""}" data-pid="${esc(x.id)}">`
+      + `<span>${x.id === st.active ? "✓ " : ""}${esc(x.name)}</span></div>`).join("")}
+    <div class="opt" data-act="new">＋ Nuovo profilo…</div>
+    <div class="opt" data-act="rename">✎ Rinomina «${esc(cur.name)}»…</div>
+    ${st.active !== "default" ? `<div class="opt" data-act="delete">🗑 Elimina «${esc(cur.name)}»…</div>` : ""}</div>`;
+  placePopover(anchor);
+  p.onclick = async (e) => {
+    const o = e.target.closest(".opt");
+    if (!o) return;
+    closePopover();
+    try {
+      if (o.dataset.pid) { if (o.dataset.pid !== st.active) await switchProfile(o.dataset.pid); }
+      else if (o.dataset.act === "new") {
+        const name = await askText(anchor, "Nome del profilo, es. Luca");
+        if (name) await switchProfile((await api("/api/profiles", { body: { name } })).created.id);
+      } else if (o.dataset.act === "rename") {
+        const name = await askText(anchor, "Nuovo nome", cur.name);
+        if (name) { await api(`/api/profiles/${encodeURIComponent(st.active)}`, { method: "PATCH", body: { name } }); await loadProfile(); }
+      } else if (o.dataset.act === "delete" && confirm(`Eliminare il profilo «${cur.name}»? Preferiti, tempo di gioco e collezioni `
+          + "di questo profilo spariscono dall'app (il database resta nella cartella profiles/eliminati).")) {
+        await api(`/api/profiles/${encodeURIComponent(st.active)}`, { method: "DELETE" });
+        await loadProfile();
+        await reload(true);
+        toast("Profilo eliminato");
+      }
+    } catch (err) { toast(err.message, true); }
+  };
+}
+
+/* ---- sincronizzazione tra PC (cartella condivisa e rete locale) */
+async function loadSync(st) {
+  try { st = st || await api("/api/sync"); } catch (e) { $("#sync-last").textContent = e.message; return; }
+  $("#sync-folder").value = st.folder;
+  document.querySelectorAll('[name="sync-what"]').forEach((r) => { r.checked = r.value === st.what; });
+  const rows = [...st.peers.map((p) => ({ name: p.name, sub: p.url, del: `peer:${p.id}`, res: st.last?.peers?.[p.id] })),
+    ...st.pcs.map((d) => ({ name: d.name, sub: "si sincronizza con questo PC", del: `pc:${d.id}` }))];
+  $("#sync-peers").innerHTML = rows.length ? `<table class="emu">${rows.map((r) => `<tr><td>💻 ${esc(r.name)} <span class="muted small">${esc(r.sub)}</span>`
+    + (r.res ? ` <span class="small ${r.res.error ? "status-bad" : "status-ok"}">${esc(r.res.error || "✓ sincronizzato")}</span>` : "")
+    + `</td><td style="width:100px"><button class="btn" data-sync-del="${esc(r.del)}">Scollega</button></td></tr>`).join("")}</table>` : "";
+  const l = st.last || {};
+  const folder = l.folder ? (l.folder.error ? ` · cartella: ${l.folder.error}` : ` · cartella ✓ (${l.folder.from} file di altri PC)`) : "";
+  $("#sync-last").textContent = st.busy ? "Sincronizzazione in corso…"
+    : l.time ? `Ultima sincronizzazione: ${new Date(l.time * 1000).toLocaleTimeString("it", { hour: "2-digit", minute: "2-digit" })}${folder}`
+    : "Non ancora sincronizzato";
+}
+
+function bindSync() {
+  const save = async (body) => { try { await loadSync(await api("/api/sync", { body })); toast("Salvato"); } catch (e) { toast(e.message, true); } };
+  $("#sync-folder-save").onclick = () => save({ folder: $("#sync-folder").value.trim() });
+  $("#sync-folder-pick").onclick = async () => { const p = window.pywebview?.api ? await pickPath("folder") : null; if (p) { $("#sync-folder").value = p; save({ folder: p }); } };
+  document.querySelectorAll('[name="sync-what"]').forEach((r) => { r.onchange = () => save({ what: r.value }); });
+  $("#sync-code").onclick = async () => {
+    try {
+      const r = await api("/api/sync/code", { body: {} });
+      $("#sync-code-out").innerHTML = `Codice <b>${esc(r.code)}</b> (vale ${r.minutes} minuti, una volta) · indirizzo di questo PC: `
+        + (r.urls.map((u) => `<code>${esc(u.replace("https://", ""))}</code>`).join(" o ") || "non trovato");
+    } catch (e) { toast(e.message, true); }
+  };
+  $("#sync-peer-add").onclick = async () => {
+    const btn = $("#sync-peer-add");
+    btn.disabled = true;
+    try {
+      await loadSync(await api("/api/sync/peer", { body: { url: $("#sync-peer-url").value.trim(), code: $("#sync-peer-code").value.trim() } }));
+      $("#sync-peer-code").value = "";
+      toast("PC abbinato: la prima sincronizzazione è partita");
+    } catch (e) { toast(e.message, true); } finally { btn.disabled = false; }
+  };
+  $("#sync-peers").onclick = async (e) => {
+    const b = e.target.closest("[data-sync-del]");
+    if (!b) return;
+    const [kind, id] = b.dataset.syncDel.split(":");
+    try { await loadSync(await api(kind === "peer" ? `/api/sync/peer/${id}` : `/api/sync/pcs/${id}`, { method: "DELETE" })); } catch (err) { toast(err.message, true); }
+  };
+  $("#sync-now").onclick = async () => {
+    const btn = $("#sync-now");
+    btn.disabled = true;
+    $("#sync-last").textContent = "Sincronizzazione in corso…";
+    try { await loadSync(await api("/api/sync/now", { body: {} })); await reload(true); } catch (e) { toast(e.message, true); } finally { btn.disabled = false; }
+  };
 }
 
 async function backupNow() {
@@ -3143,6 +3288,8 @@ function bind() {
   $("#scan-btn").onclick = () => openSettings("scan");
   $("#rebuild-btn").onclick = rebuild;
   $("#backup-now").onclick = backupNow;
+  bindSync();
+  $("#profile-btn").onclick = (e) => profileMenu(e.currentTarget);
   $("#ra-save").onclick = async () => {
     const body = { username: $("#ra-user").value };
     if ($("#ra-key").value.trim()) body.key = $("#ra-key").value.trim();
@@ -3466,6 +3613,7 @@ GS.refresh = () => reload(true);
   bind();
   loading("Caricamento dei tuoi giochi…");
   await loadExtensions(); // prima della libreria: l'attesa si vede gia' col tema scelto
+  loadProfile();
   try {
     await SETUP.open();  // primo avvio: configurazione guidata (non fa nulla se gia' configurato)
     if (!(await loadLibrary())) {

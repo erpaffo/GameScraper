@@ -41,8 +41,11 @@ ALLOWED = [
 ]
 PLAYER_COLORS = ["#4aa3ff", "#ff5f5f", "#3ddc84", "#f5c518"]  # giocatore 1..4 (come i LED dei controller)
 PUBLIC = [("GET", r"/m/?"), ("GET", r"/m/static/[\w.-]+"), ("GET", r"/m/manifest\.webmanifest"), ("POST", r"/m/api/pair"),
-          ("GET", r"/m/api/hello")]
+          ("GET", r"/m/api/hello"), ("POST", r"/api/sync/pair")]
+# un altro PC abbinato per la sincronizzazione (kind "pc") raggiunge solo lo scambio dei dati, nient'altro
+PC_ALLOWED = [("POST", r"/api/sync/exchange")]
 _ALLOWED = [(m, re.compile(p + r"$")) for m, p in ALLOWED]
+_PC_ALLOWED = [(m, re.compile(p + r"$")) for m, p in PC_ALLOWED]
 _PUBLIC = [(m, re.compile(p + r"$")) for m, p in PUBLIC]
 
 
@@ -78,8 +81,8 @@ class PhoneGate:
         dev = self.hub.device_for(_cookie(scope))
         if not dev:
             return await self._deny(scope, receive, send, 401, "Telefono non abbinato")
-        if not any(m == method and r.match(path) for m, r in _ALLOWED):
-            return await self._deny(scope, receive, send, 403, "Funzione non disponibile dal telefono")
+        if not any(m == method and r.match(path) for m, r in (_PC_ALLOWED if dev.get("kind") == "pc" else _ALLOWED)):
+            return await self._deny(scope, receive, send, 403, "Funzione non disponibile da questo dispositivo")
         scope.setdefault("state", {})["phone_device"] = dev["id"]
         return await self.app(scope, receive, send)
 
@@ -152,7 +155,7 @@ class PhoneHub:
             self.fails = 0
             return self.code
 
-    def pair(self, code: str, name: str) -> str:
+    def pair(self, code: str, name: str, kind: str = "phone") -> str:
         """Ritorna il token del nuovo telefono; ValueError se il codice e' sbagliato o scaduto."""
         with self.lock:
             if not self.code or time.time() > self.code_until or self.fails >= MAX_FAILS:
@@ -163,7 +166,7 @@ class PhoneHub:
             self.code = None  # un codice vale una volta sola
         token = secrets.token_urlsafe(32)
         dev = {"id": secrets.token_hex(6), "name": (name or "Telefono").strip()[:40], "token": _sha(token),
-               "created": time.time(), "last": time.time()}
+               "created": time.time(), "last": time.time(), "kind": kind}
         self._save(devices=[*self.conf["devices"], dev])
         return token
 
@@ -375,7 +378,7 @@ class PhoneHub:
         from .vigem import available
         ok, err = available()
         return {"enabled": self.conf["enabled"], "running": self.running(), "error": self.error, "port": self.conf["port"],
-                "urls": self.urls(), "devices": self.devices(), "vigem": ok, "vigem_error": err,
+                "urls": self.urls(), "devices": [d for d in self.devices() if d.get("kind") != "pc"], "vigem": ok, "vigem_error": err,
                 "dsu": bool(self.dsu), "dsu_error": self.dsu_error, "mouse": bool(self.conf.get("mouse")),
                 "mic_device": self.conf.get("mic_device", ""), "mic_devices": _mic_devices(),
                 "controllers": [{**p, "motion": self.slots[p["slot"]]["motion"], "pad": bool(self.slots[p["slot"]]["pad"])}

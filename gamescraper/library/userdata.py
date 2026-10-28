@@ -26,17 +26,32 @@ CREATE TABLE IF NOT EXISTS wishlist(id TEXT PRIMARY KEY, title TEXT, steam_appid
                                     added REAL, price REAL, regular REAL, cut INT, shop TEXT, url TEXT, low REAL,
                                     currency TEXT, checked REAL, alert TEXT, seen INT DEFAULT 0);
 CREATE TABLE IF NOT EXISTS wish_prices(id TEXT, day TEXT, price REAL, key_price REAL, PRIMARY KEY(id, day));
+-- ora dell'ultima modifica di ogni dato personale (tbl, id, campo): serve alla sincronizzazione tra PC.
+-- field "__deleted__" = cancellato a quell'ora (cosi' la cancellazione arriva anche sull'altro PC)
+CREATE TABLE IF NOT EXISTS sync_times(tbl TEXT, id TEXT, field TEXT, t REAL, PRIMARY KEY(tbl, id, field));
+"""
+# impostazioni del PC, comuni a tutti i profili: stanno sempre in userdata.db (il profilo principale)
+SHARED_SCHEMA = """
 CREATE TABLE IF NOT EXISTS game_profiles(key TEXT PRIMARY KEY, data TEXT);
 CREATE TABLE IF NOT EXISTS manual_games(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, exe TEXT, args TEXT,
                                         cwd TEXT, added REAL);
 """
+DELETED = "__deleted__"
 
 
 class UserData:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, shared: Path | None = None):
+        """shared: userdata.db del profilo principale, per i dati comuni a tutti i profili (profili di avvio,
+        giochi aggiunti a mano). Le tabelle allegate si trovano anche senza prefisso, quindi le query restano uguali."""
+        self.path = Path(path)
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.executescript(SCHEMA)
+        if shared and Path(shared).resolve() != self.path.resolve():
+            self.db.execute("ATTACH DATABASE ? AS shared", (str(shared),))
+            self.db.executescript(SHARED_SCHEMA.replace("EXISTS ", "EXISTS shared."))
+        else:
+            self.db.executescript(SHARED_SCHEMA)
         cols = {r[1] for r in self.db.execute("PRAGMA table_info(user_games)")}
         if "status" not in cols:  # stato del gioco: backlog / playing / done / dropped
             self.db.execute("ALTER TABLE user_games ADD COLUMN status TEXT")
@@ -65,6 +80,14 @@ class UserData:
             self.db.commit()
             self.rev += 1
 
+    def _stamp(self, tbl: str, id_: str, *fields: str):
+        """Ora della modifica di un dato personale (per la sincronizzazione: vince la modifica piu' recente)."""
+        now = time.time()
+        with self.lock:
+            self.db.executemany("INSERT OR REPLACE INTO sync_times VALUES(?, ?, ?, ?)",
+                                [(tbl, id_, f, now) for f in fields])
+            self.db.commit()
+
     # ------------------------------------------------------------ giochi
     def games(self) -> dict[str, dict]:
         cur = self._q("SELECT key, favorite, hidden, last_played, play_count, playtime, preferred, status, note, my_rating "
@@ -76,6 +99,7 @@ class UserData:
         assert field in ("favorite", "hidden", "preferred", "status", "last_played", "note", "my_rating")
         self._exec(f"INSERT INTO user_games(key, {field}) VALUES(?, ?) "
                    f"ON CONFLICT(key) DO UPDATE SET {field}=excluded.{field}", (key, value))
+        self._stamp("game", key, field)
 
     def mark_started(self, key: str):
         """Partita appena avviata (dal PC, dal telefono o da Moonlight): subito in «Giocati di recente» e «In corso»,
@@ -84,6 +108,7 @@ class UserData:
                    "ON CONFLICT(key) DO UPDATE SET last_played=excluded.last_played, "
                    "status=CASE WHEN status IS NULL OR status='' OR status='backlog' THEN 'playing' ELSE status END",
                    (key, time.time()))
+        self._stamp("game", key, "last_played", "status")
 
     def record_play(self, key: str, seconds: float):
         now = time.time()
@@ -100,6 +125,7 @@ class UserData:
         with self.lock:
             self.db.execute("UPDATE user_games SET status='playing' WHERE key=? AND (status IS NULL OR status='')", (key,))
             self.db.commit()
+        self._stamp("game", key, "last_played", "status")
 
     def sessions(self, since: float = 0) -> list[tuple[str, float, float]]:
         return self._q("SELECT key, start, seconds FROM play_sessions WHERE start >= ?", (since,))
@@ -135,15 +161,19 @@ class UserData:
                    "steam_appid=COALESCE(NULLIF(excluded.steam_appid,''), steam_appid), "
                    "itad_id=COALESCE(NULLIF(excluded.itad_id,''), itad_id)",
                    (wid, title, steam_appid or "", itad_id or "", target, time.time()))
+        self._stamp("wish", wid, "")
 
     def wish_update(self, wid: str, **f):
         f = {k: v for k, v in f.items() if k in self.WISH_COLS and k != "id"}
         if f:
             self._exec(f"UPDATE wishlist SET {', '.join(k + '=?' for k in f)} WHERE id=?", (*f.values(), wid))
+            if f.keys() & {"title", "target"}:  # scelte dell'utente (i prezzi si riscaricano su ogni PC)
+                self._stamp("wish", wid, "")
 
     def wish_delete(self, wid: str):
         self._exec("DELETE FROM wishlist WHERE id=?", (wid,))
         self._exec("DELETE FROM wish_prices WHERE id=?", (wid,))
+        self._stamp("wish", wid, DELETED)
 
     def wish_price_point(self, wid: str, price: float | None, key_price: float | None, day: str | None = None):
         """Un punto al giorno dello storico (il prezzo piu' basso visto quel giorno)."""
@@ -179,6 +209,7 @@ class UserData:
             slug, i = f"{base}-{i}", i + 1
         self._exec("INSERT INTO user_collections(slug, name, custom, created) VALUES(?, ?, 1, ?)",
                    (slug, name.strip(), time.time()))
+        self._stamp("coll", slug, "")
         return slug
 
     def update_collection(self, slug: str, name: str | None = None, hidden: int | None = None):
@@ -187,12 +218,14 @@ class UserData:
             self._exec("UPDATE user_collections SET name=? WHERE slug=?", (name.strip(), slug))
         if hidden is not None:
             self._exec("UPDATE user_collections SET hidden=? WHERE slug=?", (int(hidden), slug))
+        self._stamp("coll", slug, "")
 
     def delete_collection(self, slug: str):
         with self.lock:
             self.db.execute("DELETE FROM user_collections WHERE slug=? AND custom=1", (slug,))
             self.db.execute("DELETE FROM collection_edits WHERE slug=?", (slug,))
             self.db.commit()
+        self._stamp("coll", slug, DELETED)
 
     # ------------------------------------------------------------ giochi PC aggiunti a mano
     def manual_games(self) -> list[dict]:
@@ -214,3 +247,4 @@ class UserData:
     def edit_membership(self, slug: str, key: str, action: str):
         assert action in ("add", "remove")
         self._exec("INSERT OR REPLACE INTO collection_edits VALUES(?, ?, ?)", (slug, key, action))
+        self._stamp("edit", f"{slug}	{key}", "")

@@ -1,14 +1,14 @@
 """Versioni, changelog e commit «Version x.y.z» (mai push). Istruzioni in VERSIONING.md.
 
 La sezione in cima a changelog.md e' la versione «in preparazione» finche' non e' su GitHub: ogni modifica va li'.
-Il numero si calcola da solo dalla versione precedente: c'e' «### Aggiunto» -> +0.1.0, altrimenti +0.0.1
-(+1.0.0 solo con --major). Le attivita' non finite stanno in «### In corso» con i loro file: il commit le lascia fuori.
+Il numero si calcola da solo dalla versione precedente: c'e' «### Aggiunto» -> +0.1.0, altrimenti +0.0.1;
+--patch (+0.0.1), --minor (+0.1.0) o --major (+1.0.0) lo scelgono a mano. Le attivita' non finite stanno in «### In corso» con i loro file: il commit le lascia fuori.
 
   python tools/version.py add aggiunto|cambiato|migliorato|corretto|rimosso "testo"
   python tools/version.py wip "attivita'" [file ...]     # inizio di un lavoro lungo (i file restano fuori dai commit)
   python tools/version.py done "attivita'"               # lavoro finito: i suoi file rientrano nei commit
   python tools/version.py status
-  python tools/version.py commit [--major] [--force]     # changelog + __init__ + git commit "Version x.y.z"
+  python tools/version.py commit [--patch|--minor|--major] [--force]   # changelog + __init__ + git commit "Version x.y.z"
 """
 
 from __future__ import annotations
@@ -81,9 +81,9 @@ def subsections(body: str) -> dict[str, list[str]]:
     return out
 
 
-def level_of(body: str, major=False) -> str:
-    sub = subsections(body)
-    return "major" if major else "minor" if sub.get("Aggiunto") else "patch"
+def level_of(body: str, level: str | None = None) -> str:
+    """level: scelto a mano ("patch", "minor", "major"); altrimenti dal changelog."""
+    return level or ("minor" if subsections(body).get("Aggiunto") else "patch")
 
 
 def pending(secs, pushed) -> int | None:
@@ -219,7 +219,7 @@ def cmd_done(task: str):
     print(f"Finito: {task}")
 
 
-def plan(text: str, pushed, major=False):
+def plan(text: str, pushed, level: str | None = None):
     """(versione nuova, versione precedente, livello, attivita' in corso)."""
     pre, secs = split(text)
     i = pending(secs, pushed)
@@ -227,7 +227,11 @@ def plan(text: str, pushed, major=False):
         return None
     prev = next((vt(h) for h, _ in secs[i + 1:] if not h.startswith("## Non rilasciato")), None)
     base = max(x for x in (prev, pushed, (0, 0, 0)) if x is not None)
-    lvl = level_of(secs[i][1], major)
+    if level is None and not secs[i][0].startswith("## Non rilasciato"):
+        # numero gia' scelto da un commit non ancora pubblicato: resta quello (lo cambia solo --patch/--minor/--major)
+        keep = vt(secs[i][0])
+        return keep, base, "major" if keep[0] > base[0] else "minor" if keep[1] > base[1] else "patch", wip_items(secs[i][1])
+    lvl = level_of(secs[i][1], level)
     return bump(base, lvl), base, lvl, wip_items(secs[i][1])
 
 
@@ -247,11 +251,11 @@ def current_init() -> str:
     return m[1] if m else "?"
 
 
-def cmd_commit(major=False, force=False):
+def cmd_commit(level: str | None = None, force=False):
     with Lock():
         text = read()
         pushed = pushed_version()
-        p = plan(text, pushed, major)
+        p = plan(text, pushed, level)
         if not p:
             raise SystemExit("Niente da rilasciare: aggiungi prima le modifiche al changelog (tools/version.py add ...)")
         new, base, lvl, wip = p
@@ -289,7 +293,7 @@ def main(argv):
     elif c == "status":
         cmd_status()
     elif c == "commit":
-        cmd_commit("--major" in flags, "--force" in flags)
+        cmd_commit(next((lv for lv in ("major", "minor", "patch") if f"--{lv}" in flags), None), "--force" in flags)
     else:
         print(__doc__)
         raise SystemExit(2)

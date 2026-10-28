@@ -11,6 +11,8 @@
 <div id="app">
   <aside id="sidebar">
     <div class="brand"><span class="logo">◆</span> GameScraper</div>
+    <button class="profile-btn" id="profile-btn" type="button" title="Profilo utente: preferiti, tempo di gioco e collezioni di chi gioca">
+      <span class="ico">👤</span><span id="profile-name">Principale</span><span class="muted">▾</span></button>
     <nav id="nav">
       <div class="nav-section">Libreria</div>
       <a class="nav-item" data-view="foryou"><span class="ico">✨</span><span class="lbl">Per te</span></a>
@@ -438,6 +440,27 @@
           <button class="btn" id="xf-go">Esporta</button>
         </div>
         <p class="muted small" id="xf-info"></p>
+        <h4>🔄 Sincronizzazione tra PC</h4>
+        <p class="muted small">Tiene allineati due PC, per ogni profilo: preferiti, tempo di gioco, stati, note, voti,
+          collezioni e lista desideri. Avviene da sola ogni 5 minuti e con «Sincronizza ora».</p>
+        <label class="chk"><input type="radio" name="sync-what" value="personal"> Solo i dati personali</label>
+        <label class="chk" style="white-space:normal;align-items:flex-start"><input type="radio" name="sync-what" value="all"> Dati personali e impostazioni dell'app
+          <span class="muted small">(store online, fonti, tema, collezioni intelligenti, lista desideri; mai cartelle,
+          emulatori, account degli store e telefono)</span></label>
+        <h5>Cartella condivisa</h5>
+        <p class="muted small">Una cartella sincronizzata da OneDrive, Dropbox, Google Drive, un NAS o Syncthing: scegli la
+          stessa cartella su tutti e due i PC. Funziona anche se non sono accesi insieme.</p>
+        <div class="row"><input class="field grow" id="sync-folder" placeholder="es. C:\Users\nome\OneDrive\GameScraper">
+          <button class="btn" id="sync-folder-pick" type="button">📁</button><button class="btn" id="sync-folder-save">Salva</button></div>
+        <h5>Rete locale</h5>
+        <p class="muted small">Su un PC premi «Mostra codice»; sull'altro scrivi indirizzo e codice e premi «Abbina». Da quel
+          momento i due PC si scambiano i dati, nei due sensi, quando sono accesi sulla stessa rete.</p>
+        <div class="row wrap"><button class="btn" id="sync-code">🔑 Mostra codice per un altro PC</button><span id="sync-code-out" class="small"></span></div>
+        <div class="row wrap"><input class="field grow" id="sync-peer-url" placeholder="Indirizzo dell'altro PC (es. 192.168.1.20)">
+          <input class="field" id="sync-peer-code" placeholder="Codice" size="8" inputmode="numeric">
+          <button class="btn" id="sync-peer-add">Abbina</button></div>
+        <div id="sync-peers"></div>
+        <div class="row"><button class="btn primary" id="sync-now">⟳ Sincronizza ora</button><span class="muted small" id="sync-last"></span></div>
         <h4>Copie di sicurezza dei tuoi dati</h4>
         <p class="muted small">Preferiti, tempi di gioco, stati, collezioni personali e impostazioni (emulatori, cartelle).
           Metadati e immagini non servono: si riscaricano. Una copia automatica ogni settimana, si tengono le ultime 10.</p>

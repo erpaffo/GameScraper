@@ -41,7 +41,7 @@ def user_dir(cfg, name: str) -> Path:
 
 
 class Events:
-    """Bus di eventi lato server: game_started, game_stopped, library_built, scrape_finished, stores_refreshed."""
+    """Bus di eventi lato server: game_launching (sincrono, prima dell'avvio), game_started, game_stopped, library_built, scrape_finished, stores_refreshed."""
 
     def __init__(self):
         self.handlers: dict[str, list] = {}

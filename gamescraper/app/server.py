@@ -53,6 +53,22 @@ STATIC = Path(__file__).parent / "static"
 THUMB_WIDTHS = (200, 300, 450, 700, 1280)
 
 
+class _ActiveUser:
+    """Dati utente del profilo attivo: il server usa sempre questo oggetto, cambiare profilo cambia quello sotto.
+    shortcut: una partita gia' in corso quando si cambia profilo viene registrata sul profilo nuovo; per evitarlo
+    il launcher dovrebbe tenere il profilo con cui e' partita."""
+
+    def __init__(self, ud: UserData):
+        self.ud, self.switches = ud, 0
+
+    def __getattr__(self, name):
+        return getattr(self.ud, name)
+
+    @property
+    def rev(self) -> int:  # cambia anche cambiando profilo: le pagine aperte ricaricano i dati
+        return self.ud.rev + self.switches * 1_000_000
+
+
 class Library:
     """Istantanea in memoria di library.db + dati utente."""
 
@@ -172,7 +188,16 @@ def create_app(cfg) -> FastAPI:
     lib.load(online=False)
     threading.Thread(target=lib.load, daemon=True).start()
     Path(cfg.cache).mkdir(parents=True, exist_ok=True)  # prima installazione: la cache non esiste ancora
-    user = UserData(Path(cfg.cache) / "userdata.db")
+    from .. import sync as SY
+    users: dict[str, UserData] = {}  # profili aperti: restano aperti (chi ne ha un metodo continua a funzionare)
+
+    def user_of(pid: str) -> UserData:
+        if pid not in users:
+            users[pid] = SY.open_profile(cfg, pid)
+        return users[pid]
+    active = cfg.app.get("profile") or "default"
+    user = _ActiveUser(user_of(active if any(p["id"] == active for p in SY.profiles(cfg)) else "default"))
+    sync = SY.Sync(cfg, user_of)
     events = X.Events()
     from ..library import screens as SC
     shots = SC.Shots(cfg.cache, Path(cfg.cache) / "userdata.db")
@@ -1639,9 +1664,153 @@ def create_app(cfg) -> FastAPI:
         if launcher.running().get("status") in ("starting", "extracting", "running"):
             raise HTTPException(409, "Chiudi il gioco in corso prima di ripristinare")  # registrerebbe la partita sui dati vecchi
         try:
-            return BK.restore(cfg, body.get("name") or "", user=user)
+            return BK.restore(cfg, body.get("name") or "", user=user_of("default"),
+                              profiles={k: v for k, v in users.items() if k != "default"})
         except (FileNotFoundError, ValueError) as e:
             raise HTTPException(400, str(e))
+
+    # ------------------------------------------------------------ profili utente
+    def _profiles_state():
+        return {"profiles": SY.profiles(cfg), "active": next(k for k, v in users.items() if v is user.ud)}
+
+    @app.get("/api/profiles")
+    def api_profiles():
+        return _profiles_state()
+
+    @app.post("/api/profiles")
+    def api_profile_new(body: dict = Body(...)):
+        try:
+            p = SY.add_profile(cfg, str(body.get("name") or ""))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {**_profiles_state(), "created": p}
+
+    @app.post("/api/profiles/active")
+    def api_profile_switch(body: dict = Body(...)):
+        pid = str(body.get("id") or "")
+        if not any(p["id"] == pid for p in SY.profiles(cfg)):
+            raise HTTPException(404, "Profilo non trovato")
+        if launcher.running().get("status") in ("starting", "extracting", "running"):
+            raise HTTPException(409, "Chiudi il gioco in corso prima di cambiare profilo")
+        user.ud, user.switches = user_of(pid), user.switches + 1
+        cfg.app["profile"] = pid
+        C.save_settings(cfg, app={"profile": pid})
+        return _profiles_state()
+
+    @app.patch("/api/profiles/{pid}")
+    def api_profile_rename(pid: str, body: dict = Body(...)):
+        try:
+            SY.rename_profile(cfg, pid, str(body.get("name") or ""))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return _profiles_state()
+
+    @app.delete("/api/profiles/{pid}")
+    def api_profile_delete(pid: str):
+        if pid == "default" or not any(p["id"] == pid for p in SY.profiles(cfg)):
+            raise HTTPException(400, "Questo profilo non si elimina")
+        if user.ud is users.get(pid):
+            api_profile_switch({"id": "default"})
+        if pid in users:
+            users.pop(pid).db.close()
+        moved = SY.delete_profile(cfg, pid)
+        return {**_profiles_state(), "moved_to": str(moved) if moved else None}
+
+    # ------------------------------------------------------------ sincronizzazione tra PC
+    def _sync_loop():
+        time.sleep(15)  # dopo l'avvio, senza rallentarlo
+        while True:
+            c = SY.conf(cfg)
+            if c.get("folder") or c.get("peers"):
+                sync.run()
+            time.sleep(SY.INTERVAL)
+
+    def _sync_state():
+        c = SY.conf(cfg)
+        return {"folder": c.get("folder") or "", "what": c.get("what") or "personal", "pc": sync.pc(),
+                "peers": [{k: p.get(k) for k in ("id", "name", "url")} for p in c.get("peers") or []],
+                "pcs": [d for d in phone_hub.devices() if d.get("kind") == "pc"],
+                "server": phone_hub.running(), "urls": [u.removesuffix("/m/") for u in phone_hub.urls()],
+                "last": sync.last, "busy": sync.busy}
+
+    @app.get("/api/sync")
+    def api_sync():
+        return _sync_state()
+
+    @app.post("/api/sync")
+    def api_sync_save(body: dict = Body(...)):
+        c = SY.conf(cfg)
+        if "folder" in body:
+            f = str(body.get("folder") or "").strip()
+            if f and not Path(f).is_dir():
+                raise HTTPException(400, f"Cartella non trovata: {f}")
+            c["folder"] = f
+        if body.get("what") in ("personal", "all"):
+            c["what"] = body["what"]
+        SY.save_conf(cfg, c)
+        return _sync_state()
+
+    @app.post("/api/sync/now")
+    def api_sync_now():
+        sync.run()
+        return _sync_state()
+
+    @app.post("/api/sync/code")
+    def api_sync_code():
+        """Codice per abbinare un altro PC a questo (accende il server HTTPS sulla rete di casa se serve)."""
+        if not phone_hub.running() and not phone_hub.start(app):
+            raise HTTPException(500, phone_hub.error or "Server di rete non avviato")
+        return {"code": phone_hub.new_code(), "minutes": PH.CODE_TTL // 60, **_sync_state()}
+
+    @app.post("/api/sync/peer")
+    def api_sync_peer(body: dict = Body(...)):
+        """Abbina questo PC a un altro (che ha mostrato il codice): da qui partono gli scambi, nei due sensi."""
+        raw = str(body.get("url") or "").strip().removeprefix("https://").removeprefix("http://").split("/")[0]
+        if not raw:
+            raise HTTPException(400, "Serve l'indirizzo dell'altro PC")
+        url = f"https://{raw if ':' in raw else raw + ':' + str(PH.PORT)}"
+        try:
+            r = SY.request(url, "/api/sync/pair", {"code": str(body.get("code") or ""), "name": sync.pc()["pc_name"]})
+        except Exception as e:
+            raise HTTPException(400, f"Abbinamento non riuscito: {e}")
+        c = SY.conf(cfg)
+        peer = {"id": r["pc"]["pc_id"], "name": r["pc"].get("pc_name") or raw, "url": url, "token": r["token"], "fp": r["_fp"]}
+        c["peers"] = [p for p in c.get("peers") or [] if p["id"] != peer["id"]] + [peer]
+        SY.save_conf(cfg, c)
+        threading.Thread(target=sync.run, daemon=True).start()
+        return _sync_state()
+
+    @app.delete("/api/sync/peer/{pid}")
+    def api_sync_peer_delete(pid: str):
+        c = SY.conf(cfg)
+        c["peers"] = [p for p in c.get("peers") or [] if p["id"] != pid]
+        SY.save_conf(cfg, c)
+        return _sync_state()
+
+    @app.delete("/api/sync/pcs/{did}")
+    def api_sync_pc_revoke(did: str):
+        phone_hub.revoke(did)
+        return _sync_state()
+
+    # raggiungibili dagli altri PC tramite il server HTTPS (remote/phone.py: PUBLIC e rotte dei PC abbinati)
+    @app.post("/api/sync/pair")
+    def api_sync_pair(body: dict = Body(...)):
+        try:
+            token = phone_hub.pair(str(body.get("code") or ""), str(body.get("name") or "PC"), kind="pc")
+        except ValueError as e:
+            raise HTTPException(403, str(e))
+        return {"token": token, "pc": sync.pc()}
+
+    @app.post("/api/sync/exchange")
+    def api_sync_exchange(request: Request, body: dict = Body(...)):
+        dev = getattr(request.state, "phone_device", None)
+        if not any(d["id"] == dev and d.get("kind") == "pc" for d in phone_hub.conf["devices"]):
+            raise HTTPException(403, "Solo per i PC abbinati")
+        try:
+            merged = sync.receive(body.get("bundles") or {})
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {"bundles": sync.bundles(), "merged": merged}
 
     # ------------------------------------------------------------ RetroAchievements: obiettivi dei giochi retro
     from .. import retroachievements as RA
@@ -1781,47 +1950,66 @@ def create_app(cfg) -> FastAPI:
         return {"update": fc.get("update_display") or (str(fc["update"]) if fc.get("update") is not None else None),
                 "dlc": fc.get("dlc") or 0}
 
-    # ------------------------------------------------------------ salvataggi dei giochi (copie di sicurezza)
+    # ------------------------------------------------------------ salvataggi dei giochi (versioni e rollback)
     from ..library import saves as SV
 
-    def _saves_of(g: dict) -> tuple[str, list[Path]]:
-        """(emulatore, cartelle/file dei salvataggi) del gioco, con l'emulatore che lo avvierebbe adesso."""
+    def _saves_of(g: dict) -> dict:
+        """Salvataggi del gioco con l'emulatore che lo avvierebbe adesso: trovati (paths), condivisi con altri giochi
+        (shared), e le cartelle dove cercarli se non ce ne sono (roots). all = quelli da copiare, manuali compresi."""
+        manual = SV.resolved_manual(cfg, g["key"])
+        r = {"emulator": "", "paths": [], "shared": [], "roots": []}
         if g.get("store") == "ports":  # port PC: con portable.txt i salvataggi stanno nella sua cartella
             m = PT.all_installed(cfg).get(g["key"].split(":", 1)[1])
-            return "Port PC", PT.user_files(Path(m["folder"]), m) if m else []
-        p = P.PLATFORMS.get(g["platform"])
-        try:
-            pl = L.plan(cfg, p, user.profile(g["key"])) if p and not g.get("store") else None
-        except L.LaunchError:
-            pl = None
-        if not pl or not SV.supported(pl["emulator"]):
-            return (pl or {}).get("emulator") or "", []
-        tid = ""
-        if g["platform"] == "switch":
-            from ..cache import Cache
-            c = Cache(cfg.cache)
+            r.update(emulator="Port PC", paths=PT.user_files(Path(m["folder"]), m) if m else [],
+                     roots=[Path(m["folder"])] if m else [])
+        elif g.get("store"):  # gioco PC: solo percorsi manuali o rilevati dalla partita
+            r.update(emulator=g["store"], roots=[Path(g["install_dir"])] if g.get("install_dir") else [])
+        else:
+            p = P.PLATFORMS.get(g["platform"])
             try:
-                tid = ((c.all_resources([g["key"]]).get(g["key"]) or {}).get("nsp") or {}).get("titleid") or ""
-            finally:
-                c.close()
-        stem = Path(g["files"][0]).stem if g.get("files") else ""
-        return pl["emulator"], SV.game_saves(pl["emulator"], pl.get("exe"), rom_stem=stem, title_id=tid)
+                pl = L.plan(cfg, p, user.profile(g["key"])) if p else None
+            except L.LaunchError:
+                pl = None
+            if pl:
+                rom = Path(g["files"][0]) if g.get("files") else None
+                tid = ""
+                if g["platform"] == "switch":
+                    from ..cache import Cache
+                    c = Cache(cfg.cache)
+                    try:
+                        tid = ((c.all_resources([g["key"]]).get(g["key"]) or {}).get("nsp") or {}).get("titleid") or ""
+                    finally:
+                        c.close()
+                found, shared = SV.game_saves(pl["emulator"], pl.get("exe"), rom_stem=rom.stem if rom else "",
+                                              title_id=tid, ids=SV.game_ids(g["platform"], rom),
+                                              rom_dir=str(rom.parent) if rom else "")
+                r.update(emulator=pl["emulator"], paths=found, shared=shared,
+                         roots=SV.data_roots(pl["emulator"], pl.get("exe")) + ([Path(pl["exe"]).parent] if pl.get("exe") else []))
+        r["all"] = SV._uniq(r["paths"] + r["shared"] + manual)
+        return r
+
+    def _size(paths: list[Path]) -> int:
+        return sum(f.stat().st_size for p in paths for f in ([p] if p.is_file() else p.rglob("*")) if f.is_file())
 
     @app.get("/api/game/{gid}/saves")
     def api_saves(gid: int):
         g = lib.get(gid)
-        emu, paths = _saves_of(g)
-        return {"emulator": emu, "supported": SV.supported(emu) or emu == "Port PC", "paths": [str(x) for x in paths],
-                "items": SV.list_backups(cfg, g["key"])}
+        s = _saves_of(g)
+        return {"emulator": s["emulator"], "supported": SV.supported(s["emulator"]) or bool(s["paths"]),
+                "paths": [str(x) for x in s["paths"]], "shared": [str(x) for x in s["shared"]],
+                "manual": SV.manual_paths(cfg, g["key"]), "suggested": SV.suggestions(cfg, g["key"]),
+                "session": SV.session_point(cfg, g["key"]), "items": SV.list_backups(cfg, g["key"])}
 
     @app.post("/api/game/{gid}/saves")
     def api_saves_backup(gid: int):
         g = lib.get(gid)
-        emu, paths = _saves_of(g)
-        out = SV.backup(cfg, g["key"], g["title"], paths) if paths else None
+        s = _saves_of(g)
+        before = (SV.list_backups(cfg, g["key"])[:1] or [{}])[0].get("name")
+        out = SV.backup(cfg, g["key"], g["title"], s["all"]) if s["all"] else None
         if not out:
-            raise HTTPException(404, f"Nessun salvataggio trovato per questo gioco ({emu or 'emulatore non configurato'})")
-        return {"name": out.name}
+            raise HTTPException(404, "Nessun salvataggio trovato per questo gioco: aggiungi a mano la cartella dove "
+                                     f"li tiene ({s['emulator'] or 'emulatore non configurato'})")
+        return {"name": out.name, "unchanged": out.name == before}
 
     @app.post("/api/game/{gid}/saves/restore")
     def api_saves_restore(gid: int, body: dict = Body(...)):
@@ -1833,19 +2021,81 @@ def create_app(cfg) -> FastAPI:
         except (FileNotFoundError, ValueError) as e:
             raise HTTPException(400, str(e))
 
-    def _saves_after_game(st: dict):
-        """A fine partita: copia dei salvataggi di quel gioco (se l'emulatore e' supportato)."""
-        g = lib.by_key.get(st.get("key") or "")
-        if not g or not (SV.supported(st.get("emulator_id") or "") or g.get("store") == "ports")                 or not cfg.app.get("save_backups", True):
-            return
+    @app.get("/api/game/{gid}/saves/diff")
+    def api_saves_diff(gid: int, name: str):
         try:
-            _, paths = _saves_of(g)
-            size = sum(f.stat().st_size for p in paths for f in ([p] if p.is_file() else p.rglob("*")) if f.is_file())
-            if paths and size <= 1 << 30:  # oltre 1 GB (x10 copie) solo a mano: non si riempie il disco in silenzio
-                SV.backup(cfg, g["key"], g["title"], paths, "dopo-partita")
+            return SV.diff(cfg, lib.get(gid)["key"], name)
+        except (FileNotFoundError, ValueError) as e:
+            raise HTTPException(400, str(e))
+
+    @app.post("/api/game/{gid}/saves/meta")
+    def api_saves_meta(gid: int, body: dict = Body(...)):
+        try:
+            SV.set_meta(cfg, lib.get(gid)["key"], body.get("name") or "",
+                        pinned=None if body.get("pinned") is None else bool(body["pinned"]), note=body.get("note"))
+        except FileNotFoundError as e:
+            raise HTTPException(400, str(e))
+        return {"ok": True}
+
+    @app.post("/api/game/{gid}/saves/delete")
+    def api_saves_delete(gid: int, body: dict = Body(...)):
+        SV.delete(cfg, lib.get(gid)["key"], body.get("name") or "")
+        return {"ok": True}
+
+    @app.post("/api/game/{gid}/saves/paths")
+    def api_saves_paths(gid: int, body: dict = Body(...)):
+        try:
+            return {"manual": SV.set_paths(cfg, lib.get(gid)["key"], [str(x) for x in body.get("paths") or []])}
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+    @app.post("/api/game/{gid}/saves/suggest")
+    def api_saves_suggest(gid: int, body: dict = Body(...)):
+        try:
+            SV.answer_suggestion(cfg, lib.get(gid)["key"], str(body.get("path") or ""), bool(body.get("accept")))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {"ok": True}
+
+    save_t0: dict[str, float] = {}  # chiave -> inizio partita, per riconoscere i file cambiati giocando
+
+    def _auto_backup(st: dict, reason: str) -> dict | None:
+        g = lib.by_key.get(st.get("key") or "")
+        if not g or not cfg.app.get("save_backups", True):
+            return None
+        s = _saves_of(g)
+        if s["all"] and _size(s["all"]) <= 1 << 30:  # oltre 1 GB solo a mano: non si riempie il disco in silenzio
+            SV.backup(cfg, g["key"], g["title"], s["all"], reason)
+        return s
+
+    def _saves_before_game(st: dict):
+        """Prima che il gioco parta: la versione a cui tornare se la partita va male."""
+        try:
+            _auto_backup(st, "prima-della-partita")
+        except Exception as e:  # una copia mancata non deve impedire di giocare
+            print(f"copia dei salvataggi non riuscita: {type(e).__name__}: {e}", file=sys.stderr)
+        save_t0[st.get("key") or ""] = time.time()
+
+    def _saves_after_game(st: dict):
+        """A fine partita: nuova versione; se il gioco non ha salvataggi noti, propone le cartelle cambiate giocando."""
+        try:
+            s = _auto_backup(st, "dopo-partita")
+            t0 = save_t0.pop(st.get("key") or "", None)
+            if s is None or s["all"] or not t0:
+                return
+            roots = list(s["roots"])
+            if lib.by_key[st["key"]].get("store"):  # giochi PC: le cartelle dove Windows tiene i salvataggi
+                env = [os.environ.get(k) for k in ("APPDATA", "LOCALAPPDATA")]
+                roots += [Path.home() / "Saved Games", SV._docs(), *(Path(x) for x in env if x)]
+                if env[1]:
+                    roots.append(Path(env[1]).parent / "LocalLow")
+            found = SV.changed_since(roots, t0, exclude=[Path(cfg.cache)])
+            if found:
+                SV.suggest(cfg, st["key"], found)
         except Exception as e:  # una copia mancata non deve disturbare
             print(f"copia dei salvataggi non riuscita: {type(e).__name__}: {e}", file=sys.stderr)
 
+    events.on("game_launching", _saves_before_game)
     events.on("game_stopped", lambda st: threading.Thread(target=_saves_after_game, args=(st,), daemon=True).start())
 
     # ------------------------------------------------------------ versione, novita' e aggiornamenti
@@ -2227,8 +2477,10 @@ def create_app(cfg) -> FastAPI:
 
     @app.on_event("startup")
     def _phone_startup():
-        if phone_hub.conf.get("enabled"):
+        # il server HTTPS serve anche ai PC abbinati per la sincronizzazione in rete
+        if phone_hub.conf.get("enabled") or any(d.get("kind") == "pc" for d in phone_hub.conf["devices"]):
             threading.Thread(target=phone_hub.start, args=(app,), daemon=True).start()
+        threading.Thread(target=_sync_loop, daemon=True).start()
 
     @app.on_event("shutdown")
     def _phone_shutdown():

@@ -568,6 +568,7 @@ class Launcher:
         launcher = STORE_LAUNCHERS.get(store_id) if (self.cfg.app.get("launch") or {}).get("close_launcher") else None
         launcher_was_open = bool(launcher and _procs_named(launcher))
         self._scripts(key, "before")
+        self.on_event("game_launching", dict(self.state))  # sincrono: la copia dei salvataggi finisce prima del gioco
         try:
             target, args = launch["target"], launch.get("args") or []
             t0 = time.time()
@@ -637,6 +638,7 @@ class Launcher:
             args = [a.replace("{rom}", str(target)).replace("{core}", core) for a in pl["args"]]
             cmd = [pl["exe"], *args]
             self._scripts(key, "before")
+            self.on_event("game_launching", dict(self.state))
             self._set(status="running", message=" ".join(f'"{c}"' if " " in c else c for c in cmd))
             t0 = time.time()
             proc = subprocess.Popen(cmd, cwd=str(Path(pl["exe"]).parent))

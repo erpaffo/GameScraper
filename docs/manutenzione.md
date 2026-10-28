@@ -1,9 +1,53 @@
 # Dati, copie di sicurezza e salute
 
+## Sincronizzazione tra PC
+
+Con due PC (per esempio fisso e portatile) **Impostazioni › Libreria › Sincronizzazione tra PC** tiene allineati i
+dati personali di ogni profilo: preferiti, nascosti, stati, note, voti, versione principale, tempo di gioco e
+partite, collezioni personali e modifiche alle collezioni, lista desideri. La sincronizzazione avviene da sola
+all'avvio e ogni 5 minuti, oppure subito con **⟳ Sincronizza ora**.
+
+### Cosa sincronizzare
+
+| Scelta | Cosa passa da un PC all'altro |
+|---|---|
+| **Solo i dati personali** | I dati elencati sopra |
+| **Dati personali e impostazioni dell'app** | In più: store online e altri store PC, fonti e loro limiti e account, console aggiunte, tema, plugin disattivati, collezioni intelligenti, impostazioni della lista desideri e di RetroAchievements |
+
+Restano **sempre del singolo PC**: cartelle delle ROM, emulatori e profili di avvio, giochi aggiunti a mano, account
+degli store PC (Steam, Epic, GOG…), telefono e streaming. La scelta va fatta uguale su tutti e due i PC.
+
+### Due modi, anche insieme
+
+**Cartella condivisa**: scegli una cartella sincronizzata da OneDrive, Dropbox, Google Drive, un NAS o Syncthing, la
+**stessa** su tutti e due i PC, e premi **Salva**. Ogni PC ci scrive solo il suo file
+(`GameScraper-sync/<profilo>/<pc>.json`), quindi il servizio di sincronizzazione non crea conflitti. Funziona anche
+se i PC non sono mai accesi insieme.
+
+**Rete locale**, senza servizi esterni:
+
+1. sul primo PC premi **🔑 Mostra codice per un altro PC**: compaiono un codice di 6 cifre (vale 10 minuti, una volta
+   sola) e l'indirizzo del PC;
+2. sul secondo PC scrivi indirizzo e codice e premi **Abbina**.
+
+Da quel momento il secondo PC scambia i dati con il primo, **nei due sensi**, quando sono accesi sulla stessa rete. La
+comunicazione è cifrata (HTTPS) e il certificato del primo PC viene ricordato all'abbinamento: se cambia, lo scambio
+si ferma e va rifatto l'abbinamento. Un PC abbinato può solo scambiare i dati di sincronizzazione, nient'altro. I PC
+abbinati si scollegano dalla stessa sezione. Windows può chiedere di consentire l'app sulle reti private.
+
+### Come si uniscono i dati
+
+- Per ogni dato vince la **modifica più recente**: se togli un preferito sul portatile, sparisce anche dal fisso.
+- Al primo collegamento i dati dei due PC si **uniscono**: i preferiti di entrambi restano preferiti.
+- Il **tempo di gioco** si somma: ogni partita è registrata una volta sola, anche ripetendo la sincronizzazione.
+- Le **cancellazioni** (collezioni, giochi della lista desideri) arrivano anche sull'altro PC.
+- Lo stesso gioco si riconosce sui due PC anche se è in cartelle diverse (le ROM per contenuto, i giochi PC per il
+  codice dello store).
+
 ## Copie di sicurezza dei tuoi dati
 
 In **Impostazioni › Libreria › Copie di sicurezza dei tuoi dati** si salvano in uno zip preferiti, tempi di gioco,
-stati, note, collezioni personali e `settings.json`. Le copie stanno in `<cache>/backups`.
+stati, note, collezioni personali (di tutti i profili) e `settings.json`. Le copie stanno in `<cache>/backups`.
 
 - **Copia automatica settimanale** all'avvio; si tengono le ultime 10.
 - **Ripristino a caldo**: funziona con l'app aperta. Prima di ripristinare viene salvata una copia dei dati attuali,

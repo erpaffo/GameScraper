@@ -61,20 +61,29 @@ def plan(cfg, log=print) -> list[tuple[str, str, str, str]]:
 def apply(cfg, pairs, log=print):
     cache = Path(cfg.cache)
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    for name in ("cache.db", "userdata.db"):
+    # i profili utente oltre al principale: stesse tabelle personali di userdata.db
+    profiles = [f"profiles/{f.name}" for f in sorted((cache / "profiles").glob("*.db"))]
+    for name in ("cache.db", "userdata.db", *profiles):
         # backup di sqlite e non copia del file: userdata.db e' in WAL e puo' essere aperto dall'app
         src, dst = sqlite3.connect(cache / name), sqlite3.connect(cache / f"{name}.{stamp}.bak")
         src.backup(dst)
         src.close()
         dst.close()
-    dbs = {n: sqlite3.connect(cache / n) for n in ("cache.db", "userdata.db")}
-    for db_name, table in TABLES:
+    dbs = {n: sqlite3.connect(cache / n) for n in ("cache.db", "userdata.db", *profiles)}
+    tables = TABLES + [(n, t) for n in profiles for db_n, t in TABLES if db_n == "userdata.db"]
+    for db_name, table in tables:
         db = dbs[db_name]
         try:
             for old, new, _, _ in pairs:
                 db.execute(f"UPDATE OR REPLACE {table} SET key=? WHERE key=?", (new, old))
         except sqlite3.OperationalError:
-            pass  # tabella non ancora creata
+            pass  # tabella non ancora creata (o non di questo database)
+    for name in ("userdata.db", *profiles):  # ore delle modifiche per la sincronizzazione tra PC
+        try:
+            for old, new, _, _ in pairs:
+                dbs[name].execute("UPDATE OR REPLACE sync_times SET id=? WHERE tbl='game' AND id=?", (new, old))
+        except sqlite3.OperationalError:
+            pass
     for db in dbs.values():
         db.commit()
         db.close()

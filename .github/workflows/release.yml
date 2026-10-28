@@ -65,6 +65,7 @@ jobs:
           python tests/test_controllers.py
           python tests/test_ports.py
           python tests/test_version.py
+          python tests/test_sync.py
 
       - name: Build
         run: pyinstaller packaging/gamescraper.spec --noconfirm --distpath dist --workpath build

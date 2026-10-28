@@ -32,6 +32,24 @@ Sotto le viste ci sono le **console** (con il numero di giochi), la sezione **PC
 **collezioni** e le **collezioni intelligenti**. Gli stati dei giochi (Da giocare, In corso, Finito, Abbandonato)
 sono viste anch'essi.
 
+## Profili utente
+
+Se al PC giocano più persone, ognuna può avere il suo **profilo**: il pulsante **👤** in cima alla barra laterale
+mostra il profilo attivo e apre il menu per cambiarlo, crearne uno nuovo (**＋ Nuovo profilo…**), rinominarlo o
+eliminarlo.
+
+| Separato per profilo | Comune a tutti i profili |
+|---|---|
+| Preferiti, nascosti, stati, note e voti | La libreria: ROM, giochi PC, store online, dati scaricati |
+| Tempo di gioco, partite, *Giocati di recente* | Emulatori, profili di avvio, giochi aggiunti a mano |
+| Collezioni personali e modifiche alle collezioni | Impostazioni, temi, plugin, collezioni intelligenti |
+| Lista desideri | Schermate |
+
+Il profilo **Principale** c'è sempre e non si elimina. Eliminare un altro profilo non cancella niente: il suo
+database viene spostato in `cache/profiles/eliminati/`. Non si può cambiare profilo durante una partita. Con la
+[sincronizzazione tra PC](manutenzione.md#sincronizzazione-tra-pc) ogni profilo si sincronizza con quello che ha lo
+**stesso nome** sull'altro PC.
+
 ## Cercare, ordinare, raggruppare
 
 - **Ricerca** (tasto `/`): cerca nel titolo, nello sviluppatore, nella console e nello store. Più parole devono

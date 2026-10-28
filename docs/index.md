@@ -20,6 +20,7 @@ copertine, descrizioni, valutazioni e durate, e li avvia con un doppio clic.
 | Telefono | Il telefono come telecomando, controller (anche più giocatori) e schermo con Moonlight | [Telefono e streaming](telefono-streaming.md) |
 | TV | Interfaccia a schermo intero per il controller | [Big Picture](bigpicture.md) |
 | Personalizzazione | Temi (solo CSS) e plugin (JavaScript e Python) | [Temi e plugin](ESTENSIONI.md) |
+| Più PC e più persone | Sincronizzazione dei dati tra due PC (cartella condivisa o rete locale) e profili utente separati | [Dati e manutenzione](manutenzione.md#sincronizzazione-tra-pc), [Profili](libreria.md#profili-utente) |
 | Manutenzione | Copie di sicurezza, pagina Salute, cartelle rinominate, esportazione | [Dati e manutenzione](manutenzione.md) |
 
 ## Come è fatta l'app

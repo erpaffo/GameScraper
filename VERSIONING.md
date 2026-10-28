@@ -6,12 +6,13 @@ Tutto passa da `tools/version.py`. Lo script non fa mai `git push`: il push lo f
 
 - La sezione in cima a `changelog.md` è la **versione in preparazione**: è «Non rilasciato», oppure una versione più
   alta di quella su GitHub (`origin/main`). Ogni modifica si scrive lì.
-- Il numero si calcola da solo partendo dalla versione precedente:
-  - c'è almeno una voce in «Aggiunto» → **+0.1.0** (funzioni nuove);
-  - solo «Corretto», «Migliorato», «Cambiato», «Rimosso» → **+0.0.1** (correzioni, pulizia);
-  - **+1.0.0** solo con `--major`, per la versione definitiva.
+- **Il livello lo sceglie l'utente**: prima di ogni commit chiedigli se aumentare di 0.0.1 o di 0.1.0 e passa
+  `--patch` (+0.0.1), `--minor` (+0.1.0) o `--major` (+1.0.0, versione definitiva).
+- Senza opzioni il numero si calcola dalla versione precedente: con almeno una voce in «Aggiunto» **+0.1.0**,
+  altrimenti **+0.0.1**.
 - Finché non fai il push, i commit successivi restano nella stessa versione: lo stesso «Version 0.3.0», con il changelog
-  che cresce. Se nel frattempo arriva una funzione nuova, il numero sale da solo (per esempio da 0.2.3 a 0.3.0).
+  che cresce. Il numero scelto resta anche se arrivano voci in «Aggiunto»; lo cambia solo un commit con
+  `--patch`/`--minor`/`--major`.
 - Dopo il push, la modifica seguente apre una sezione nuova.
 
 ## Comandi
@@ -32,6 +33,8 @@ python tools/version.py status
 :: aggiorna changelog e gamescraper/__init__.py, poi git commit -m "Version x.y.z"
 python tools/version.py commit
 python tools/version.py commit --force    :: anche con lavori in corso: i loro file restano fuori
+python tools/version.py commit --patch    :: +0.0.1 (scelto dall'utente)
+python tools/version.py commit --minor    :: +0.1.0 (scelto dall'utente)
 python tools/version.py commit --major    :: versione definitiva (+1.0.0)
 
 :: pubblicare (a mano)

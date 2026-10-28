@@ -75,6 +75,13 @@ def main():
         assert "Niente da rilasciare" in v("commit", ok=False)
         v("add", "rimosso", "roba")
         assert "0.4.1" in v("status") and "1.0.0" in v("commit", "--major")
+        # livello scelto a mano: --patch anche con «Aggiunto», e il numero scelto resta ai commit seguenti
+        g("push", "-q")
+        v("add", "aggiunto", "funzione")
+        assert "Version 1.0.1" in v("commit", "--patch")
+        v("add", "aggiunto", "altra funzione")
+        assert "In preparazione: 1.0.1" in v("status") and "Version 1.0.1" in v("commit")
+        assert "Version 1.1.0" in v("add", "corretto", "x") + v("commit", "--minor")
     print("ok  versioni: numero dal changelog, stessa versione fino al push, attività in corso fuori dal commit")
     print("test_version: OK")
 

@@ -8,7 +8,8 @@
 | `settings.json` | Scelte fatte dall'app: emulatori, store, cataloghi, tema, plugin, pianificazioni | L'app (accanto a `config.toml`) |
 | `cache/cache.db` | Risposte delle fonti, stato dello scraping, elenchi degli store online | L'app |
 | `cache/library.db` | La libreria pronta per l'interfaccia | L'app, a ogni ricostruzione |
-| `cache/userdata.db` | Preferiti, tempo di gioco, stati, note, collezioni personali | L'app; mai toccato dalle ricostruzioni |
+| `cache/userdata.db` | Preferiti, tempo di gioco, stati, note, collezioni personali del profilo Principale; profili di avvio e giochi aggiunti a mano (comuni) | L'app; mai toccato dalle ricostruzioni |
+| `cache/profiles/<profilo>.db` | Gli stessi dati personali degli altri profili utente | L'app |
 | `cache/backups/` | Copie di sicurezza dei tuoi dati | L'app |
 | `cache/saves/` | Copie dei salvataggi dei giochi | L'app |
 | `cache/logs/diagnostica.log` | Log diagnostico (con `--log`) | L'app |
@@ -134,6 +135,8 @@ Lo scrive l'app; si può modificare a mano con l'app chiusa. Le sezioni più uti
 | `custom_platforms` | Console aggiunte con **＋ Aggiungi console** |
 | `screenscraper`, `igdb`, `rawg`, `thegamesdb`, `limits` | Account e limiti delle fonti impostati dall'app |
 | `app` | Tema, plugin, collezioni intelligenti (`smart_collections`), pianificazioni e altre scelte dell'app |
+| `app.profiles`, `app.profile` | Profili utente e profilo attivo |
+| `app.sync` | Sincronizzazione: cartella condivisa (`folder`), cosa sincronizzare (`what`: `personal` o `all`), PC abbinati, identità di questo PC |
 
 ## Comandi da terminale
 

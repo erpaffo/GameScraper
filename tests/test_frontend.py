@@ -567,11 +567,11 @@ def test_game_saves():
         old = os.environ.get("APPDATA")
         os.environ["APPDATA"] = str(tmp)
         try:
-            assert SV.game_saves("eden", None, title_id=tid.lower()) == [ed]
-            assert SV.game_saves("ryujinx", None, title_id=tid) == [ry]
-            rfiles = SV.game_saves("retroarch", str(ra / "retroarch.exe"), rom_stem="Pokemon Rosso")
+            assert SV.game_saves("eden", None, title_id=tid.lower()) == ([ed], [])
+            assert SV.game_saves("ryujinx", None, title_id=tid)[0] == [ry]
+            rfiles = SV.game_saves("retroarch", str(ra / "retroarch.exe"), rom_stem="Pokemon Rosso")[0]
             assert sorted(f.name for f in rfiles) == ["Pokemon Rosso.srm", "Pokemon Rosso.state1"], rfiles
-            assert not SV.supported("dolphin") and SV.game_saves("dolphin", None, title_id=tid) == []
+            assert not SV.supported("xemu") and SV.game_saves("xemu", None, title_id=tid) == ([], [])
         finally:
             if old is None:
                 os.environ.pop("APPDATA", None)
@@ -601,6 +601,117 @@ def test_game_saves():
         except FileNotFoundError:
             pass
     print("ok  salvataggi: Eden, Ryujinx, RetroArch; copia, ripristino, zip manomesso")
+
+
+def test_saves_versions():
+    """Salvataggi: regole per Dolphin/PCSX2/PPSSPP/Azahar/melonDS, ID letti dalle ROM, versioni senza doppioni,
+    fissate che sopravvivono, rollback esatto, confronto, percorsi manuali e proposte dai file cambiati giocando."""
+    import os
+    import struct
+    from gamescraper.library import saves as SV
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        tmp = Path(t)
+        # ID dalle ROM: disco GameCube, ISO PS2 con SYSTEM.CNF, ISO PSP con UMD_DATA.BIN, cartuccia 3DS (NCSD)
+        (tmp / "g.iso").write_bytes(b"GALE01" + b"\0" * 64)
+        (tmp / "p2.iso").write_bytes(b"\0" * 5000 + b"BOOT2 = cdrom0:\\SLUS_209.46;1\r\nVER = 1.00")
+        (tmp / "psp.iso").write_bytes(b"\0" * 3000 + b"ULUS-10041|0123456789ABCDEF|0001|G")
+        n3 = bytearray(0x200)
+        n3[0x100:0x104] = b"NCSD"
+        struct.pack_into("<Q", n3, 0x108, 0x0004000000055D00)
+        (tmp / "x.3ds").write_bytes(bytes(n3))
+        assert SV.game_ids("gc", tmp / "g.iso") == {"gid": "GALE01", "gid4": "GALE", "gid4hex": "47414c45"}
+        assert SV.game_ids("ps2", tmp / "p2.iso") == {"serial": "SLUS-20946", "serialnd": "SLUS20946"}
+        assert SV.game_ids("psp", tmp / "psp.iso")["serialnd"] == "ULUS10041"
+        assert SV.game_ids("3ds", tmp / "x.3ds") == {"tid": "0004000000055D00", "lowid": "00055d00"}
+        assert SV.game_ids("gc", tmp / "nessuno.iso") == {}
+        # cartelle degli emulatori (portatili accanto all'exe)
+        dol = tmp / "Dolphin"
+        dol.mkdir()
+        (dol / "portable.txt").write_text("")
+        card = dol / "User" / "GC" / "EUR" / "Card A"
+        card.mkdir(parents=True)
+        (card / "01-GALE-SuperSmash.gci").write_bytes(b"g")
+        (card / "01-GXXE-Altro.gci").write_bytes(b"x")
+        (dol / "User" / "GC" / "MemoryCardA.EUR.raw").write_bytes(b"raw")
+        found, shared = SV.game_saves("dolphin", str(dol / "Dolphin.exe"), ids=SV.game_ids("gc", tmp / "g.iso"))
+        assert [p.name for p in found] == ["01-GALE-SuperSmash.gci"] and [p.name for p in shared] == ["MemoryCardA.EUR.raw"]
+        pcsx = tmp / "PCSX2"
+        (pcsx / "sstates").mkdir(parents=True)
+        (pcsx / "memcards").mkdir()
+        (pcsx / "portable.ini").write_text("")
+        (pcsx / "sstates" / "SLUS-20946 (ABCD1234).01.p2s").write_bytes(b"s")
+        (pcsx / "memcards" / "Mcd001.ps2").write_bytes(b"m")
+        found, shared = SV.game_saves("pcsx2", str(pcsx / "pcsx2-qt.exe"), ids=SV.game_ids("ps2", tmp / "p2.iso"))
+        assert [p.name for p in found] == ["SLUS-20946 (ABCD1234).01.p2s"] and [p.name for p in shared] == ["Mcd001.ps2"]
+        pp = tmp / "PPSSPP" / "memstick" / "PSP" / "SAVEDATA" / "ULUS10041DATA00"
+        pp.mkdir(parents=True)
+        assert SV.game_saves("ppsspp", str(tmp / "PPSSPP" / "PPSSPPWindows64.exe"), ids={"serialnd": "ULUS10041"})[0] == [pp]
+        az = tmp / "Azahar" / "user" / "sdmc" / "Nintendo 3DS" / "a" / "b" / "title" / "00040000" / "00055d00" / "data"
+        az.mkdir(parents=True)
+        assert SV.game_saves("azahar", str(tmp / "Azahar" / "azahar.exe"), ids=SV.game_ids("3ds", tmp / "x.3ds"))[0] == [az]
+        roms = tmp / "roms [nds]"
+        roms.mkdir()
+        (roms / "Zelda [!].sav").write_bytes(b"z")
+        assert [p.name for p in SV.game_saves("melonds", None, rom_stem="Zelda [!]", rom_dir=str(roms))[0]] == ["Zelda [!].sav"]
+
+        # versioni: nessun doppione, fissate che restano, rollback che toglie i file nati dopo
+        cfg = config.Config(cache=tmp / "cache")
+        cfg.app = {"save_keep": 2}
+        sav = tmp / "Gioco" / "Saves"
+        sav.mkdir(parents=True)
+        (sav / "slot1").write_bytes(b"v1")
+        first = SV.backup(cfg, "pc/g", "Gioco", [sav], "prima-della-partita")
+        assert SV.backup(cfg, "pc/g", "Gioco", [sav], "dopo-partita") == first, "contenuto uguale: nessuna nuova versione"
+        assert SV.session_point(cfg, "pc/g") == first.name
+        SV.set_meta(cfg, "pc/g", first.name, pinned=True, note="prima del boss")
+        for i in range(3):
+            (sav / "slot1").write_bytes(b"v" + str(i + 2).encode())
+            time.sleep(1.05)  # nomi al secondo e ordinamento per data
+            SV.backup(cfg, "pc/g", "Gioco", [sav], "dopo-partita")
+        items = SV.list_backups(cfg, "pc/g")
+        assert len(items) == 3 and items[-1]["name"] == first.name and items[-1]["pinned"], items
+        assert items[-1]["note"] == "prima del boss" and items[-1]["reason"] == "prima-della-partita"
+        (sav / "slot2").write_bytes(b"nuovo")
+        dd = SV.diff(cfg, "pc/g", first.name)
+        assert [Path(x).name for x in dd["changed"]] == ["slot1"] and [Path(x).name for x in dd["extra"]] == ["slot2"], dd
+        r = SV.restore(cfg, "pc/g", first.name)
+        assert (sav / "slot1").read_bytes() == b"v1" and not (sav / "slot2").exists() and r["removed"] == 1, r
+        assert SV.diff(cfg, "pc/g", first.name)["same"] == 1
+        SV.delete(cfg, "pc/g", first.name)
+        assert first.name not in [b["name"] for b in SV.list_backups(cfg, "pc/g")] and SV.session_point(cfg, "pc/g") is None
+
+        # percorsi manuali: variabili espanse, cartelle troppo generiche rifiutate
+        os.environ["GS_TEST_SAVES"] = str(sav)
+        assert SV.set_paths(cfg, "pc/g", ["%GS_TEST_SAVES%"]) == ["%GS_TEST_SAVES%"]
+        assert SV.resolved_manual(cfg, "pc/g") == [sav]
+        for bad in (Path(sav.anchor), Path.home(), tmp / "non-esiste", "relativo\\x", cfg.cache):
+            try:
+                SV.set_paths(cfg, "pc/g", [str(bad)])
+                raise AssertionError(f"percorso accettato: {bad}")
+            except ValueError:
+                pass
+        assert SV.manual_paths(cfg, "pc/g") == ["%GS_TEST_SAVES%"], "un percorso rifiutato non cambia la lista"
+
+        # proposte: solo le cartelle con file cambiati dopo l'inizio della partita, niente log/cache
+        game = tmp / "AppDataFinta" / "Studio" / "Gioco2"
+        (game / "save").mkdir(parents=True)
+        (game / "logs").mkdir()
+        (game / "old.cfg").write_bytes(b"o")
+        t0 = time.time() + 1
+        os.utime(game / "old.cfg", (t0 - 100, t0 - 100))
+        (game / "save" / "profile.dat").write_bytes(b"p")
+        (game / "logs" / "run.txt").write_bytes(b"l")
+        os.utime(game / "save" / "profile.dat", (t0 + 5, t0 + 5))
+        os.utime(game / "logs" / "run.txt", (t0 + 5, t0 + 5))
+        found = SV.changed_since([tmp / "AppDataFinta"], t0)
+        assert found == [game / "save"], found
+        assert SV.suggest(cfg, "pc/h", found) == [str((game / "save").resolve())]
+        SV.answer_suggestion(cfg, "pc/h", str((game / "save").resolve()), accept=False)
+        assert SV.suggest(cfg, "pc/h", found) == [], "una proposta ignorata non torna"
+        SV.suggest(cfg, "pc/k", found)
+        SV.answer_suggestion(cfg, "pc/k", str((game / "save").resolve()), accept=True)
+        assert SV.resolved_manual(cfg, "pc/k") == [(game / "save").resolve()] and SV.suggestions(cfg, "pc/k") == []
+    print("ok  salvataggi: regole emulatori, ID dalle ROM, versioni, rollback, percorsi manuali, proposte")
 
 
 def test_mark_started():
@@ -715,5 +826,6 @@ if __name__ == "__main__":
     test_wishlist_keyshops()
     test_eden_screenshot_dirs()
     test_game_saves()
+    test_saves_versions()
     test_mark_started()
     test_stream_optimize()
