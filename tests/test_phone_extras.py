@@ -88,12 +88,117 @@ def test_pwa_installabile(tmp_path):
         man = gate.get("/m/manifest.webmanifest").json()
         assert man["scope"] == "/m/" and man["start_url"] == "/m/" and man["id"] == "/m/"
         assert {"192x192", "512x512"} <= {i["sizes"] for i in man["icons"]}
-        # la pagina registra il service worker
+        # la pagina registra il service worker e spiega cosa manca se il certificato non e' fidato
         js = gate.get("/m/static/m.js").text
         assert 'navigator.serviceWorker.register("/m/sw.js"' in js
+        assert "beforeinstallprompt" in js and "install-btn" in js
+        # il certificato della CA si scarica senza abbinamento (serve proprio a fidarsi del PC)
+        gate.cookies.clear()
+        ca = gate.get("/m/ca.crt")
+        assert ca.status_code == 200, ca.text
+        assert "x-x509-ca-cert" in ca.headers["content-type"], ca.headers
+        assert ca.content.startswith(b"-----BEGIN CERTIFICATE-----")
     finally:
         close(app, gate)
-    print("ok  PWA: sw.js pubblico con ambito /m, manifest con icone 192/512, registrazione nella pagina")
+    print("ok  PWA: sw.js pubblico con ambito /m, manifest con icone 192/512, CA scaricabile, pulsante Installa")
+
+
+def test_certificato_firmato_dalla_ca(tmp_path):
+    """Il certificato del server e' firmato da una CA locale: senza, il telefono mostra «non privata» e il browser
+    rifiuta il service worker (app non installabile). La CA deve restare la stessa quando cambia l'IP."""
+    from cryptography import x509
+    from cryptography.x509.oid import ExtendedKeyUsageOID
+
+    from gamescraper.remote import certs
+
+    folder = tmp_path / "certs"
+    crt, key, ca = certs.ensure(folder)
+    assert crt.exists() and key.exists() and ca.exists() and ca.name == "ca.crt"
+    leaf = x509.load_pem_x509_certificate(crt.read_bytes())
+    root = x509.load_pem_x509_certificate(ca.read_bytes())
+    assert leaf.issuer == root.subject and leaf.subject != root.subject, "il certificato e' ancora autofirmato"
+    assert root.extensions.get_extension_for_class(x509.BasicConstraints).value.ca is True
+    ski = root.extensions.get_extension_for_class(x509.SubjectKeyIdentifier).value.digest
+    aki = leaf.extensions.get_extension_for_class(x509.AuthorityKeyIdentifier).value.key_identifier
+    assert aki == ski, "il telefono non collegherebbe il certificato alla CA"
+    eku = leaf.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
+    assert ExtendedKeyUsageOID.SERVER_AUTH in eku
+    san = leaf.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+    ips = {str(i) for i in san.get_values_for_type(x509.IPAddress)}
+    assert "127.0.0.1" in ips and "localhost" in {str(d) for d in san.get_values_for_type(x509.DNSName)}
+    # secondo giro: niente viene rifatto (il telefono non va riconfigurato)
+    first = leaf.serial_number
+    crt2, _, ca2 = certs.ensure(folder)
+    assert crt2 == crt and ca2 == ca
+    assert x509.load_pem_x509_certificate(crt2.read_bytes()).serial_number == first
+
+    # indirizzo nuovo: si rifa' solo il certificato del server, la CA resta quella
+    mp = Patch()
+    try:
+        mp.setattr(certs, "lan_ips", lambda: ["10.9.9.9"])
+        crt3, _, ca3 = certs.ensure(folder)
+        renewed = x509.load_pem_x509_certificate(crt3.read_bytes())
+        assert renewed.serial_number != first, "certificato non rifatto dopo il cambio di indirizzo"
+        assert "10.9.9.9" in {str(i) for i in renewed.extensions.get_extension_for_class(
+            x509.SubjectAlternativeName).value.get_values_for_type(x509.IPAddress)}
+        assert renewed.issuer == x509.load_pem_x509_certificate(ca3.read_bytes()).subject
+        assert ca3.read_bytes() == ca.read_bytes(), "la CA e' cambiata: il telefono andrebbe riconfigurato"
+    finally:
+        mp.undo()
+
+    # certificato autofirmato di una versione precedente (o file sbagliato): viene sostituito
+    crt.write_bytes(ca.read_bytes())
+    crt4, _, _ = certs.ensure(folder)
+    fixed = x509.load_pem_x509_certificate(crt4.read_bytes())
+    assert fixed.serial_number != x509.load_pem_x509_certificate(ca.read_bytes()).serial_number
+    assert fixed.issuer == x509.load_pem_x509_certificate(ca.read_bytes()).subject
+
+    # il PC puo' salvare il certificato (per passarlo al telefono se il download sul telefono viene bloccato)
+    cfg = make_cfg(tmp_path)
+    api = client(cfg)
+    dl = api.get("/api/phone/ca")
+    assert dl.status_code == 200, dl.text
+    assert "x-x509-ca-cert" in dl.headers["content-type"], dl.headers
+    print("ok  certificato del server firmato dalla CA locale, CA stabile, rifatto al cambio di IP")
+
+
+def test_libreria_pronta_in_cache(tmp_path):
+    """La libreria non viene ricostruita a ogni apertura (0,5 s e 8 MB su una libreria grande): stessa risposta
+    finche' nulla cambia, e nuova appena cambia un dato utente. E' quello che rende rapida l'app del telefono."""
+    import json
+    import sqlite3
+
+    from gamescraper.library.build import SCHEMA
+
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    db = sqlite3.connect(cache / "library.db")
+    db.executescript(SCHEMA)
+    db.executemany(
+        "INSERT INTO games(key, platform, title, sort_title, year, genres, files, media, found, grp, is_primary, origin) "
+        "VALUES(?,?,?,?,?,'[]','[]','{}',1,?,?, '{}')",
+        [("gba/AAA", "gba", "Pokemon Rubino", "pokemon rubino", 2003, "gba/s:AXV", 1),
+         ("gba/BBB", "gba", "Pokemon Zaffiro", "pokemon zaffiro", 2003, "gba/s:BXV", 1)])
+    db.commit()
+    db.close()
+
+    cfg = config.Config(cache=cache, output=tmp_path / "out")
+    cfg.config_path = tmp_path / "config.toml"
+    api = client(cfg)
+    a = api.get("/api/library?part=owned")
+    assert a.status_code == 200 and len(a.json()["games"]["rows"]) == 2, a.text
+    b = api.get("/api/library?part=owned")
+    assert b.content == a.content, "la seconda richiesta deve usare la risposta gia' pronta"
+
+    gid = a.json()["games"]["rows"][0][0]
+    r = api.post(f"/api/game/{gid}/flag", json={"field": "favorite", "value": True})
+    assert r.status_code == 200, r.text
+    c = api.get("/api/library?part=owned")
+    assert c.content != a.content, "cambiando un dato utente la libreria va ricostruita"
+    gcols = c.json()["groups"]["cols"]
+    fav = [row[gcols.index("favorite")] for row in c.json()["groups"]["rows"]]
+    assert any(fav), "il preferito appena messo deve comparire subito"
+    print("ok  libreria in cache: risposta pronta al secondo giro, rifatta dopo una modifica")
 
 
 def test_pad_salvato_sul_pc(tmp_path):
@@ -118,6 +223,18 @@ def test_pad_salvato_sul_pc(tmp_path):
     finally:
         close(app, gate)
     print("ok  aspetti del pad salvati sul PC, con valori riportati nei limiti")
+
+
+def test_ca_installata_nasconde_il_qr(tmp_path):
+    """La casella «certificato gia' installato» resta salvata sul PC e il QR non viene piu' generato."""
+    cfg = make_cfg(tmp_path)
+    api = client(cfg)
+    assert api.get("/api/phone").json()["ca_installed"] is False
+    assert api.post("/api/phone", json={"ca_installed": True}).json()["ca_installed"] is True
+    assert config.read_settings(cfg)["app"]["phone"]["ca_installed"] is True
+    assert api.get("/api/phone").json()["ca_installed"] is True
+    assert api.post("/api/phone", json={"ca_installed": False}).json()["ca_installed"] is False
+    print("ok  certificato gia' installato: scelta salvata sul PC")
 
 
 def test_telecomando(tmp_path, monkeypatch=None):
@@ -239,8 +356,10 @@ def test_avvisi_giochi_gratis_e_port(tmp_path, monkeypatch=None):
 
 
 if __name__ == "__main__":
-    for fn in (test_pwa_installabile, test_pad_salvato_sul_pc, test_telecomando, test_prova_controller,
-               test_power_a_fine_lavori, test_notifiche, test_avvisi_giochi_gratis_e_port):
+    for fn in (test_pwa_installabile, test_certificato_firmato_dalla_ca, test_libreria_pronta_in_cache,
+               test_pad_salvato_sul_pc, test_ca_installata_nasconde_il_qr, test_telecomando, test_prova_controller,
+               test_power_a_fine_lavori,
+               test_notifiche, test_avvisi_giochi_gratis_e_port):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
             fn(Path(t))
     print("TUTTI I TEST OK")

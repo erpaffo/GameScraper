@@ -14,14 +14,59 @@ Tutto si configura in **Impostazioni › 📱 Telefono e streaming**.
 ### Attivarla e abbinare il telefono
 
 1. **Attiva l'accesso dal telefono**. L'app pubblica sulla rete di casa una web app in HTTPS.
-2. Inquadra il **QR** con il telefono. Il codice di abbinamento ha 6 cifre, vale 10 minuti e si usa una volta sola.
-3. Aggiungi la pagina alla **schermata Home** del telefono: si apre come un'app. Da questa versione è una **vera app
-   installabile**: ha un service worker, quindi si installa anche dal menu del browser («Installa app») e la
-   **libreria resta consultabile anche quando il Wi-Fi va e viene** (copertine comprese); i comandi che modificano
-   qualcosa (avvio, preferiti, controller) richiedono la connessione.
+2. **Installa una volta il certificato del PC** (vedi sotto): senza, il telefono mostra «connessione non privata» e il
+   browser **rifiuta di installare l'app**.
+3. Inquadra il **QR** dell'abbinamento con il telefono. Il codice ha 6 cifre, vale 10 minuti e si usa una volta sola.
+4. Tocca **⬇ Installa** in alto (su iPhone/iPad: *Condividi › Aggiungi alla schermata Home*): l'app parte a tutto
+   schermo e la **libreria resta consultabile anche quando il Wi-Fi va e viene** (copertine comprese); i comandi che
+   modificano qualcosa (avvio, preferiti, controller) richiedono la connessione.
 
-La prima apertura mostra l'avviso «connessione non privata»: è il certificato del tuo PC, si accetta con
-**Avanzate › Procedi**. Windows può chiedere di consentire l'app sulle reti private.
+Windows può chiedere di consentire l'app sulle reti private: rispondi Sì.
+
+### Installare l'app: il certificato HTTPS
+
+Il server del telefono parla HTTPS, ma con un certificato **fatto in casa**. Un certificato non fidato produce due
+effetti: l'avviso «connessione non privata» e, soprattutto, il **rifiuto del service worker** da parte del browser —
+quindi niente installazione e niente uso senza rete. La soluzione è fidarsi del PC una volta sola.
+
+Attenzione a cosa fa il profilo: **non attiva l'HTTPS** (c'è già, la pagina è `https://<ip>:8766/m/`), serve a dire al
+telefono «questo certificato è legittimo». HTTPS è due cose insieme: connessione cifrata e **identità** del server
+certificata da qualcuno. Un sito pubblico si fa certificare da un'autorità pubblica (serve un dominio e internet);
+qui l'autorità sei tu, sul PC, e installare `GameScraper-CA.crt` una volta sul telefono la rende riconosciuta. Con un
+certificato fidato il service worker viene accettato e l'app si installa. Senza profilo, su iPhone puoi ancora usare
+*Condividi › Aggiungi alla schermata Home*, ma resta un semplice collegamento: niente uso senza rete e niente
+giroscopio (anche i sensori richiedono una connessione considerata sicura).
+
+Sul PC: **Impostazioni › 📱 Telefono e streaming › 🔒 Certificato del PC**. Si inquadra il QR (o si apre
+`https://<ip-del-pc>:8766/m/ca.crt`) e si installa il file `GameScraper-CA.crt`:
+
+- **Android**: Impostazioni › Sicurezza › Crittografia e credenziali › Installa un certificato › *Certificato CA* ›
+  «Avvisa comunque» › scegli il file appena scaricato. Chrome si fida delle CA installate dall'utente.
+- **iPhone/iPad**: Impostazioni › Generali › VPN e gestione dispositivi › installa il profilo; poi Impostazioni ›
+  Generali › Info › *Impostazioni attendibilità certificati* › attiva l'interruttore di «GameScraper CA» (senza questo
+  passaggio il certificato non è fidato).
+
+Poi si chiudono e si riaprono le schede del browser: l'avviso sparisce e l'app si installa. Note utili:
+
+- **Apertura immediata**: una volta installata, la pagina e la libreria arrivano dalla copia sul telefono e si
+  aggiornano in sottofondo; sul PC l'ultima risposta della libreria resta pronta, così non viene ricostruita a ogni
+  apertura. Con decine di migliaia di giochi la differenza si vede (da qualche secondo a poche centinaia di
+  millisecondi).
+- La CA resta la **stessa per 10 anni**: se il PC cambia indirizzo IP cambia solo il certificato del server (rifatto e
+  firmato da solo) e il telefono continua a fidarsi — non si reinstalla niente.
+- Il file `ca.key` nella cartella `certs` accanto alle impostazioni è la chiave che rende il PC fidato: non va copiata
+  su altri PC né condivisa. Per togliere la fiducia basta rimuovere la CA dalle impostazioni del telefono.
+- Su iPhone l'installazione delle app (PWAs) è possibile **solo da Safari**, non da Chrome o Firefox.
+- Se il telefono continua a dire «non privata»: manca l'attivazione della fiducia (iOS), la CA è stata installata come
+  certificato «Wi-Fi/VPN» invece che «CA» (Android), oppure la pagina è ancora aperta: chiudi tutte le schede e riapri.
+- Se il telefono **blocca il download** del certificato (capita finché la pagina è segnalata come non sicura), in
+  Impostazioni › Telefono e streaming c'è il link che salva `GameScraper-CA.crt` **sul PC**: passalo al telefono con
+  cavo, e-mail, cloud o AirDrop, poi installalo come sopra.
+- Se hai perso la cartella `certs` (o hai ripristinato un backup su un PC nuovo) viene creata una CA nuova: i telefoni
+  vanno rifidati una volta sola.
+- In alternativa alla CA locale si può usare un dominio pubblico con certificato valido (per esempio un tunnel
+  Cloudflare o Tailscale, vedi [Giocare con un amico a distanza](#giocare-con-un-amico-a-distanza)): serve però una
+  connessione a internet e un servizio esterno.
 
 ### Sicurezza
 

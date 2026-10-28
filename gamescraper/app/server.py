@@ -305,6 +305,9 @@ def create_app(cfg) -> FastAPI:
     job: dict = {"current": J.ScrapeJob(), "stores": J.StoreJob(), "storemeta": J.StoreMetaJob(),
                  "hltb": J.HltbJob(), "collart": J.CollArtJob(), "netmeta": J.NetMetaJob(),
                  "pcstores": J.PcStoreJob(), "top": J.TopGamesJob(), "store_refresh": J.StoreRefreshJob()}
+    # ultime risposte di /api/library gia' pronte: telefono e PC la richiedono a ogni apertura (costruirla
+    # costa 0,2-0,6 s e qualche MB con una libreria grande) e cambia solo quando cambia libreria o dati utente
+    lib_payloads: dict = {}
     start_lock = threading.Lock()
 
     def _claim(name: str, j) -> bool:
@@ -367,6 +370,13 @@ def create_app(cfg) -> FastAPI:
         """part='owned': solo i giochi posseduti (subito); 'online': solo il catalogo (dopo); vuoto: tutto."""
         if part != "owned":
             lib.full.wait()
+        # la risposta dipende da libreria, dati utente e poche impostazioni: con le stesse, si restituisce quella gia' pronta
+        ck = (lib.built_at, user.rev, part, bool(cfg.app.get("skip_duplicates", True)),
+              tuple(sorted((k, tuple(v or [])) for k, v in cfg.catalogs.items())),
+              len(cfg.app.get("smart_collections") or []))
+        hit = lib_payloads.get(ck)
+        if hit is not None:
+            return Response(content=hit, media_type="application/json")
         with lib.lock:
             sel = lib.games if not part else [g for g in lib.games if (g.get("store") == "online") == (part == "online")]
             grp_list = list(dict.fromkeys(g["grp"] for g in sel))
@@ -397,7 +407,7 @@ def create_app(cfg) -> FastAPI:
                 if urls:
                     plats[p] += 0  # console con uno store online ma senza giochi posseduti
             # JSONResponse diretto: jsonable_encoder di FastAPI su ~150.000 righe costa secondi
-            return JSONResponse({
+            r = JSONResponse({
                 "built_at": lib.built_at, "user_rev": user.rev,
                 "platforms": sorted(({"id": p, "name": P.PLATFORMS[p].name if p in P.PLATFORMS else p, "count": n}
                                      for p, n in plats.items()), key=lambda x: x["name"].lower()),
@@ -413,6 +423,10 @@ def create_app(cfg) -> FastAPI:
                                     "collections", "versions", "status"], "rows": groups},
                 "smart": cfg.app.get("smart_collections") or [],
             })
+            if len(lib_payloads) > 3:  # posseduti, catalogo e poco altro: le voci vecchie non servono piu'
+                lib_payloads.clear()
+            lib_payloads[ck] = r.body
+            return Response(content=r.body, media_type="application/json")
 
     FIELD_LABELS = {"title": "dati del gioco", "description": "descrizione", "developer": "sviluppatore",
                     "publisher": "editore", "genres": "generi", "release_date": "data di uscita",

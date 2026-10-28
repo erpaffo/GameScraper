@@ -1931,6 +1931,32 @@ async function loadRemote() {
   $("#ph-on").checked = ph.enabled;
   const mins = ph.code_until ? Math.max(0, Math.round((ph.code_until - Date.now() / 1000) / 60)) : 0;
   $("#ph-box").innerHTML = !ph.enabled ? "" : ph.error ? `<p class="status-bad">${esc(ph.error)}</p>` : !ph.running ? `<p class="muted">Avvio…</p>` : `
+    <h4>🔒 Certificato del PC (una volta sola)</h4>
+    <p class="muted small">Con un certificato «autofirmato» il telefono mostra <i>connessione non privata</i> e il browser
+      <b>rifiuta di installare l'app</b>. Installando invece la CA di questo PC l'avviso sparisce, l'app si installa e
+      funziona anche senza rete.</p>
+    <div class="ph-pair"${ph.ca_installed ? " hidden" : ""}>
+      <div class="ph-qr">${ph.qr_ca || ""}</div>
+      <div class="ph-steps">
+        <b>Installa il certificato sul telefono</b>
+        <ol>
+          <li>Inquadra il QR (o apri <code>${esc(ph.ca_url || "")}</code>) e accetta l'avviso <i>Avanzate › Procedi</i>:
+            è l'ultima volta che compare.</li>
+          <li><b>Android</b>: Impostazioni › Sicurezza › Crittografia e credenziali › Installa un certificato ›
+            <i>Certificato CA</i> › «Avvisa comunque» › scegli <code>GameScraper-CA.crt</code>.</li>
+          <li><b>iPhone/iPad</b>: Impostazioni › Generali › VPN e gestione dispositivi › installa il profilo; poi
+            Impostazioni › Generali › Info › <i>Impostazioni attendibilità certificati</i> › attiva «GameScraper CA».</li>
+          <li>Chiudi e riapri la pagina: niente avviso, e in alto compare <b>⬇ Installa</b> (su iPhone/iPad:
+            <i>Condividi › Aggiungi alla schermata Home</i>).</li>
+        </ol>
+        <p class="muted small">Se il PC cambia indirizzo IP il certificato del server viene rifatto da solo, ma la CA resta
+          la stessa: non serve reinstallare niente. La chiave <code>ca.key</code> resta nella cartella <code>certs</code> del PC.<br>
+          Se il telefono non riesce a scaricarlo (download bloccato per l'avviso di sicurezza), salvalo sul PC con
+          <a href="/api/phone/ca" download="GameScraper-CA.crt">questo link</a> e passalo al telefono con cavo, e-mail o cloud.</p>
+      </div>
+    </div>
+    <label class="small"><input type="checkbox" id="ph-ca-ok"${ph.ca_installed ? " checked" : ""}>
+      Ho già installato il certificato sul telefono (nascondi il QR)</label>
     <div class="ph-pair">
       <div class="ph-qr">${ph.qr}</div>
       <div class="ph-steps">
@@ -1939,8 +1965,7 @@ async function loadRemote() {
           <li>Collega il telefono alla stessa rete Wi-Fi del PC.</li>
           <li>Inquadra il QR con la fotocamera, oppure apri <code>${esc(ph.urls[0] || "")}</code> e inserisci il codice
             <span class="ph-code">${esc(ph.code || "")}</span> <span class="muted small">(valido ancora ${mins} min, <a href="#" id="ph-newcode">nuovo codice</a>)</span></li>
-          <li>Il telefono avvisa che la connessione «non è privata» (il certificato è del tuo PC): scegli <i>Avanzate › Procedi</i>.</li>
-          <li>Aggiungi la pagina alla schermata Home: diventa un'app.</li>
+          <li>Se compare ancora «non privata», manca il certificato del PC (punto sopra).</li>
         </ol>
         <p class="muted small">La prima volta Windows può chiedere di consentire GameScraper sulle reti private: rispondi Sì.</p>
       </div>
@@ -3560,6 +3585,7 @@ function bind() {
   $('[data-pane="remote"]').addEventListener("change", async (e) => {
     const t = e.target;
     if (t.id === "ph-mouse") phoneSet({ mouse: t.checked });
+    if (t.id === "ph-ca-ok") phoneSet({ ca_installed: t.checked });
     if (t.id === "ph-touch") phoneSet({ touchscreen: t.checked });
     else if (t.id === "ph-public") phoneSet({ public_url: t.value });
     else if (t.id === "ph-video") phoneSet({ video_addr: t.value });

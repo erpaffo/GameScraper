@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.1 (2026-10-28)
+### Corretto
+
+- Telefono: l'app ora si puo' davvero installare. Il certificato del PC e' firmato da una CA locale (si installa una volta sul telefono, Impostazioni › Telefono e streaming › 🔒 Certificato del PC): sparisce l'avviso «connessione non privata» e il browser non rifiuta piu' il service worker; se cambia l'indirizzo IP del PC la CA resta la stessa. Il pulsante «⬇ Installa» compare quando il telefono si fida del certificato
+
+### Migliorato
+
+- Telefono: casella «ho gia' installato il certificato» che nasconde il QR della CA
+- Telefono: l'app si apre subito. La pagina e la libreria arrivano dalla copia locale del service worker e i dati nuovi scendono in sottofondo; il PC tiene pronta l'ultima risposta della libreria, che non viene piu' ricostruita a ogni apertura (con 40.000 giochi da ~1 s a poche decine di ms)
+
 ## 0.7.0 (2026-10-28)
 ### Corretto
 

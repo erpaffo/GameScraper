@@ -62,8 +62,8 @@ D:/ROM/
 - **🎛 Telecomando del PC**: dalla scheda Attività si premono sul PC volume, muto, play/pausa, precedente e successivo, Esc, Invio, ⌫, Alt+Tab, F11 e Start, uno alla volta (mai testo libero).
 - **🎮 Prova controller** (Impostazioni › Telefono): il PC mostra in tempo reale i tasti premuti sui telefoni, la posizione delle levette e la pressione di LT/RT, e **📳 Vibra** fa vibrare un telefono.
 - **🎮 Gioca con un amico a distanza**: un invito (link + codice di 6 cifre, 10 minuti, un ospite) fa entrare un amico dal suo telefono come altro giocatore, con il solo controller; il video lo manda Moonlight e il PC conferma il PIN. Da fuori casa serve un tunnel (Cloudflare, ngrok o Tailscale Funnel).
-- **App installabile e anche senza rete**: un service worker tiene sul telefono la pagina e le ultime copertine, così la libreria si consulta anche quando il Wi-Fi va e viene; per avviare un gioco serve la rete.
-- La prima apertura mostra l'avviso "connessione non privata" (certificato del tuo PC): *Avanzate › Procedi*. Windows può chiedere di consentire l'app sulle reti private.
+- **App installabile e anche senza rete**: un service worker tiene sul telefono la pagina e le ultime copertine, così la libreria si consulta anche quando il Wi-Fi va e viene; per avviare un gioco serve la rete. Per installarla va prima fidato il PC: **Impostazioni › Telefono e streaming › 🔒 Certificato del PC** (una volta sola; senza, il browser rifiuta il service worker).
+- La prima apertura, se il certificato non è ancora installato, mostra l'avviso "connessione non privata": *Avanzate › Procedi*. Windows può chiedere di consentire l'app sulle reti private.
 
 **Streaming da remoto** con [Sunshine](https://app.lizardbyte.dev/Sunshine) (sul PC) e [Moonlight](https://moonlight-stream.org) (telefono, tablet, TV, altro PC): *Pubblica in Moonlight* aggiunge a Sunshine "GameScraper Big Picture" e i tuoi giochi principali con le copertine (le altre app di Sunshine restano). Moonlight avvia `gamescraper-cli play --key …`, che resta aperto finché giochi: lo streaming si chiude da solo a fine partita.
 

@@ -16,6 +16,7 @@ const STORE_SHORT = { steam: "STEAM", epic: "EPIC", gog: "GOG", amazon: "AMAZON"
 
 async function api(path, opts = {}) {
   const init = { method: opts.method || "GET", headers: { "Content-Type": "application/json" }, credentials: "same-origin" };
+  if (opts.cache) init.cache = opts.cache;
   if (opts.body !== undefined) { init.body = JSON.stringify(opts.body); init.method = opts.method || "POST"; }
   const r = await fetch(path, init);
   if (r.status === 401) { if (GUEST.on) { location.href = "/g/"; throw new Error("Invito scaduto"); } showPair(); throw new Error("Telefono non abbinato"); }
@@ -53,13 +54,14 @@ $("#pair-go").onclick = async () => {
 
 /* ------------------------------------------------------------------ libreria */
 const L = { games: [], byId: new Map(), plats: new Map(), q: "", plat: store.get("plat", ""), chip: store.get("chip", "all"),
-  sort: store.get("sort", "title"), shown: 0, items: [], rated: new Map() };
+  sort: store.get("sort", "title"), shown: 0, items: [], rated: new Map(), built_at: 0 };
 
 function decode(lib) {
   const gc = Object.fromEntries(lib.games.cols.map((c, i) => [c, i]));
   const rc = Object.fromEntries(lib.groups.cols.map((c, i) => [c, i]));
   const groups = lib.groups.rows;
   L.plats = new Map(lib.platforms.map((p) => [p.id, p.name]));
+  L.built_at = lib.built_at || 0;
   L.games = lib.games.rows.map((r) => {
     const g = groups[r[gc.group]];
     return { id: r[gc.id], title: r[gc.title], sort: r[gc.sort], platform: r[gc.platform], year: r[gc.year], cover: r[gc.cover],
@@ -211,6 +213,7 @@ function showMoonlightSteps(title) {
     <button class="btn primary big" id="moon-ok">Ok</button>`;
   $("#moon-ok").onclick = closeSheet;
 }
+function showSheet(html) { $("#sheet").hidden = false; $(".sheet-box").innerHTML = html; }
 function closeSheet() { $("#sheet").hidden = true; }
 $(".sheet-bg").onclick = closeSheet;
 
@@ -1090,26 +1093,96 @@ $("#lib-chips").onclick = (e) => {
   L.chip = b.dataset.chip; store.set("chip", L.chip); renderLibTools(); filterLib();
 };
 
+/** Scheletro della Home: qualcosa sullo schermo nel frattempo, invece di una pagina vuota. */
+function skeleton() {
+  return `<h2 class="sec">&nbsp;</h2><div class="row-scroll">${`<div class="card sk"><div class="cv"></div><div class="t">&nbsp;</div></div>`.repeat(6)}</div>`;
+}
+
+/** Dati freschi in sottofondo: se la libreria e' cambiata sul PC, la Home si ridisegna da sola. */
+async function refreshLib() {
+  let d;
+  try { d = await api("/api/library?part=owned&fresh=1", { cache: "no-store" }); } catch { return; }  // offline: resta la copia
+  if (d.built_at === L.built_at && L.games.length) return;  // niente di nuovo
+  decode(d);
+  shownLibrary();
+}
+
+function shownLibrary() {
+  $("#grid").innerHTML = "";  // libreria ricaricata: la Libreria si ridisegna alla prossima apertura
+  L.shown = 0;
+  renderHome(); renderLibTools();
+  if (!$("#v-lib").hidden) filterLib();
+}
+
 async function start() {
   $("#pair").hidden = true; $("#main").hidden = false;
+  $("#v-home").innerHTML = skeleton();  // subito visibile: la libreria arriva dalla copia locale o dalla rete
+  tab("home");
   try { decode(await api("/api/library?part=owned")); }
   catch (e) {  // senza rete e senza cache: la Home lo dice, invece di restare vuota
     if (!$("#pair").hidden) return;
     $("#v-home").innerHTML = `<p class="empty">Libreria non disponibile: ${esc(e.message)}</p>`;
     toast(e.message, true); return;
   }
-  await pullPad();  // aspetto del pad e posizioni dei tasti: stanno sul PC
-  $("#grid").innerHTML = "";  // libreria ricaricata: la Libreria si ridisegna alla prossima apertura
-  L.shown = 0;
-  renderHome(); renderLibTools();
-  tab("home");
+  shownLibrary();
+  // impostazioni del pad dal PC e aggiornamento in sottofondo: non devono far aspettare la Home
+  pullPad().then(() => { if (!$("#pad").hidden) { $("#pad").style.setProperty("--s", SET.scale); applyLayout(); } });
+  refreshLib();
   pollRun();
 }
 
+/* ---- installazione dell'app: il browser la propone solo con un certificato fidato (vedi il certificato del PC) */
+const INSTALL = { ev: null };
+function isStandalone() {
+  return matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+}
+function isIOS() {
+  // iPadOS 13+ si presenta come Mac: lo si riconosce dal touch
+  return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+function installUI() {
+  // Chrome/Android avvisa quando l'app si puo' installare; Safari su iPhone non ha un prompt: si spiega dal menu
+  $("#install-btn").hidden = isStandalone() || !(INSTALL.ev || isIOS());
+}
+window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); INSTALL.ev = e; installUI(); });
+window.addEventListener("appinstalled", () => { INSTALL.ev = null; $("#install-btn").hidden = true; toast("App installata 🎉"); });
+$("#install-btn").onclick = async () => {
+  if (INSTALL.ev) {
+    INSTALL.ev.prompt();
+    try { await INSTALL.ev.userChoice; } catch { /* annullato */ }
+    INSTALL.ev = null;
+    return;
+  }
+  showSheet(`<h2>⬇ Installa GameScraper</h2>
+    <ol class="steps">
+      <li>Tocca <b>Condividi</b> (il quadrato con la freccia) in basso in Safari.</li>
+      <li>Scegli <b>Aggiungi alla schermata Home</b>.</li>
+      <li>Apri l'icona <b>GameScraper</b>: parte a tutto schermo, senza la barra del browser.</li>
+    </ol>
+    <p class="muted small">Se l'app non si installa o compare ancora l'avviso «non privata», manca il certificato del PC:
+      sul PC, Impostazioni › 📱 Telefono e streaming › 🔒 Certificato del PC.</p>
+    <button class="btn primary big" id="in-ok">Ok</button>`);
+  $("#in-ok").onclick = closeSheet;
+};
+
+/** Service worker: serve per installare l'app e per aprirla subito le volte successive (non blocca questa apertura). */
+async function registerSW() {
+  if (!("serviceWorker" in navigator)) return;
+  try {
+    await navigator.serviceWorker.register("/m/sw.js", { scope: "/m/" });
+  } catch {
+    if (!store.get("swWarned", false)) {  // una volta sola: poi diventa fastidioso
+      store.set("swWarned", true);
+      setTimeout(() => toast("Per installare l'app serve il certificato del PC: Impostazioni › Telefono e streaming", true), 3000);
+    }
+  }
+}
+
 (async function main() {
-  // service worker: rende l'app installabile e lascia la libreria consultabile quando il Wi-Fi va e viene
-  if ("serviceWorker" in navigator) {
-    try { await navigator.serviceWorker.register("/m/sw.js", { scope: "/m/" }); } catch { /* niente: la pagina funziona lo stesso */ }
+  registerSW();  // senza await: la pagina non aspetta il service worker
+  installUI();
+  if (!window.isSecureContext) {  // pagina aperta in chiaro: niente service worker, niente installazione
+    setTimeout(() => toast("Apri l'indirizzo https del PC: senza HTTPS l'app non si installa e il giroscopio non funziona", true), 1500);
   }
   let h = null;
   try { h = await (await fetch("/m/api/hello", { credentials: "same-origin" })).json(); } catch { h = null; }

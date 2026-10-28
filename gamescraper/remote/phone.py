@@ -46,7 +46,7 @@ ALLOWED = [
 ]
 PLAYER_COLORS = ["#4aa3ff", "#ff5f5f", "#3ddc84", "#f5c518"]  # giocatore 1..4 (come i LED dei controller)
 PUBLIC = [("GET", r"/m/?"), ("GET", r"/m/static/[\w.-]+"), ("GET", r"/m/manifest\.webmanifest"), ("POST", r"/m/api/pair"),
-          ("GET", r"/m/api/hello"), ("POST", r"/api/sync/pair"), ("GET", r"/m/sw\.js")]
+          ("GET", r"/m/api/hello"), ("POST", r"/api/sync/pair"), ("GET", r"/m/sw\.js"), ("GET", r"/m/ca\.crt")]
 # un altro PC abbinato per la sincronizzazione (kind "pc") raggiunge solo lo scambio dei dati, nient'altro
 PC_ALLOWED = [("POST", r"/api/sync/exchange")]
 # l'ospite a distanza (kind "guest") ha solo il controller: niente libreria, mouse o scambio dei posti
@@ -192,7 +192,8 @@ class PhoneHub:
         # public_url: indirizzo pubblico del PC (tunnel) per il link d'invito dell'ospite a distanza
         # video_addr: indirizzo da scrivere in Moonlight (per esempio quello di Tailscale) mostrato all'ospite
         return {"enabled": False, "port": PORT, "devices": [], "mouse": False, "mic_device": "", "touchscreen": True,
-                "screen_idle": 30, "public_url": "", "video_addr": "", **(self.cfg.app.get("phone") or {})}
+                "screen_idle": 30, "public_url": "", "video_addr": "", "ca_installed": False,
+                **(self.cfg.app.get("phone") or {})}
 
     def _save(self, **kw):
         c = {**self.conf, **kw}
@@ -297,6 +298,17 @@ class PhoneHub:
         from .certs import lan_ips
         return [f"https://{ip}:{self.conf['port']}/m/" for ip in lan_ips()]
 
+    def certs_dir(self) -> Path:
+        """Cartella di certificato e CA (accanto alle impostazioni, o alla cache se non c'e' settings.json)."""
+        return (Path(self.cfg.config_path).parent if self.cfg.config_path is not None
+                else Path(self.cfg.cache).parent) / "certs"
+
+    def ca_url(self) -> str:
+        """Indirizzo da aprire sul telefono una volta sola per installare la CA di questo PC."""
+        from .certs import lan_ips
+        ips = lan_ips()
+        return f"https://{ips[0]}:{self.conf['port']}/m/ca.crt" if ips else ""
+
     def start(self, app) -> bool:
         if self.server:
             return True
@@ -304,8 +316,7 @@ class PhoneHub:
 
         from .certs import ensure
         try:
-            crt, key = ensure(Path(self.cfg.cache).parent / "certs" if self.cfg.config_path is None
-                              else Path(self.cfg.config_path).parent / "certs")
+            crt, key, _ca = ensure(self.certs_dir())
         except Exception as e:
             self.error = f"Certificato HTTPS non creato: {e}"
             return False
@@ -548,7 +559,7 @@ class PhoneHub:
                 "urls": self.urls(), "devices": [d for d in self.devices() if d.get("kind") not in ("pc", "guest")],
                 "guests": [d for d in self.devices() if d.get("kind") == "guest"],
                 "public_url": self.conf.get("public_url", ""), "video_addr": self.conf.get("video_addr", ""),
-                "invite": self.invite(),
+                "invite": self.invite(), "ca_url": self.ca_url(), "ca_installed": bool(self.conf.get("ca_installed")),
                 "vigem": ok, "vigem_error": err,
                 "dsu": bool(self.dsu), "dsu_error": self.dsu_error, "mouse": bool(self.conf.get("mouse")),
                 "touchscreen": bool(self.conf.get("touchscreen")),
@@ -579,10 +590,23 @@ def register(app, hub: PhoneHub, static_dir: Path):
         """Service worker servito dalla radice di /m (cosi' il suo ambito copre tutta l'app del telefono)."""
         return FileResponse(mdir / "sw.js", headers={"Service-Worker-Allowed": "/m/", "Cache-Control": "no-cache"})
 
+    @app.get("/m/ca.crt")
+    def m_ca():
+        """CA del PC da installare una volta sul telefono: senza, l'avviso «non privato» resta e il service
+        worker viene rifiutato (quindi l'app non si installa). Raggiungibile senza abbinamento."""
+        from .certs import ca_path
+        try:
+            p = ca_path(hub.certs_dir())
+        except Exception as e:
+            raise HTTPException(500, f"Certificato non disponibile: {e}")
+        return FileResponse(p, media_type="application/x-x509-ca-cert", filename="GameScraper-CA.crt",
+                            headers={"Cache-Control": "no-cache"})
+
     @app.get("/m/manifest.webmanifest")
     def m_manifest():
         return JSONResponse({"id": "/m/", "scope": "/m/", "start_url": "/m/", "name": "GameScraper",
-                             "short_name": "GameScraper", "display": "standalone",
+                             "short_name": "GameScraper", "description": "La tua libreria di giochi e il PC come controller",
+                             "lang": "it", "dir": "ltr", "display": "standalone",
                              "background_color": "#0f1117", "theme_color": "#0f1117",
                              "icons": [{"src": "/m/static/icon-192.png", "sizes": "192x192", "type": "image/png"},
                                        {"src": "/m/static/icon.png", "sizes": "512x512", "type": "image/png"}]},
@@ -849,6 +873,7 @@ def register(app, hub: PhoneHub, static_dir: Path):
         st["code"] = hub.code if hub.running() else None
         st["code_until"] = hub.code_until
         st["qr"] = _qr_svg(f"{st['urls'][0]}#code={hub.code}") if hub.running() and st["urls"] else ""
+        st["qr_ca"] = _qr_svg(st["ca_url"]) if hub.running() and st.get("ca_url") and not st["ca_installed"] else ""
         return st
 
     @app.post("/api/phone")
@@ -860,6 +885,8 @@ def register(app, hub: PhoneHub, static_dir: Path):
             hub._save(mouse=bool(body["mouse"]))
         if "touchscreen" in body:
             hub._save(touchscreen=bool(body["touchscreen"]))
+        if "ca_installed" in body:
+            hub._save(ca_installed=bool(body["ca_installed"]))
         if "screen_idle" in body:
             try:
                 secs = int(float(body["screen_idle"]))
@@ -886,6 +913,19 @@ def register(app, hub: PhoneHub, static_dir: Path):
         _local(request)
         hub.new_code()
         return api_phone(request)
+
+    @app.get("/api/phone/ca")
+    def api_phone_ca(request: Request):
+        """Il certificato della CA da salvare sul PC (per passarlo al telefono con cavo, e-mail o cloud):
+        utile se il telefono non riesce a scaricarlo dalla pagina con l'avviso «non privata»."""
+        _local(request)
+        from .certs import ca_path
+        try:
+            p = ca_path(hub.certs_dir())
+        except Exception as e:
+            raise HTTPException(500, f"Certificato non disponibile: {e}")
+        return FileResponse(p, media_type="application/x-x509-ca-cert", filename="GameScraper-CA.crt",
+                            headers={"Cache-Control": "no-cache"})
 
     @app.post("/api/phone/invite")
     def api_phone_invite(request: Request):
