@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.7.2 (2026-10-28)
+### Aggiunto
+
+- Estensione «Cosa gioco stasera?»: propone un gioco dal backlog in base al tempo che hai (durata HowLongToBeat), al genere e alla console, dando la precedenza a quelli che non giochi da più tempo; «Un altro» e «Avvia»
+- Estensione «Anniversari retro»: badge «30 ANNI» sulle copertine dei giochi usciti oggi e pagina «Oggi nel…»
+- Estensione «Pulizia libreria»: duplicati, giochi mai avviati o fermi da anni e dati incompleti, con azioni di massa e badge «DUP»
+- Estensione «Diario di gioco»: voci datate e cronologia delle sessioni nel dettaglio di ogni gioco
+- Estensione «Limite di tempo»: notifica quando superi le ore di gioco scelte al giorno o a settimana
+- Estensione «Obiettivi personali»: obiettivi a periodo, serie di giorni consecutivi e distintivi
+- Estensione «Riepilogo annuale»: il tuo anno in giochi con un'immagine da salvare e condividere
+- Estensione «SteamGridDB»: copertine verticali, sfondi e logo mancanti da SteamGridDB (serve una chiave gratuita)
+- Estensione «Calendario uscite»: uscite future della lista dei desideri e dei generi che giochi, da RAWG
+
+### Cambiato
+
+- Lista desideri: le key arrivano da GG.deals e gli store da IsThereAnyDeal; allkeyshop non viene più interrogato (niente più blocchi)
+
+### Migliorato
+
+- Badge 👥 con il numero di giocatori in locale sulle copertine, anche per i giochi non installati
+- Lista desideri: la riga mostra prezzo Steam pieno, scontato e key più economica; il dettaglio ha la tabella degli store e i grafici di Steam e delle key
+
+### Corretto
+
+- Multigiocatore locale: Game Boy, DS, PSP e le altre portatili (multiplayer solo con cavo) non compaiono più
+- Lista desideri: le copertine si vedono sempre (anche per i giochi senza codice Steam) e le key compaiono anche per i giochi aggiunti con la ricerca IsThereAnyDeal
+
 ## 0.7.1 (2026-10-28)
 ### Corretto
 

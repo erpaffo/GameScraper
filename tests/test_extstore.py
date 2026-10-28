@@ -54,13 +54,14 @@ def main():
         ids = [p["id"] for p in X.list_plugins(cfg)]
         assert ids == [S.STORE_ID], ids  # nell'app c'e' solo lo store
         cat = {x["id"]: x for x in S.catalog(cfg)["items"]}
-        assert set(cat) == {"linkstores", "minerva", "statistiche"} and cat["statistiche"]["state"] == "available"
+        assert set(cat) == {d.name for d in T.EXT.iterdir() if (d / "plugin.toml").exists()}      # tutte quelle del repository
+        assert {"linkstores", "minerva", "statistiche"} <= set(cat) and cat["statistiche"]["state"] == "available"
 
         r = S.install(cfg, "statistiche")
         assert r["ok"] and (plugins / "statistiche" / "backend.py").is_file()
         ps = X.list_plugins(cfg)
         assert [p["id"] for p in ps] == [S.STORE_ID, "statistiche"] and ps[0]["locked"] and ps[1]["enabled"]
-        assert S.catalog(cfg)["items"][2]["state"] == "installed"
+        assert {x["id"]: x for x in S.catalog(cfg)["items"]}["statistiche"]["state"] == "installed"
         print("ok  installazione da indice locale, store per primo")
 
         # aggiornamento: versione piu' alta nell'indice -> «update», reinstallando si sostituisce la cartella

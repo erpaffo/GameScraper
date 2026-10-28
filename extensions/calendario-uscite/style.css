@@ -1,0 +1,3 @@
+.cu-list { list-style: none; padding: 0; margin: 0 0 12px; max-width: 760px; }
+.cu-list li { display: flex; gap: 12px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.cu-list img { width: 96px; height: 54px; object-fit: cover; border-radius: 6px; background: var(--bg-3); flex-shrink: 0; }

@@ -1,0 +1,7 @@
+[plugin]
+name = "Pulizia libreria"
+version = "1.0"
+author = "GameScraper"
+description = "Trova duplicati, giochi mai avviati o fermi da anni e giochi con metadati incompleti, con azioni di massa (nascondi, abbandonato, backlog) e un badge «DUP» sulle copertine dei duplicati."
+api = 1
+min_app = "0.7.1"

@@ -1,0 +1,4 @@
+.an-list { list-style: none; padding: 0; margin: 0; max-width: 760px; }
+.an-list li { padding: 8px 4px; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: baseline; }
+.an-list b { min-width: 90px; color: var(--accent); }
+.an-list a { color: inherit; }

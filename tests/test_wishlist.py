@@ -73,8 +73,55 @@ def test_gg_error_does_not_block_official(tmp: Path):
     print("ok  errore GG.deals gestito senza bloccare i prezzi ufficiali")
 
 
+def test_itad_game_without_appid_gets_keys_and_detail(tmp: Path):
+    """Gioco aggiunto dalla ricerca ITAD (nessun codice Steam): si trova il codice, GG.deals da' la key, il dettaglio e' salvato."""
+    def handler(req: httpx.Request):
+        h, path = req.url.host, req.url.path
+        if h == "store.steampowered.com" and path.endswith("/storesearch/"):
+            return httpx.Response(200, json={"items": [{"id": 1, "name": "Altro gioco"}, {"id": 292030, "name": "The Witcher 3: Wild Hunt"}]})
+        if h == "store.steampowered.com":
+            return httpx.Response(200, json={"292030": {"success": True, "data": {"price_overview": {
+                "final": 999, "initial": 2999, "discount_percent": 67, "currency": "EUR"}}}})
+        if h == "api.gg.deals":
+            assert req.url.params["ids"] == "292030"
+            return httpx.Response(200, json=FIXTURE)
+        if path.endswith("/games/prices/v3"):
+            return httpx.Response(200, json=[{"id": "itad-1", "historyLow": {"all": {"amount": 4.99}}, "deals": [
+                {"shop": {"name": "Steam"}, "price": {"amount": 9.99, "currency": "EUR"}, "regular": {"amount": 29.99}, "cut": 67, "url": "https://s"},
+                {"shop": {"name": "GOG"}, "price": {"amount": 12.0, "currency": "EUR"}, "regular": {"amount": 29.99}, "cut": 60, "url": "https://g"}]}])
+        if path.endswith("/games/history/v2"):
+            assert req.url.params["shops"] == "61"
+            return httpx.Response(200, json=[
+                {"timestamp": "2026-01-02T10:00:00+01:00", "shop": {"id": 61}, "deal": {"price": {"amount": 29.99}}},
+                {"timestamp": "2026-03-01T10:00:00+01:00", "shop": {"id": 61}, "deal": {"price": {"amount": 9.99}}},
+                {"timestamp": "2026-02-01T10:00:00+01:00", "shop": {"id": 16}, "deal": {"price": {"amount": 1.0}}}])
+        raise AssertionError(req.url)
+
+    real_client = W.httpx.Client
+    W.httpx.Client = lambda **k: real_client(transport=httpx.MockTransport(handler), **k)
+    try:
+        u = UserData(tmp / "userdata2.db")
+        u.wish_add("itad:itad-1", "The Witcher 3: Wild Hunt", "", "itad-1", cover="https://img/c.jpg")
+        cfg = C.Config(cache=tmp)
+        cfg.app = {"wishlist": {"gg_key": "k", "itad_key": "i", "country": "IT"}}
+        W.check(cfg, u, log=print)
+        w = u.wishlist()[0]
+        assert w["steam_appid"] == "292030" and w["cover"] == "https://img/c.jpg", w
+        assert w["key_price"] == 8.49 and w["key_low"] == 5.12, w
+        d = json.loads(w["aks"])
+        assert d["steam"]["price"] == 9.99 and d["steam"]["regular"] == 29.99 and d["steam"]["cut"] == 67, d
+        assert [o["shop"] for o in d["offers"]] == ["Steam", "GOG"] and d["low"] == 4.99, d
+        with real_client(transport=httpx.MockTransport(handler)) as c:
+            assert W.itad_history(c, "i", "itad-1", "IT") == [["2026-01-02", 29.99], ["2026-03-01", 9.99]]  # solo Steam, in ordine
+        u.db.close()
+    finally:
+        W.httpx.Client = real_client
+    print("ok  gioco ITAD senza codice Steam: codice trovato, key, dettaglio e storico")
+
+
 if __name__ == "__main__":
     test_gg_prices_parsing_and_regions()
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_gg_error_does_not_block_official(Path(t))
+        test_itad_game_without_appid_gets_keys_and_detail(Path(t))
     print("TUTTI I TEST OK")

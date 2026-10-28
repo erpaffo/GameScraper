@@ -149,6 +149,10 @@ PLATFORMS: dict[str, Platform] = {p.id: p for p in [
     _p("cps3", "Capcom CPS-3", "zip", 8, 52, 23, "MAME", (), arcade=True),
 ]}
 
+# Portatili senza split screen: il "multiplayer" e' tra console diverse (cavo link, wireless locale)
+NO_SPLIT = frozenset("gb gbc gba nds 3ds psp psvita virtualboy pokemini gameandwatch atarilynx gamegear "
+                     "ngp ngpc wonderswan wonderswancolor".split())
+
 
 def norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", s.lower())

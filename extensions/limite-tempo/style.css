@@ -1,0 +1,6 @@
+.lt-grid { display: grid; grid-template-columns: max-content 1fr; gap: 12px 24px; align-items: center; margin: 14px 0; max-width: 640px; }
+.lt-grid label { display: flex; flex-direction: column; gap: 4px; }
+.lt-grid input[type=number] { width: 140px; }
+.lt-track { height: 8px; border-radius: 4px; background: var(--bg-3); overflow: hidden; margin-bottom: 4px; }
+.lt-fill { height: 100%; background: var(--accent); }
+.lt-fill.over { background: #e5484d; }

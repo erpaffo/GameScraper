@@ -467,7 +467,8 @@ body.foryou-mode #plugin-view { padding: 0; }
 .wp-table th { text-align: left; font-weight: 500; color: var(--muted, #8a93a6); padding: 4px 6px; border-bottom: 1px solid var(--line); }
 .wp-table td { padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,.04); }
 .wp-table .num { text-align: right; white-space: nowrap; }
-.wp-foot { margin-top: 14px; }
+.wp-range { margin-top: 14px; }
+.wp-chart { width: 100%; height: 170px; display: block; } .wp-chart .ax { font-size: 10px; fill: var(--muted, #8a93a6); }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .tile-s { background: rgba(255,255,255,.04); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
 .tile-s b { font-size: 26px; line-height: 1.1; } .tile-s span { font-size: 13px; opacity: .75; } .tile-s small { opacity: .8; }

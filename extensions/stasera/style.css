@@ -1,0 +1,8 @@
+.ss-bar { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: end; margin-bottom: 18px; }
+.ss-bar label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.ss-bar label.chk { flex-direction: row; align-items: center; gap: 6px; }
+.ss-card { display: flex; gap: 22px; align-items: flex-start; max-width: 780px; padding: 18px;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 14px; }
+.ss-cover { width: 190px; max-width: 38vw; border-radius: 10px; background: var(--bg-3); aspect-ratio: 3 / 4; object-fit: cover; }
+.ss-info h2 { margin: 0 0 4px; }
+.ss-btns { display: flex; flex-wrap: wrap; gap: 8px; }

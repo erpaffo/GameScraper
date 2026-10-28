@@ -2,6 +2,66 @@
   "version": 1,
   "extensions": [
     {
+      "id": "anniversari",
+      "name": "Anniversari retro",
+      "version": "1.0",
+      "author": "GameScraper",
+      "description": "Un badge «30 ANNI» sulle copertine dei giochi usciti proprio oggi, di qualche anno fa, e la pagina «Oggi nel…» con l'elenco.",
+      "min_app": "0.7.1",
+      "base": "anniversari/",
+      "files": {
+        "backend.py": "4188b25566141a966561a36508cc852a0e3322ac8cb1f968d98921a5530b3229",
+        "frontend.js": "8b9665770cf2eefe47c96a52a6800f3754852e3aa20e83f19a73e16aca36a86b",
+        "plugin.toml": "431903ca439c1164cc5fb1964a5a9a05cf740fb09375b2ac12e4f9ccdfb110c2",
+        "style.css": "57030827a56b1e35ac6c1d3b8317b60600cd85e20371b73da8e8bb096cb47b40"
+      }
+    },
+    {
+      "id": "calendario-uscite",
+      "name": "Calendario uscite",
+      "version": "1.0",
+      "author": "GameScraper",
+      "description": "Le prossime uscite: prima i giochi della tua lista dei desideri che devono ancora uscire, poi i titoli più attesi dei generi che giochi di più. Usa la chiave RAWG già impostata nell'app.",
+      "min_app": "0.7.1",
+      "base": "calendario-uscite/",
+      "files": {
+        "backend.py": "f414b87c7d6e481c2280efd300c4f280111cc2e1a4d666a5ea2d8da1517e8e31",
+        "frontend.js": "763cded618d1ea2585ae32eabbb6dab83f8399a87a42e8cc4b51531e3b38ecfd",
+        "plugin.toml": "f517472467ebd2d47ff299eeb6b7e9b89cdcd66ccebaf36da50ef0cc7e24c124",
+        "style.css": "d0dbe66bd6e494de9946a9740e869aacef24b0f71267af9a3f509092fab8ab01"
+      }
+    },
+    {
+      "id": "diario",
+      "name": "Diario di gioco",
+      "version": "1.0",
+      "author": "GameScraper",
+      "description": "Nel dettaglio di ogni gioco, un diario con voci datate (a che punto sei, trucchi, password) e la cronologia delle sessioni giocate. Si affianca alla nota personale già presente.",
+      "min_app": "0.7.1",
+      "base": "diario/",
+      "files": {
+        "backend.py": "4e8cd647e55202daf9368c0805e775eeddcea0b1c072c3db6dd106f8f68e3da0",
+        "frontend.js": "59932be8f5152cf7864a11595a2eecdfe87b738a3e4cc8df2c1cb356f31cd0e4",
+        "plugin.toml": "1c4f9196607563e600df674e31d2cf3420e47ba094843c7fcb63e8e5714bdb6e",
+        "style.css": "f2424e5c7fcc2d654f59f9db0cc37f81546873a35eb65e58ed642b27ecba0940"
+      }
+    },
+    {
+      "id": "limite-tempo",
+      "name": "Limite di tempo",
+      "version": "1.0",
+      "author": "GameScraper",
+      "description": "Avvisa con una notifica quando superi X ore di gioco al giorno o alla settimana (del profilo attivo): utile per te o per i figli. È un avviso, non chiude il gioco.",
+      "min_app": "0.7.1",
+      "base": "limite-tempo/",
+      "files": {
+        "backend.py": "09cdd49c73060f1df6e8c8ae011e7f043f57e040ba784f7d58c9977259d38213",
+        "frontend.js": "7b1b0b7dc24d1b66844d8a6e7263052820f51501d2aa0d2a11ca7bbf08aa8d80",
+        "plugin.toml": "9e9adda7346e589d869fc893850c0649f40a529450efded965e51ded84c31617",
+        "style.css": "005928af354ef58b2fb99f2f4d3e09ccc470c99a91862e8b62a6f15753eba611"
+      }
+    },
+    {
       "id": "linkstores",
       "name": "Link → Store",
       "version": "1.0",
@@ -31,6 +91,66 @@
       }
     },
     {
+      "id": "obiettivi",
+      "name": "Obiettivi personali",
+      "version": "1.0",
+      "author": "GameScraper",
+      "description": "Obiettivi tuoi («finisci 3 giochi a marzo», «20 ore questa settimana»), serie di giorni consecutivi e distintivi che si sbloccano giocando.",
+      "min_app": "0.7.1",
+      "base": "obiettivi/",
+      "files": {
+        "backend.py": "d0d1aec3cfee74053d694cda659b478117e88426ecbe4641ce831840c3f3a7bd",
+        "frontend.js": "074e16f6d37fd56157890fd3f023518d7d215e7c7f0714bd8b5cafd9505395d4",
+        "plugin.toml": "3d7a84d93940633e12a5d0064e11175da99621c9c79b292598cb4e32d0e316b4",
+        "style.css": "cc117b6eae389a23aa3fe7c69823a6c0e6b66769ba1a48766e417656e8536e6e"
+      }
+    },
+    {
+      "id": "pulizia",
+      "name": "Pulizia libreria",
+      "version": "1.0",
+      "author": "GameScraper",
+      "description": "Trova duplicati, giochi mai avviati o fermi da anni e giochi con metadati incompleti, con azioni di massa (nascondi, abbandonato, backlog) e un badge «DUP» sulle copertine dei duplicati.",
+      "min_app": "0.7.1",
+      "base": "pulizia/",
+      "files": {
+        "frontend.js": "612f279ec380363be3815123e162f558ada7fdb061eece68a71712a280cae5a8",
+        "logica.js": "067871519aec426153fea3c1849bc2e98c6ef40dda5ed7e2a5beebfd4d49b219",
+        "plugin.toml": "dcbd65eadc7e6ddaaab83a9dcdb4debbe68e488e1f3834d112a59276f7018b8c",
+        "style.css": "675b11dd82766b7441b0a63b865b17be0e6193a493b154aa9113d7aa0d312039"
+      }
+    },
+    {
+      "id": "riepilogo-annuale",
+      "name": "Riepilogo annuale",
+      "version": "1.0",
+      "author": "GameScraper",
+      "description": "Il tuo anno in giochi: ore, giochi più giocati, console preferita, mese e giorno più attivi, giochi finiti. Con un'immagine da salvare e condividere.",
+      "min_app": "0.7.1",
+      "base": "riepilogo-annuale/",
+      "files": {
+        "backend.py": "83ff72ab07b44c80705dcc3c567ba46ab3b9289edb926bf2700ca1082025dc1d",
+        "frontend.js": "3e89ce7756dccac376be2a57e0c1d29615097dc80ada4af9929c7e41fb191f12",
+        "plugin.toml": "9401960c8da9388567110d94391c9b912ee0b3fc19cc15635f4be1aa6a46a0da",
+        "style.css": "54c3c8685c2819e9ba02a210f828278c29ce2592c1326aa8abe454de96689e4e"
+      }
+    },
+    {
+      "id": "stasera",
+      "name": "Cosa gioco stasera?",
+      "version": "1.0",
+      "author": "GameScraper",
+      "description": "Sceglie un gioco dal backlog in base al tempo che hai (durata HowLongToBeat), al genere e alla console, dando la precedenza a quelli che non giochi da più tempo. «Un altro» ne propone un altro, «Avvia» lo lancia.",
+      "min_app": "0.7.1",
+      "base": "stasera/",
+      "files": {
+        "frontend.js": "6e43bb3c82df820a4bb667ddaccb5c07ed6f269bfbcc2595fa773e07e97370ee",
+        "logica.js": "f3dbc76c814a0574a427304b96400479b0f618da4413113173009c0a9135b68a",
+        "plugin.toml": "b5c6bb1ea42b8c36042292dda3a32b609c065eb5b2b9f67d024f7c4101413b90",
+        "style.css": "07ec9f5e800c2f90259bdb88c3789c708215fd6d4d8beddc7eb8ceb66d49c02a"
+      }
+    },
+    {
       "id": "statistiche",
       "name": "Statistiche di gioco",
       "version": "1.0",
@@ -43,6 +163,20 @@
         "frontend.js": "37ed36554079dd9f7c5d94d9c20ba35e8d9e403f3dc43f2d030320b850a11ff7",
         "plugin.toml": "27c2df976c550b0c13cc35baf89274e81c4ff797b318011dd6e880abb6759426",
         "style.css": "5f206414809d5571487e96aa8a50bf763609f9939778a61004cc1ac5d3c9c595"
+      }
+    },
+    {
+      "id": "steamgriddb",
+      "name": "SteamGridDB",
+      "version": "1.0",
+      "author": "GameScraper",
+      "description": "Fonte di copertine (verticali), sfondi (hero) e logo da SteamGridDB, per i giochi a cui le altre fonti non le hanno trovate. Serve una chiave gratuita di steamgriddb.com.",
+      "min_app": "0.7.1",
+      "base": "steamgriddb/",
+      "files": {
+        "backend.py": "a4925fc15bd9975e6fbe71ba4ff2d413b2b78ff86333857a80229da5313040bb",
+        "frontend.js": "b2db9476220602938fe6e094f857a004f345b9cd2f72cb31a11b62561507cdfc",
+        "plugin.toml": "12c46dfa4f9c016b3d8e1e93914aef1036751fa91e19fe33686623ddc67f18c9"
       }
     }
   ]

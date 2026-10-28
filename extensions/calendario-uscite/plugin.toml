@@ -1,0 +1,7 @@
+[plugin]
+name = "Calendario uscite"
+version = "1.0"
+author = "GameScraper"
+description = "Le prossime uscite: prima i giochi della tua lista dei desideri che devono ancora uscire, poi i titoli più attesi dei generi che giochi di più. Usa la chiave RAWG già impostata nell'app."
+api = 1
+min_app = "0.7.1"

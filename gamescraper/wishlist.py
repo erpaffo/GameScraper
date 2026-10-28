@@ -124,6 +124,56 @@ def gg_prices(c: httpx.Client, key: str, appids: list[str], region: str, log=pri
     return out
 
 
+def steam_prices(c: httpx.Client, appids: list[str], country: str, log=print) -> dict[str, dict]:
+    """{appid: {price, regular, cut, currency, url}} per i giochi in vendita su Steam (gratuiti o ritirati: assenti)."""
+    out: dict[str, dict] = {}
+    ids = list(dict.fromkeys(a for a in appids if a))
+    for i in range(0, len(ids), 40):
+        if i:
+            time.sleep(1)
+        r = c.get(f"{STEAM_STORE}/api/appdetails", params={"appids": ",".join(ids[i:i + 40]), "cc": country.lower(),
+                                                          "filters": "price_overview"})
+        if r.status_code != 200:
+            log(f"Steam: HTTP {r.status_code}")
+            break
+        data = r.json() or {}
+        for a in ids[i:i + 40]:
+            po = (data.get(a) or {}).get("data")
+            po = po.get("price_overview") if isinstance(po, dict) else None
+            if po:
+                out[a] = {"price": po["final"] / 100, "regular": po["initial"] / 100, "cut": po.get("discount_percent") or 0,
+                          "currency": po.get("currency", "EUR"), "url": f"{STEAM_STORE}/app/{a}"}
+    return out
+
+
+def find_appid(c: httpx.Client, title: str, country: str) -> str:
+    """Codice Steam di un gioco aggiunto da IsThereAnyDeal (senza codice): solo se il titolo coincide, altrimenti ''."""
+    r = c.get(f"{STEAM_STORE}/api/storesearch/", params={"term": title, "cc": country, "l": "english"})
+    if r.status_code != 200:
+        return ""
+    want = matching.normalize(title)
+    return next((str(it["id"]) for it in r.json().get("items", []) if matching.normalize(it.get("name", "")) == want), "")
+
+
+ITAD_STEAM = 61  # id di Steam fra i negozi di IsThereAnyDeal
+
+
+def itad_history(c: httpx.Client, key: str, itad_id: str, country: str, days: int = 730) -> list[list]:
+    """Prezzi di Steam nel tempo da IsThereAnyDeal: [[data, prezzo]] in ordine di data."""
+    since = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - days * 86400))
+    r = c.get(f"{ITAD}/games/history/v2", params={"key": key, "id": itad_id, "country": country,
+                                                 "shops": ITAD_STEAM, "since": since})
+    if r.status_code != 200:
+        return []
+    out = []
+    for e in r.json() or []:
+        amount = ((e.get("deal") or {}).get("price") or {}).get("amount")
+        sid = (e.get("shop") or {}).get("id")
+        if amount is not None and e.get("timestamp") and sid in (None, ITAD_STEAM):
+            out.append([e["timestamp"][:10], amount])
+    return sorted(out)
+
+
 def _alert(item: dict, price, regular, cut, low, threshold, key_price=None) -> str:
     target = item.get("target")
     if target and key_price is not None and key_price <= target and (price is None or key_price < price):
@@ -150,7 +200,17 @@ def check(cfg, user, log=print, force: bool = False) -> dict:
     if not stale:
         return {"checked": 0, "alerts": []}
     saved: set[str] = set()
+    detail: dict[str, dict] = {}  # per gioco: Steam, key piu' economica, offerte (colonna aks, nome storico)
     with httpx.Client(headers=UA, timeout=30) as c:
+        for w in stale:  # giochi aggiunti da IsThereAnyDeal: senza codice Steam GG.deals non li trova
+            if not w["steam_appid"]:
+                try:
+                    w["steam_appid"] = find_appid(c, w["title"], s["country"])
+                except (httpx.HTTPError, ValueError) as e:
+                    log(f"Steam: {type(e).__name__}: {e}")
+                if w["steam_appid"]:
+                    user.wish_update(w["id"], steam_appid=w["steam_appid"])
+        steam = steam_prices(c, [w["steam_appid"] for w in stale], s["country"], log)
         keys: dict[str, dict] = {}
         if s["gg_key"]:
             try:
@@ -192,35 +252,32 @@ def check(cfg, user, log=print, force: bool = False) -> dict:
                 if not deals:
                     user.wish_update(w["id"], checked=time.time())
                     continue
+                detail[w["id"]] = {"offers": [{"shop": (x.get("shop") or {}).get("name", ""), "price": (x.get("price") or {}).get("amount"),
+                                               "regular": (x.get("regular") or {}).get("amount"), "cut": x.get("cut") or 0,
+                                               "url": x.get("url", "")} for x in deals[:25]], "low": low}
                 d = deals[0]
                 pr, rg = (d.get("price") or {}).get("amount"), (d.get("regular") or {}).get("amount")
                 save(w, pr, rg, d.get("cut") or 0, (d.get("shop") or {}).get("name", ""), d.get("url", ""), low,
                      (d.get("price") or {}).get("currency", "EUR"), s["threshold"], alerts)
         # senza chiave (o giochi senza codice IsThereAnyDeal): prezzo su Steam
-        rest = [w for w in stale if w["steam_appid"] and not (s["itad_key"] and w["itad_id"])]
-        for i in range(0, len(rest), 40):
-            chunk = rest[i:i + 40]
-            r = c.get(f"{STEAM_STORE}/api/appdetails", params={"appids": ",".join(w["steam_appid"] for w in chunk),
-                                                              "cc": s["country"].lower(), "filters": "price_overview"})
-            if r.status_code != 200:
-                log(f"Steam: HTTP {r.status_code}")
-                break
-            data = r.json() or {}
-            for w in chunk:
-                po = ((data.get(w["steam_appid"]) or {}).get("data") or {})
-                po = po.get("price_overview") if isinstance(po, dict) else None
-                if not po:  # gratuito o non in vendita
+        for w in stale:
+            st = steam.get(w["steam_appid"])
+            if w["steam_appid"] and not (s["itad_key"] and w["itad_id"]):
+                if st:
+                    save(w, st["price"], st["regular"], st["cut"], "Steam", st["url"], None, st["currency"], s["threshold"], alerts)
+                else:  # gratuito o non in vendita
                     user.wish_update(w["id"], checked=time.time())
-                    continue
-                save(w, po["final"] / 100, po["initial"] / 100, po.get("discount_percent") or 0, "Steam",
-                     f"{STEAM_STORE}/app/{w['steam_appid']}", None, po.get("currency", "EUR"), s["threshold"], alerts)
-            time.sleep(1)
         # nessun prezzo ufficiale trovato ma prezzo nei negozi di key (es. gioco non piu' in vendita su Steam)
         for w in stale:
             k = keys.get(w["steam_appid"])
             if w["id"] not in saved and k:
                 save(w, w["price"], w["regular"], w["cut"] or 0, w["shop"] or "", w["url"] or "", w["low"],
                      w["currency"] or k.get("currency") or "EUR", s["threshold"], alerts)
+        for w in stale:  # dettaglio per il dialog: i dati scaricati ora, piu' lo storico di ITAD gia' in cache
+            old = json.loads(w["aks"] or "{}")
+            d = {**{k: old[k] for k in ("hist", "hist_at") if k in old}, **detail.get(w["id"], {}),
+                 "steam": steam.get(w["steam_appid"]) or old.get("steam"), "key": keys.get(w["steam_appid"]) or old.get("key")}
+            user.wish_update(w["id"], aks=json.dumps(d))
     return {"checked": len(stale), "alerts": alerts}
 
 

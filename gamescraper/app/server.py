@@ -24,6 +24,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import httpx
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
@@ -157,8 +158,11 @@ class Library:
 def _players(v, platform: str = "") -> int:
     """Numero massimo di giocatori IN LOCALE (stesso schermo/console), 0 se sconosciuto.
     '1-4', '2', 'Up to 8'... -> il massimo. Valori da gioco online (es. 16, 64) vengono scartati:
-    per i PC oltre 4 (le schede PC indicano quasi sempre i giocatori online), per le console oltre 8."""
-    n = [int(x) for x in re.findall(r"\d+", str(v or ""))]
+    per i PC oltre 4 (le schede PC indicano quasi sempre i giocatori online), per le console oltre 8.
+    Portatili (P.NO_SPLIT): 0, il multiplayer richiede piu' console."""
+    if platform in P.NO_SPLIT:
+        return 0
+    n =[int(x) for x in re.findall(r"\d+", str(v or ""))]
     m = max(n) if n else 0
     if m > (4 if platform == "windows" else 8):
         return 0
@@ -3064,51 +3068,14 @@ def create_app(cfg) -> FastAPI:
         owned = {normalize(g["title"]) for g in lib.games if g.get("store") != "online"
                  and (g.get("store") is None or g.get("installed") or g.get("store"))}
         hist = user.wish_history()
-        queued = sum(1 for w in items if KP.due(w))
         for w in items:
             w["owned"] = normalize(w["title"]) in owned
             w["history"] = hist.get(w["id"], [])
-            a = json.loads(w.pop("aks") or "{}")  # le offerte complete arrivano solo con il dettaglio del gioco
-            w["aks_status"] = "missing" if a.get("missing") else "error" if a.get("error") else "ok" if a.get("product_id") else None
+            w["steam"] = json.loads(w.pop("aks") or "{}").get("steam")  # le offerte complete arrivano con il dettaglio del gioco
         return {"items": items, "settings": {"country": s["country"], "threshold": s["threshold"],
                                              "has_key": bool(s["itad_key"]), "has_gg": bool(s["gg_key"])},
                 "unseen": sum(1 for w in items if w["alert"] and not w["seen"]), "checking": wish_state["checking"],
-                "aks": {"running": aks_state["running"], "queued": queued, "blocked_until": _aks_block(),
-                        "wait": queued * 3 * (KP.GAP + KP.JITTER / 2)}}  # al peggio: 3 richieste per gioco
-
-    # prezzi delle key da allkeyshop: un solo giro alla volta, ritmo e pause in keyprices
-    from .. import keyprices as KP
-    aks_state = {"running": False}
-    aks_lock = threading.Lock()
-
-    def _aks_block(until: float | None = None) -> float:
-        from ..cache import Cache
-        c = Cache(cfg.cache)
-        try:
-            if until is not None:
-                c.kv_set("aks_block", until)
-            return float(c.kv_get("aks_block") or 0)
-        finally:
-            c.close()
-
-    def _aks_log(m):
-        wish_state["log"].append(m)
-        del wish_state["log"][:-100]
-
-    def _aks_run():
-        with aks_lock:
-            if aks_state["running"]:
-                return
-            aks_state["running"] = True
-        try:
-            KP.refresh(user, W.settings(cfg)["country"], log=_aks_log, block_until=_aks_block, set_block=_aks_block)
-        except Exception as e:  # il giro riparte al prossimo controllo
-            _aks_log(f"allkeyshop: {type(e).__name__}: {e}")
-        finally:
-            aks_state["running"] = False
-
-    def _aks_start():
-        threading.Thread(target=_aks_run, daemon=True).start()
+                "log": wish_state["log"][-3:]}
 
     def _wish_check(force=False):
         if wish_state["checking"]:
@@ -3148,9 +3115,8 @@ def create_app(cfg) -> FastAPI:
         wid = body.get("id") or ("steam:" + body["steam_appid"] if body.get("steam_appid") else "t:" + normalize(title))
         target = body.get("target")
         user.wish_add(wid, title, str(body.get("steam_appid") or ""), str(body.get("itad_id") or ""),
-                      float(target) if target not in (None, "") else None)
+                      float(target) if target not in (None, "") else None, str(body.get("cover") or ""))
         threading.Thread(target=_wish_check, daemon=True).start()
-        _aks_start()
         return _wish_payload()
 
     @app.post("/api/wishlist/import-steam")
@@ -3171,13 +3137,11 @@ def create_app(cfg) -> FastAPI:
         for it in items:
             user.wish_add("steam:" + it["steam_appid"], it["title"], it["steam_appid"])
         threading.Thread(target=_wish_check, daemon=True).start()
-        _aks_start()
         return {**_wish_payload(), "imported": len(items)}
 
     @app.post("/api/wishlist/check")
     def api_wishlist_check(body: dict = Body(default={})):
         threading.Thread(target=_wish_check, kwargs={"force": bool(body.get("force", True))}, daemon=True).start()
-        _aks_start()  # solo i giochi non controllati oggi: «forza» non vale per allkeyshop
         return {"ok": True}
 
     @app.post("/api/wishlist/settings")
@@ -3215,36 +3179,28 @@ def create_app(cfg) -> FastAPI:
 
     @app.get("/api/wishlist/prices/{wid:path}")
     def api_wishlist_prices(wid: str):
-        """Dettaglio dei prezzi di un gioco: Steam, key piu' economica, tutte le offerte, minimi storici."""
-        items = user.wishlist()
-        w = next((x for x in items if x["id"] == wid), None)
+        """Dettaglio dei prezzi di un gioco: Steam, key piu' economica (GG.deals), offerte degli store (ITAD) e storico."""
+        w = next((x for x in user.wishlist() if x["id"] == wid), None)
         if not w:
             raise HTTPException(404, "Gioco non nella lista")
-        todo = sorted((x for x in items if KP.due(x)), key=lambda x: (x.get("aks_checked") or 0, -(x.get("added") or 0)))
-        pos = next((i for i, x in enumerate(todo) if x["id"] == wid), None)
-        return {"id": wid, "title": w["title"], "steam_appid": w["steam_appid"], "checked": w["aks_checked"],
-                "aks": json.loads(w["aks"] or "{}"), "queue": pos, "running": aks_state["running"],
-                "blocked_until": _aks_block(), "wait": None if pos is None else (pos + 1) * 3 * (KP.GAP + KP.JITTER / 2)}
-
-    @app.post("/api/wishlist/prices/{wid:path}")
-    def api_wishlist_prices_set(wid: str, body: dict = Body(default={})):
-        """Pagina allkeyshop indicata dall'utente (gioco non trovato o sbagliato) oppure «aggiorna adesso»."""
-        url = (body.get("url") or "").strip()
-        if url and not re.match(r"https://(www\.)?allkeyshop\.com/blog/buy-[\w-]+/?$", url):
-            raise HTTPException(400, "Incolla l'indirizzo della pagina del gioco su allkeyshop (https://www.allkeyshop.com/blog/buy-…)")
-        f = {"aks_checked": None}
-        if url:
-            f["aks"] = json.dumps({"url": url})
-        user.wish_update(wid, **f)
-        _aks_start()
-        return api_wishlist_prices(wid)
+        d = json.loads(w["aks"] or "{}")
+        s = W.settings(cfg)
+        if s["itad_key"] and w["itad_id"] and time.time() - (d.get("hist_at") or 0) > 24 * 3600:
+            try:  # storico di Steam da ITAD: una volta al giorno
+                with httpx.Client(headers=W.UA, timeout=20) as c:
+                    d["hist"], d["hist_at"] = W.itad_history(c, s["itad_key"], w["itad_id"], s["country"]), time.time()
+                user.wish_update(wid, aks=json.dumps(d))
+            except (httpx.HTTPError, ValueError) as e:
+                wish_state["log"].append(f"IsThereAnyDeal, storico: {type(e).__name__}: {e}")
+        return {"id": wid, "title": w["title"], "steam_appid": w["steam_appid"], "checked": w["checked"],
+                "currency": w["currency"] or "EUR", "detail": d, "history": user.wish_history(3650).get(wid, []),
+                "key_low": w["key_low"], "key_url": w["key_url"], "has_itad": bool(s["itad_key"]), "has_gg": bool(s["gg_key"])}
 
     def _wish_loop():
         time.sleep(30)
         while True:
             if user.wishlist() and time.time() - wish_state["last"] > 12 * 3600:
                 _wish_check()
-            _aks_start()  # parte solo se c'e' un gioco da controllare (al massimo una volta al giorno ciascuno)
             time.sleep(1800)
 
     threading.Thread(target=_wish_loop, daemon=True).start()

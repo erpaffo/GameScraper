@@ -1,0 +1,6 @@
+.di-form { display: flex; gap: 8px; align-items: flex-start; }
+.di-form textarea { flex: 1; resize: vertical; }
+.di-list { list-style: none; padding: 0; margin: 8px 0 0; }
+.di-list li { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.di-voce { background: var(--bg-3); border-radius: 8px; padding: 8px 10px !important; margin-bottom: 6px; }
+.di-del { float: right; background: none; border: 0; color: var(--muted); cursor: pointer; }

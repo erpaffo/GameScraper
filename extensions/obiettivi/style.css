@@ -1,0 +1,15 @@
+.ob-serie { font-size: 20px; margin-bottom: 8px; }
+.ob-row { position: relative; padding: 10px 36px 10px 12px; margin-bottom: 8px; max-width: 720px;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; }
+.ob-row.done { border-color: var(--accent); }
+.ob-row .muted { margin-left: 8px; }
+.ob-track { height: 8px; border-radius: 4px; background: var(--bg-3); margin-top: 6px; overflow: hidden; }
+.ob-fill { height: 100%; background: var(--accent); }
+.ob-del { position: absolute; top: 8px; right: 8px; background: none; border: 0; color: var(--muted); cursor: pointer; }
+.ob-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px 0 22px; }
+.ob-form input { width: 80px; }
+.ob-badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; max-width: 900px; }
+.ob-badge { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px;
+  background: var(--bg-2); border: 1px solid var(--line); opacity: .6; }
+.ob-badge.on { opacity: 1; border-color: var(--accent); }
+.ob-badge span { font-size: 22px; }

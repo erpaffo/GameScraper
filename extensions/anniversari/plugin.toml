@@ -1,0 +1,7 @@
+[plugin]
+name = "Anniversari retro"
+version = "1.0"
+author = "GameScraper"
+description = "Un badge «30 ANNI» sulle copertine dei giochi usciti proprio oggi, di qualche anno fa, e la pagina «Oggi nel…» con l'elenco."
+api = 1
+min_app = "0.7.1"

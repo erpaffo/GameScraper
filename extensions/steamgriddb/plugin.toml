@@ -1,0 +1,7 @@
+[plugin]
+name = "SteamGridDB"
+version = "1.0"
+author = "GameScraper"
+description = "Fonte di copertine (verticali), sfondi (hero) e logo da SteamGridDB, per i giochi a cui le altre fonti non le hanno trovate. Serve una chiave gratuita di steamgriddb.com."
+api = 1
+min_app = "0.7.1"

@@ -59,10 +59,10 @@ class UserData:
             if col not in cols:
                 self.db.execute(f"ALTER TABLE user_games ADD COLUMN {col} {typ}")
         wcols = {r[1] for r in self.db.execute("PRAGMA table_info(wishlist)")}
-        # prezzo migliore sui negozi di key (GG.deals o allkeyshop): attuale, minimo storico, pagina di confronto;
-        # aks = offerte e minimi storici di allkeyshop (JSON), aks_checked = ultimo controllo
+        # prezzo migliore sui negozi di key (GG.deals): attuale, minimo storico, pagina di confronto;
+        # aks = dettaglio prezzi (JSON: Steam, key, offerte ITAD; nome storico, prima veniva da allkeyshop), cover = copertina
         for col, typ in (("key_price", "REAL"), ("key_low", "REAL"), ("key_url", "TEXT"), ("aks", "TEXT"),
-                         ("aks_checked", "REAL")):
+                         ("aks_checked", "REAL"), ("cover", "TEXT")):
             if col not in wcols:
                 self.db.execute(f"ALTER TABLE wishlist ADD COLUMN {col} {typ}")
         self.db.commit()
@@ -157,18 +157,20 @@ class UserData:
 
     # ------------------------------------------------------------ lista dei desideri
     WISH_COLS = ("id", "title", "steam_appid", "itad_id", "target", "added", "price", "regular", "cut", "shop", "url",
-                 "low", "currency", "checked", "alert", "seen", "key_price", "key_low", "key_url", "aks", "aks_checked")
+                 "low", "currency", "checked", "alert", "seen", "key_price", "key_low", "key_url", "aks", "aks_checked", "cover")
 
     def wishlist(self) -> list[dict]:
         cur = self._q(f"SELECT {', '.join(self.WISH_COLS)} FROM wishlist ORDER BY title COLLATE NOCASE")
         return [dict(zip(self.WISH_COLS, r)) for r in cur]
 
-    def wish_add(self, wid: str, title: str, steam_appid: str = "", itad_id: str = "", target: float | None = None):
-        self._exec("INSERT INTO wishlist(id, title, steam_appid, itad_id, target, added) VALUES(?,?,?,?,?,?) "
+    def wish_add(self, wid: str, title: str, steam_appid: str = "", itad_id: str = "", target: float | None = None,
+                 cover: str = ""):
+        self._exec("INSERT INTO wishlist(id, title, steam_appid, itad_id, target, added, cover) VALUES(?,?,?,?,?,?,?) "
                    "ON CONFLICT(id) DO UPDATE SET title=excluded.title, "
                    "steam_appid=COALESCE(NULLIF(excluded.steam_appid,''), steam_appid), "
-                   "itad_id=COALESCE(NULLIF(excluded.itad_id,''), itad_id)",
-                   (wid, title, steam_appid or "", itad_id or "", target, time.time()))
+                   "itad_id=COALESCE(NULLIF(excluded.itad_id,''), itad_id), "
+                   "cover=COALESCE(NULLIF(excluded.cover,''), cover)",
+                   (wid, title, steam_appid or "", itad_id or "", target, time.time(), cover or ""))
         self._stamp("wish", wid, "")
 
     def wish_update(self, wid: str, **f):

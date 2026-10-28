@@ -216,6 +216,15 @@ repository. La release, invece, contiene solo lo store.
 | **Statistiche** | tempo di gioco per console e store, giochi più giocati, completezza dei metadati |
 | **Link → Store** | legge una pagina che raccoglie altri siti, raggruppa i link per intestazione (h2/h3) e aggiunge ciascuno come store di una console o come store PC (repack / download diretto) |
 | **Store Minerva + Switch** | importa in un clic le cartelle di minerva-archive.org elencate su r-roms.github.io **e** aggiunge gli store Switch preimpostati (NXBrew `game-index`, Ziperto NSP, Ziperto XCI) |
+| **Cosa gioco stasera?** | propone un gioco dal backlog in base al tempo che hai (durata HowLongToBeat), al genere e alla console, con più probabilità per quelli che non giochi da più tempo; «Un altro» e «Avvia» |
+| **Anniversari retro** | badge «30 ANNI» sulle copertine dei giochi usciti proprio oggi e pagina «Oggi nel…» (servono le date di uscita complete) |
+| **Pulizia libreria** | duplicati, giochi mai avviati o fermi da anni, dati incompleti; azioni di massa (nascondi, abbandonato, backlog) e badge «DUP» |
+| **Diario di gioco** | nel dettaglio di ogni gioco, voci datate e cronologia delle sessioni (si affianca alla nota personale già presente) |
+| **Limite di tempo** | notifica quando superi X ore al giorno o a settimana (del profilo attivo); è un avviso, non chiude il gioco |
+| **Obiettivi personali** | obiettivi a periodo (giochi finiti, ore, giorni di gioco), serie di giorni consecutivi e distintivi |
+| **Riepilogo annuale** | il tuo anno in giochi (ore, più giocati, console, mese) con un'immagine da salvare |
+| **SteamGridDB** | fonte di copertine verticali, sfondi e logo mancanti; chiave gratuita in Impostazioni › SteamGridDB |
+| **Calendario uscite** | uscite future dei giochi in lista desideri e dei prossimi titoli dei tuoi generi, da RAWG (usa la chiave di Impostazioni › Fonti) |
 
 **Store Minerva + Switch** tiene i preset in `PRESETS` (`backend.py`): per aggiungerne altri basta una riga
 (`{"console": ["https://…"]}`). Poiché gli elenchi della stessa console possono avere formati diversi

@@ -1,0 +1,5 @@
+.pl-tabs, .pl-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.pl-years { margin-left: 8px; color: var(--muted); }
+.pl-list { list-style: none; padding: 0; margin: 12px 0 0; max-width: 900px; }
+.pl-list li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.pl-list label { display: flex; gap: 8px; align-items: baseline; }

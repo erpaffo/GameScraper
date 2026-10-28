@@ -248,6 +248,7 @@ function tileEl(g) {
     + (S.oneVersion && g.grp.versions > 1 ? `<span class="badge ver">${g.grp.versions} ${g.store ? "store" : "versioni"}</span>` : "")
     + (g.store ? `<span class="badge plat">${esc(STORE_SHORT[g.store] || g.store.toUpperCase())}</span>`
       : showPlat ? `<span class="badge plat">${esc(SHORT[g.platform] || g.platform.toUpperCase())}</span>` : "")
+    + (g.players >= 2 ? `<span class="badge ext" title="Multigiocatore locale">👥 ${g.players}</span>` : "")
     + (g.store === "online" ? `<span class="badge inst">🌐 Scarica${g.size ? " · " + fmtSize(g.size) : ""}</span>`
       : g.store && !g.installed ? `<span class="badge inst">⬇ Installa</span>` : "")
     + GS.ui.tileBadges.map((b) => { try { const t = b.render(g); return t ? `<span class="badge ext">${esc(t)}</span>` : ""; } catch { return ""; } }).join("");
@@ -1491,9 +1492,8 @@ async function followPortJob(pv) {
   else if (S.view.type === "ports") renderPorts(pv);
 }
 
-/** Prezzo dei negozi di key, con lo sconto rispetto al prezzo pieno ufficiale (es. 60 € su Steam -> 9,50 € = -84%). */
-function keyPrice(w, money) {
-  const full = w.regular || w.price;
+/** Prezzo dei negozi di key (GG.deals), con lo sconto rispetto al prezzo pieno (es. 60 € su Steam -> 9,50 € = -84%). */
+function keyPrice(w, money, full) {
   const cut = full ? Math.round((1 - w.key_price / full) * 100) : 0;
   return `<span class="wl-key" title="Negozi di key${w.key_low != null ? ` · minimo storico ${money(w.key_low, w.currency)}` : ""}">🔑 `
     + `${cut > 0 ? `<span class="cut">-${cut}%</span>` : ""}<b>${money(w.key_price, w.currency)}</b></span>`;
@@ -1515,12 +1515,14 @@ async function renderWishlist(pv) {
   let d;
   try { d = await api("/api/wishlist"); } catch (e) { pv.innerHTML = `<div class="page"><p>${esc(e.message)}</p></div>`; return; }
   const money = (v, cur = "EUR") => (v == null ? "—" : v === 0 ? "Gratis" : v.toLocaleString("it", { style: "currency", currency: cur || "EUR" }));
-  const steamImg = (w) => (w.steam_appid ? remoteImg(`https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${w.steam_appid}/capsule_184x69.jpg`) : "");
+  // header.jpg esiste per ogni gioco Steam; senza codice Steam (o se manca) si usa la copertina salvata alla ricerca
+  const steamImg = (w) => remoteImg(w.steam_appid ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${w.steam_appid}/header.jpg` : w.cover);
+  const imgTag = (w) => (steamImg(w) ? `<img src="${steamImg(w)}" alt="" data-fb="${w.steam_appid && w.cover ? remoteImg(w.cover) : ""}" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.dataset.fb=''}else this.remove()">` : "");
   const s = d.settings;
   pv.innerHTML = `<div class="page">
     <div class="page-head"><div><h2>♡ Lista desideri</h2>
       <p class="muted small">Prezzi degli store ufficiali${s.has_key ? " (IsThereAnyDeal: Steam, GOG, Epic, Humble e altri)" : " (Steam; aggiungi la chiave IsThereAnyDeal per confrontare tutti gli store)"}.
-        Negozi di key: allkeyshop (una richiesta al minuto e ogni gioco una volta al giorno, per non farsi bloccare dal sito)${s.has_gg ? " e GG.deals" : ""}.
+        Negozi di key: GG.deals.
         Clicca un gioco per vedere tutte le offerte e i minimi storici.
         Avviso quando lo sconto supera il ${s.threshold}%, quando il prezzo (anche nei negozi di key) scende sotto quello che indichi o tocca il minimo storico.</p></div>
       <div class="row"><button class="btn" id="wl-import">⬇ Importa da Steam</button><button class="btn" id="wl-check">↻ Controlla prezzi</button>
@@ -1535,16 +1537,15 @@ async function renderWishlist(pv) {
       <button class="btn primary" id="wl-save">Salva</button></div>
     <div class="wl-add"><input class="field grow" id="wl-q" placeholder="Cerca un gioco da aggiungere…" autocomplete="off"><div id="wl-res"></div></div>
     ${d.checking ? `<p class="muted small">Controllo dei prezzi in corso…</p>` : ""}
-    ${d.aks.blocked_until * 1000 > Date.now() ? `<p class="muted small">allkeyshop ha rifiutato le richieste: riprovo dalle ${new Date(d.aks.blocked_until * 1000).toLocaleTimeString("it", { hour: "2-digit", minute: "2-digit" })}.</p>`
-      : d.aks.queued ? `<p class="muted small">🔑 allkeyshop: ${d.aks.queued} giochi da controllare (al massimo ${Math.ceil(d.aks.wait / 60)} min)…</p>` : ""}
+    ${!s.has_gg ? `<p class="muted small">🔑 Per i prezzi delle key aggiungi la chiave GG.deals in ⚙.</p>`
+      : d.log.length ? `<p class="muted small">Ultimo avviso: ${esc(d.log[d.log.length - 1])}</p>` : ""}
     <div class="wl-list">${d.items.map((w) => `<div class="wl-row${w.alert ? " has-alert" : ""}${w.alert && !w.seen ? " new" : ""}" data-wid="${esc(w.id)}" title="Clicca per tutte le offerte">
-      <div class="wl-img">${steamImg(w) ? `<img src="${steamImg(w)}" alt="" onerror="this.remove()">` : ""}</div>
+      <div class="wl-img">${imgTag(w)}</div>
       <div class="wl-t"><b>${esc(w.title)}</b>${w.owned ? ` <span class="tag">già in libreria</span>` : ""}
         <span class="muted small">${w.checked ? `${esc(w.shop || "")} · controllato ${new Date(w.checked * 1000).toLocaleDateString("it")}` : "prezzo non ancora controllato"}
-          ${w.low != null ? ` · minimo storico ${money(w.low, w.currency)}` : ""}
-          ${w.aks_status === "missing" ? " · 🔑 non trovato su allkeyshop" : !w.aks_status && !w.aks_checked ? " · 🔑 key: in coda" : ""}</span>${priceSpark(w.history, money, w.currency)}</div>
-      <div class="wl-price">${w.cut ? `<span class="cut">-${w.cut}%</span><s class="muted">${money(w.regular, w.currency)}</s>` : ""}<b>${money(w.price, w.currency)}</b>
-        ${w.key_price != null ? keyPrice(w, money) : ""}</div>
+          ${w.low != null ? ` · minimo storico ${money(w.low, w.currency)}` : ""}</span>${priceSpark(w.history, money, w.currency)}</div>
+      <div class="wl-price" title="${esc(w.steam ? "Steam" : w.shop || "")}">${(w.steam || w).cut ? `<span class="cut">-${(w.steam || w).cut}%</span><s class="muted">${money((w.steam || w).regular, w.currency)}</s>` : ""}<b>${money((w.steam || w).price, w.currency)}</b>
+        ${w.key_price != null ? keyPrice(w, money, (w.steam || w).regular || (w.steam || w).price) : ""}</div>
       <div class="wl-alert">${w.alert ? `🔔 ${esc(w.alert)}` : ""}</div>
       <label class="wl-target" title="Avvisami quando costa meno di…">≤ <input class="field" type="number" step="0.5" min="0" data-target="${esc(w.id)}" value="${w.target ?? ""}" placeholder="€"></label>
       ${w.url ? `<button class="btn" data-open="${esc(w.url)}">Apri ↗</button>` : ""}
@@ -1606,60 +1607,74 @@ async function renderWishlist(pv) {
   };
 }
 
-/** Dettaglio dei prezzi di un gioco della lista: Steam, key più economica, tutte le offerte e minimi storici (allkeyshop). */
+/** Grafico a gradini del prezzo nel tempo: pts = [[data, prezzo]], low = linea tratteggiata del minimo storico. */
+function lineChart(pts, color, low, money) {
+  if (pts.length < 2) return `<p class="muted small">Non ci sono ancora abbastanza dati per il grafico.</p>`;
+  const W = 640, H = 170, L = 58, B = 20, T = 8;
+  const ts = pts.map(([d]) => +new Date(d)), vs = pts.map(([, v]) => v).concat(low != null ? [low] : []);
+  const t0 = ts[0], t1 = ts[ts.length - 1], lo = Math.min(...vs), hi = Math.max(...vs);
+  const x = (t) => L + (t1 === t0 ? 0 : ((t - t0) / (t1 - t0)) * (W - L - 6));
+  const y = (v) => T + (hi === lo ? (H - T - B) / 2 : (1 - (v - lo) / (hi - lo)) * (H - T - B));
+  const path = pts.map(([, v], i) => (i ? `H${x(ts[i]).toFixed(1)}V${y(v).toFixed(1)}` : `M${x(t0).toFixed(1)},${y(v).toFixed(1)}`)).join("") + `H${x(t1).toFixed(1)}`;
+  const day = (t) => new Date(t).toLocaleDateString("it", { day: "2-digit", month: "short", year: "2-digit" });
+  return `<svg class="wp-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img">
+    <text x="2" y="${T + 9}" class="ax">${money(hi)}</text><text x="2" y="${H - B}" class="ax">${money(lo)}</text>
+    <text x="${L}" y="${H - 5}" class="ax">${day(t0)}</text><text x="${W - 4}" y="${H - 5}" class="ax" text-anchor="end">${day(t1)}</text>
+    ${low != null ? `<line x1="${L}" x2="${W - 6}" y1="${y(low)}" y2="${y(low)}" stroke="${color}" stroke-dasharray="4 4" opacity=".5"><title>Minimo storico ${money(low)}</title></line>` : ""}
+    <path d="${path}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
+}
+
+/** Dettaglio dei prezzi di un gioco: Steam, key più economica (GG.deals), offerte degli store (IsThereAnyDeal), grafici. */
 async function openWishPrices(wid) {
   const dlg = $("#wl-dlg"), box = $("#wl-dlg-body");
-  const money = (v) => (v == null ? "—" : v.toLocaleString("it", { style: "currency", currency: "EUR" }));
-  const day = (s) => (s ? new Date(s).toLocaleDateString("it") : "");
   let d;
   try { d = await api(`/api/wishlist/prices/${encodeURIComponent(wid)}`); } catch (e) { return toast(e.message, true); }
-  const a = d.aks || {};
-  const steam = a.steam || (a.aks_steam != null ? { price: a.aks_steam } : null);
-  const keys = (a.offers || []).filter((o) => !o.official && !o.account);
-  const accounts = (a.offers || []).filter((o) => o.account);
-  const official = (a.offers || []).filter((o) => o.official);
-  const offerRow = (o) => `<tr><td>${esc(o.shop)}</td><td class="muted">${esc(o.region)}</td><td class="muted">${esc(o.edition)}</td>
-    <td>${o.coupon ? `<code>${esc(o.coupon)}</code>` : ""}</td>
-    <td class="num">${o.original > o.price ? `<s class="muted">${money(o.original)}</s> ` : ""}<b>${money(o.price)}</b></td></tr>`;
-  const table = (rows) => `<table class="wp-table"><thead><tr><th>Negozio</th><th>Regione</th><th>Edizione</th><th>Coupon</th><th class="num">Prezzo</th></tr></thead>
-    <tbody>${rows.map(offerRow).join("")}</tbody></table>`;
-  const status = d.blocked_until * 1000 > Date.now() ? `allkeyshop ha rifiutato le richieste: riprovo dalle ${new Date(d.blocked_until * 1000).toLocaleTimeString("it", { hour: "2-digit", minute: "2-digit" })}.`
-    : d.queue != null ? `🔑 In coda su allkeyshop${d.queue ? ` (${d.queue} giochi prima di questo)` : ""}: circa ${Math.max(1, Math.round(d.wait / 60))} min.`
-    : a.missing ? "Gioco non trovato su allkeyshop: incolla qui sotto l'indirizzo della sua pagina."
-    : a.error ? `Ultimo controllo non riuscito (${esc(a.error)}): riprovo domani.`
-    : d.checked ? `Prezzi di allkeyshop del ${new Date(d.checked * 1000).toLocaleString("it", { dateStyle: "short", timeStyle: "short" })}.` : "";
+  const money = (v) => (v == null ? "—" : v.toLocaleString("it", { style: "currency", currency: d.currency }));
+  const a = d.detail || {}, steam = a.steam, key = a.key;
+  const since = (days) => (days ? new Date(Date.now() - days * 864e5).toISOString().slice(0, 10) : "");
+  // Steam: storico di ITAD + punti giornalieri registrati qui (questi vincono sullo stesso giorno)
+  const byDay = new Map((a.hist || []).concat(d.history.filter((h) => h[1] != null).map((h) => [h[0], h[1]])));
+  const steamPts = [...byDay].sort(([x], [y]) => (x < y ? -1 : 1));
+  const keyPts = d.history.filter((h) => h[2] != null).map((h) => [h[0], h[2]]);
+  const offers = a.offers || [];
+  let range = 365;
+  const draw = () => {
+    const cut = (pts) => pts.filter(([day]) => day >= since(range));
+    box.querySelector("#wp-charts").innerHTML = `
+      <h4>Steam</h4>${lineChart(cut(steamPts), "#5b8cff", null, money)}
+      <h4>Key più economica</h4>${keyPts.length > 1 ? lineChart(cut(keyPts), "#9be3b5", d.key_low, money)
+        : `<p class="muted small">Lo storico delle key si costruisce giorno per giorno da quando segui il gioco${d.key_low != null ? ` (minimo storico: ${money(d.key_low)})` : ""}.</p>`}`;
+    box.querySelectorAll("[data-range]").forEach((b) => b.classList.toggle("primary", +b.dataset.range === range));
+  };
   box.innerHTML = `<div class="row"><h3 class="grow">${esc(d.title)}</h3>
-      ${a.url ? `<button class="btn" data-open="${esc(a.url)}">allkeyshop ↗</button>` : ""}
       ${steam?.url ? `<button class="btn" data-open="${esc(steam.url)}">Steam ↗</button>` : ""}
+      ${d.key_url ? `<button class="btn" data-open="${esc(d.key_url)}">GG.deals ↗</button>` : ""}
       <button class="icon-btn" id="wp-close" title="Chiudi">✕</button></div>
-    <p class="muted small">${status}</p>
+    <p class="muted small">${d.checked ? `Prezzi controllati il ${new Date(d.checked * 1000).toLocaleString("it", { dateStyle: "short", timeStyle: "short" })}.` : "Prezzi non ancora controllati."}
+      ${d.has_gg ? "" : " Aggiungi la chiave GG.deals in ⚙ per le key."}${d.has_itad ? "" : " Aggiungi la chiave IsThereAnyDeal per il confronto degli store e lo storico."}</p>
     <div class="wp-cards">
       <div class="wp-card"><span class="muted small">Steam</span>
-        <b>${steam ? money(steam.price) : "—"}</b>${steam?.cut ? ` <span class="cut">-${steam.cut}%</span> <s class="muted">${money(steam.regular)}</s>` : ""}
-        <span class="muted small">Minimo storico: ${money(a.steam_low)} ${a.steam_low_date ? `(${day(a.steam_low_date)})` : ""}</span></div>
-      <div class="wp-card key"><span class="muted small">Key più economica</span>
-        <b>${a.key ? money(a.key.price) : "—"}</b>
-        <span class="muted small">${a.key ? `${esc(a.key.shop)} · ${esc(a.key.region)}${a.key.coupon ? ` · coupon <code>${esc(a.key.coupon)}</code>` : ""}` : ""}</span>
-        <span class="muted small">Minimo storico: ${money(a.key_low)} ${a.key_low_date ? `(${day(a.key_low_date)})` : ""}</span></div>
+        <b>${steam ? money(steam.price) : "—"}</b>${steam?.cut ? ` <span class="cut">-${steam.cut}%</span> <span class="muted small">prezzo pieno <s>${money(steam.regular)}</s></span>` : ""}</div>
+      <div class="wp-card key"><span class="muted small">Key più economica (GG.deals)</span>
+        <b>${key?.key != null ? money(key.key) : "—"}</b>
+        <span class="muted small">Minimo storico: ${money(key?.key_low)}</span></div>
+      ${a.low != null ? `<div class="wp-card"><span class="muted small">Minimo storico negli store</span><b>${money(a.low)}</b></div>` : ""}
     </div>
-    ${keys.length ? `<h4>Key (${keys.length} offerte)</h4>${table(keys)}` : ""}
-    ${official.length ? `<h4>Store ufficiali</h4>${table(official)}` : ""}
-    ${accounts.length ? `<details><summary class="muted small">Offerte account, non key (${accounts.length})</summary>${table(accounts)}</details>` : ""}
-    <div class="row wp-foot"><input class="field grow" id="wp-url" placeholder="Gioco sbagliato o non trovato? Incolla l'indirizzo della pagina su allkeyshop" value="">
-      <button class="btn" id="wp-url-save">Usa</button><button class="btn" id="wp-refresh" title="Rimette il gioco in testa alla coda">↻ Aggiorna</button></div>`;
-  box.onclick = async (e) => {
-    const t = e.target, o = t.closest("[data-open]");
-    if (o) { api("/api/open", { body: { url: o.dataset.open } }); return; }
-    if (t.id === "wp-close") dlg.close();
-    else if (t.id === "wp-refresh" || t.id === "wp-url-save") {
-      const body = t.id === "wp-url-save" ? { url: $("#wp-url").value.trim() } : {};
-      try { await api(`/api/wishlist/prices/${encodeURIComponent(wid)}`, { body }); } catch (err) { return toast(err.message, true); }
-      openWishPrices(wid);
-    }
+    ${offers.length ? `<h4>Offerte degli store (${offers.length})</h4><table class="wp-table"><thead><tr><th>Negozio</th><th class="num">Prezzo pieno</th><th class="num">Sconto</th><th class="num">Prezzo</th><th></th></tr></thead>
+      <tbody>${offers.map((o) => `<tr><td>${esc(o.shop)}</td><td class="num muted">${o.cut ? `<s>${money(o.regular)}</s>` : ""}</td>
+        <td class="num">${o.cut ? `-${o.cut}%` : ""}</td><td class="num"><b>${money(o.price)}</b></td>
+        <td>${o.url ? `<button class="btn" data-open="${esc(o.url)}">Apri ↗</button>` : ""}</td></tr>`).join("")}</tbody></table>` : ""}
+    <div class="row wp-range"><span class="muted small grow">Andamento</span>
+      <button class="btn" data-range="30">30 giorni</button><button class="btn" data-range="365">1 anno</button><button class="btn" data-range="0">Tutto</button></div>
+    <div id="wp-charts"></div>`;
+  box.onclick = (e) => {
+    const t = e.target, o = t.closest("[data-open]"), r = t.closest("[data-range]");
+    if (o) api("/api/open", { body: { url: o.dataset.open } });
+    else if (r) { range = +r.dataset.range; draw(); }
+    else if (t.id === "wp-close") dlg.close();
   };
+  draw();
   if (!dlg.open) dlg.showModal();
-  clearTimeout(openWishPrices.tmr);
-  if (d.queue != null) openWishPrices.tmr = setTimeout(() => dlg.open && openWishPrices(wid), 15000);  // in coda: si aggiorna da solo
 }
 
 /* ---- pagina: statistiche */
@@ -3778,6 +3793,7 @@ GS.openGame = (id) => openDetail(id);
 GS.library = () => S;
 GS.currentGame = () => S.detail;
 GS.refresh = () => reload(true);
+GS.redraw = () => { if (S.games.length) refreshGrid(true); };  // ridisegna le copertine (badge di un'estensione arrivati dopo)
 
 (async function main() {
   bind();
