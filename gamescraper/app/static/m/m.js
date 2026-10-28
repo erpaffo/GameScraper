@@ -31,7 +31,10 @@ function toast(msg, err = false) {
 
 /* ------------------------------------------------------------------ abbinamento */
 function showPair() {
+  // niente piu' giri in sottofondo finche' il telefono non e' di nuovo abbinato
+  clearTimeout(runT); clearTimeout(actT);
   $("#pair").hidden = false; $("#main").hidden = true; $("#pad").hidden = true;
+  $("#pad-lobby").hidden = true;
   const code = (location.hash.match(/code=(\d{6})/) || [])[1];
   if (code) $("#pair-code").value = code;
   const ua = navigator.userAgent;
@@ -79,9 +82,13 @@ function renderHome() {
   const favs = L.games.filter((g) => g.fav).sort((a, b) => a.sort.localeCompare(b.sort)).slice(0, 30);
   const pc = L.games.filter((g) => g.store && g.installed).sort((a, b) => (b.last || 0) - (a.last || 0)).slice(0, 20);
   const row = (t, list) => (list.length ? `<h2 class="sec">${t}</h2><div class="row-scroll">${list.map(card).join("")}</div>` : "");
-  $("#v-home").innerHTML = row("▶ In corso", playing) + row("◷ Giocati di recente", recent) + row("★ Preferiti", favs)
-    + row("🖥 Giochi PC installati", pc)
-    || `<p class="empty">Libreria vuota: aggiungi i giochi dall'app sul PC.</p>`;
+  const rows = row("▶ In corso", playing) + row("◷ Giocati di recente", recent) + row("★ Preferiti", favs)
+    + row("🖥 Giochi PC installati", pc);
+  // senza partite recenti, preferiti o giochi PC la Home non deve dire «libreria vuota»: si mostrano i titoli
+  $("#v-home").innerHTML = rows || (L.games.length
+    ? row("🎲 Tutti i giochi", L.games.slice().sort((a, b) => a.sort.localeCompare(b.sort)).slice(0, 30))
+      + `<p class="empty small">${L.games.length} giochi: aprine uno o cerca in <b>🔍 Libreria</b>.</p>`
+    : `<p class="empty">Libreria vuota: aggiungi i giochi dall'app sul PC.</p>`);
 }
 
 function filterLib() {
@@ -118,6 +125,8 @@ function renderLibTools() {
   const plats = [...new Set(L.games.filter((g) => !g.store).map((g) => g.platform))].sort((a, b) => (L.plats.get(a) || a).localeCompare(L.plats.get(b) || b));
   $("#plat").innerHTML = `<option value="">Tutte</option>` + (L.games.some((g) => g.store) ? `<option value="pc">PC</option>` : "")
     + plats.map((p) => `<option value="${esc(p)}">${esc(L.plats.get(p) || p)}</option>`).join("");
+  // il filtro salvato puo' non esistere piu' (console tolta, libreria ricostruita): si torna a «Tutte»
+  if (![...$("#plat").options].some((o) => o.value === L.plat)) { L.plat = ""; store.set("plat", ""); }
   $("#plat").value = L.plat;
   const chips = [["all", "Tutti"], ["recent", "Recenti"], ["fav", "★ Preferiti"], ["playing", "▶ In corso"], ["backlog", "📋 Da giocare"]];
   $("#lib-chips").innerHTML = chips.map(([k, l]) => `<button data-chip="${k}" class="${L.chip === k ? "on" : ""}">${l}</button>`).join("");
@@ -266,11 +275,14 @@ const LAYOUTS = {
   gc: { shoulder: { lt: "L", lb: "—", rb: "Z", rt: "R" }, face: { a: "A", b: "X", x: "B", y: "Y" },
     mid: { back: "⧉", guide: "⌂", start: "START" } },
 };
-/* aspetti speciali: un pannello proprio al posto dei tasti standard. portrait = telefono in verticale;
+/* aspetti speciali: un pannello proprio al posto dei tasti standard. portrait = telefono in verticale,
+   both = vanno bene tutte e due le posizioni (DS/3DS);
    motion = cosa fa il giroscopio (dsu: movimento agli emulatori, wheel: sterzo sulla levetta sinistra) */
 const SPECIAL = {
   buzz: { portrait: true }, wii: { portrait: true, motion: "dsu" }, wiis: { motion: "dsu" }, nunchuk: { motion: "dsu" },
-  wheel: { motion: "wheel" }, guitar: {}, arcade: {}, gun: {}, mic: { portrait: true }, ds: { portrait: true },
+  wheel: { motion: "wheel" }, guitar: {}, arcade: {}, gun: {}, mic: { portrait: true },
+  // DS/3DS: verticale (schermo sopra, comandi sotto) oppure orizzontale (comandi sopra lo schermo)
+  ds: { both: true },
 };
 const WII = new Set(["wii", "wiis", "nunchuk"]);
 // console o titolo del gioco in corso -> aspetto (se «automatico» e' attivo e l'aspetto scelto e' un controller normale)
@@ -362,6 +374,16 @@ function editUp(e) {
   EDIT.drag = null;
 }
 
+/* orientamento: gli aspetti «verticale» si bloccano in verticale, gli altri in orizzontale; il DS/3DS resta libero
+   (both) cosi' si puo' passare da verticale a orizzontale mentre si gioca */
+function lockOrientation(sp) {
+  const want = sp && sp.both ? null : sp && sp.portrait ? "portrait" : "landscape";
+  try {
+    if (want) screen.orientation?.lock?.(want).catch(() => {});
+    else screen.orientation?.unlock?.();
+  } catch { /* non supportato: si chiede di ruotare */ }
+}
+
 function applyLayout() {
   const lay = effLayout();
   const pad = $("#pad");
@@ -372,13 +394,14 @@ function applyLayout() {
   const sp = SPECIAL[lay];
   pad.classList.toggle("special", !!sp);
   pad.classList.toggle("portrait", !!(sp && sp.portrait));
+  pad.classList.toggle("free", !!(sp && sp.both));  // nessun blocco di rotazione: vanno bene verticale e orizzontale
   document.querySelectorAll("#pad .sp").forEach((e) => e.classList.toggle("on", e.id === `sp-${lay}`));
   $("#pad-rotate").textContent = sp && sp.portrait ? "Tieni il telefono in verticale 🔄" : "Ruota il telefono in orizzontale 🔄";
   if (prev !== lay) {
     releaseAll();
     showSource();
     if (!$("#pad").hidden) {
-      try { screen.orientation?.lock?.(sp && sp.portrait ? "portrait" : "landscape").catch(() => {}); } catch { /* */ }
+      lockOrientation(sp);
       if (sp && sp.motion) enableMotion();
       if (lay === "wheel") WHEEL.base = null;
       if (prev === "mic") micStop();
@@ -407,8 +430,8 @@ function releaseAll() {
   PAD.buttons = 0; PAD.lt = PAD.rt = PAD.lx = PAD.ly = PAD.rx = PAD.ry = 0; PAD.dirty = true;
   if (GUN.down) gunSend(GUN.x, GUN.y, false);
 }
-const GYRO_LABEL = { off: "🌀 Spento", dsu: "🌀 Movimento", aim: "🎯 Mira" };
-const SRC_LABEL = { auto: "🎮 Auto", touch: "👆 A schermo", gamepad: "🎮 Il mio" };
+const GYRO_LABEL = { off: "🌀 Off", dsu: "🌀 Mov", aim: "🎯 Mira" };
+const SRC_LABEL = { auto: "🎮 Auto", touch: "👆 Dito", gamepad: "🎮 Pad" };
 
 /* ---- controller vero collegato al telefono/iPad (Bluetooth): Gamepad API, schema "standard" */
 const GP_MAP = [["a", 0], ["b", 1], ["x", 2], ["y", 3], ["lb", 4], ["rb", 5], ["back", 8], ["start", 9], ["ls", 10], ["rs", 11],
@@ -439,11 +462,12 @@ window.addEventListener("gamepaddisconnected", () => { showSource(); PAD.buttons
 
 async function openPad() {
   $("#pad").hidden = false;
+  document.body.classList.add("pad-on");  // il gioco non deve scorrere sotto il controller
   $("#pad").style.setProperty("--s", SET.scale);
   $("#pad-gyro").textContent = GYRO_LABEL[SET.gyro];
   try { await document.documentElement.requestFullscreen?.({ navigationUI: "hide" }); } catch { /* iOS non lo supporta */ }
   const sp = SPECIAL[effLayout()];
-  try { await screen.orientation?.lock?.(sp && sp.portrait ? "portrait" : "landscape"); } catch { /* non supportato: si chiede di ruotare */ }
+  lockOrientation(sp);
   try { PAD.wake = await navigator.wakeLock?.request("screen"); } catch { /* */ }
   if (SET.gyro !== "off" || (sp && sp.motion)) await enableMotion();
   applyLayout();
@@ -457,12 +481,15 @@ function closePad() {
   micStop();
   dsStop();  // lo schermo inferiore torna sul PC
   $("#pad").hidden = true;
+  document.body.classList.remove("pad-on");
   $("#pad-lobby").hidden = true;
+  $("#pad-settings").hidden = true;
   rumble(0, 0);
   if (PAD.ws) { PAD.ws.onclose = null; PAD.ws.close(); PAD.ws = null; }
   try { document.exitFullscreen?.(); } catch { /* */ }
   try { screen.orientation?.unlock?.(); } catch { /* */ }
   try { PAD.wake?.release(); } catch { /* */ }
+  if (!$("#main").hidden) tab("home");  // si torna alla schermata Home
 }
 function connectPad() {
   const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/m/ws`);
@@ -565,8 +592,20 @@ function dsStart() {
 function dsStop() {
   if (DSS.ws) { DSS.ws.onclose = null; DSS.ws.close(); DSS.ws = null; }
 }
+/* riquadro dove si vede davvero lo schermo: in orizzontale l'immagine sta dentro l'area con le bande nere ai lati,
+   quindi il tocco si misura sull'immagine (object-fit: contain) e non sull'area intera */
+function dsImageRect() {
+  const area = $("#ds-area").getBoundingClientRect();
+  const img = $("#ds-img");
+  const nw = img.naturalWidth, nh = img.naturalHeight;
+  if (!nw || !nh) return area;
+  if (getComputedStyle(img).objectFit !== "contain") return area;
+  const k = Math.min(area.width / nw, area.height / nh);
+  const w = nw * k, h = nh * k;
+  return { left: area.left + (area.width - w) / 2, top: area.top + (area.height - h) / 2, width: w, height: h };
+}
 function dsTouch(e, down, force = false) {
-  const r = $("#ds-area").getBoundingClientRect();
+  const r = dsImageRect();
   if (e) {
     DSS.x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
     DSS.y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
@@ -1019,7 +1058,10 @@ $("#lib-chips").onclick = (e) => {
 async function start() {
   $("#pair").hidden = true; $("#main").hidden = false;
   try { decode(await api("/api/library?part=owned")); } catch (e) { if (!$("#pair").hidden) return; toast(e.message, true); return; }
+  $("#grid").innerHTML = "";  // libreria ricaricata: la Libreria si ridisegna alla prossima apertura
+  L.shown = 0;
   renderHome(); renderLibTools();
+  tab("home");
   pollRun();
 }
 

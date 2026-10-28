@@ -118,14 +118,17 @@ class PhoneHub:
         self.mic_busy = False
         self.screen = None  # schermo inferiore DS/3DS della partita in corso (remote/dualscreen.Session), se c'e'
         self.screen_clients = 0
+        self.last_touch = 0.0  # ultimo tocco sullo schermo del telefono (per riportarlo sul PC se non lo si usa)
+        self.screen_seen = 0.0  # ultimo momento in cui un telefono guardava lo schermo
 
     # ------------------------------------------------------------ impostazioni
     @property
     def conf(self) -> dict:
         # mouse: il telefono puo' muovere il mouse del PC (touchpad / pistola ottica); spento finche' non lo attiva il PC
         # touchscreen: nei giochi DS/3DS il telefono fa da schermo inferiore (se e' collegato all'avvio)
+        # screen_idle: secondi senza tocchi dopo i quali lo schermo inferiore torna sul PC
         return {"enabled": False, "port": PORT, "devices": [], "mouse": False, "mic_device": "", "touchscreen": True,
-                **(self.cfg.app.get("phone") or {})}
+                "screen_idle": 30, **(self.cfg.app.get("phone") or {})}
 
     def _save(self, **kw):
         c = {**self.conf, **kw}
@@ -391,6 +394,7 @@ class PhoneHub:
                 "urls": self.urls(), "devices": [d for d in self.devices() if d.get("kind") != "pc"], "vigem": ok, "vigem_error": err,
                 "dsu": bool(self.dsu), "dsu_error": self.dsu_error, "mouse": bool(self.conf.get("mouse")),
                 "touchscreen": bool(self.conf.get("touchscreen")),
+                "screen_idle": int(self.conf.get("screen_idle") or 30),
                 "mic_device": self.conf.get("mic_device", ""), "mic_devices": _mic_devices(),
                 "controllers": [{**p, "motion": self.slots[p["slot"]]["motion"], "pad": bool(self.slots[p["slot"]]["pad"])}
                                 for p in self.players() if p["slot"] in self.slots]}
@@ -424,13 +428,15 @@ def register(app, hub: PhoneHub, static_dir: Path):
         return {"paired": bool(hub.device_for(request.cookies.get(COOKIE))) or request.client.host == "127.0.0.1"}
 
     @app.post("/m/api/pair")
-    def m_pair(body: dict = Body(...)):
+    def m_pair(request: Request, body: dict = Body(...)):
         try:
             token = hub.pair(str(body.get("code") or ""), str(body.get("name") or ""))
         except ValueError as e:
             raise HTTPException(403, str(e))
         r = JSONResponse({"ok": True})
-        r.set_cookie(COOKIE, token, max_age=3 * 365 * 86400, httponly=True, secure=True, samesite="strict", path="/")
+        # il cookie e' Secure (il telefono usa HTTPS): se la pagina arriva in chiaro il browser lo scarterebbe
+        r.set_cookie(COOKIE, token, max_age=3 * 365 * 86400, httponly=True,
+                     secure=request.url.scheme == "https", samesite="strict", path="/")
         return r
 
     @app.get("/m/api/me")
@@ -521,11 +527,13 @@ def register(app, hub: PhoneHub, static_dir: Path):
     @app.websocket("/m/screen")
     async def m_screen(ws: WebSocket):
         """Schermo inferiore DS/3DS: fotogrammi JPEG (binari) verso il telefono, tocchi del pennino verso l'emulatore.
-        Collegato = lo schermo sta sul telefono; chiuso l'ultimo, torna sul PC in un riquadro."""
+        Finche' un telefono guarda lo schermo e lo si usa, sul PC resta nascosto: a decidere quando riportarlo sul PC
+        e' il controllo in server.py (telefono scollegato o fermo da troppo tempo)."""
         import asyncio
         await ws.accept()
         with hub.lock:
             hub.screen_clients += 1
+        hub.last_touch = hub.screen_seen = time.time()
         shown = None
         recv = asyncio.ensure_future(ws.receive_text())
         try:
@@ -546,6 +554,7 @@ def register(app, hub: PhoneHub, static_dir: Path):
                     m = json.loads(recv.result())
                     recv = asyncio.ensure_future(ws.receive_text())
                     if s and m.get("t") == "touch":
+                        hub.last_touch = time.time()  # il telefono si sta usando: lo schermo resta suo
                         await asyncio.to_thread(s.touch, float(m.get("x", 0)), float(m.get("y", 0)), bool(m.get("d")))
         except (WebSocketDisconnect, RuntimeError, ValueError, OSError):
             pass
@@ -554,11 +563,10 @@ def register(app, hub: PhoneHub, static_dir: Path):
             with hub.lock:
                 hub.screen_clients -= 1
                 s, last = hub.screen, hub.screen_clients <= 0
-            if s and last:  # nessun telefono guarda più: lo schermo inferiore torna sul PC in un riquadro
+            hub.screen_seen = time.time()
+            if s and last and s.down:  # nessun telefono guarda piu': pennino sollevato (il riquadro sul PC lo mette il controllo)
                 try:
-                    if s.down:  # pennino sollevato
-                        s.touch(0, 0, False)
-                    await asyncio.to_thread(s.pip)
+                    s.touch(0, 0, False)
                 except OSError:
                     pass
 
@@ -625,6 +633,12 @@ def register(app, hub: PhoneHub, static_dir: Path):
             hub._save(mouse=bool(body["mouse"]))
         if "touchscreen" in body:
             hub._save(touchscreen=bool(body["touchscreen"]))
+        if "screen_idle" in body:
+            try:
+                secs = int(float(body["screen_idle"]))
+            except (TypeError, ValueError):
+                raise HTTPException(400, "Secondi non validi per lo schermo sul PC")
+            hub._save(screen_idle=min(600, max(5, secs)))
         if "mic_device" in body:
             hub._save(mic_device=str(body["mic_device"] or "")[:64])
         if "enabled" in body:

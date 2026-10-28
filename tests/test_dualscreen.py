@@ -194,10 +194,47 @@ def test_server_cycle_and_gate():
     print("ok  ciclo nel server (configura, gioca, ripristina; anche dopo una chiusura a meta') e cancello di rete")
 
 
+def test_mostra_sul_pc_solo_se_telefono_fermo_o_scollegato():
+    """Lo schermo inferiore sul PC resta nascosto: ricompare se il telefono si scollega (dopo qualche secondo) o se
+    non lo si tocca da piu' di `screen_idle` secondi, e sparisce di nuovo al primo tocco."""
+    assert not D.show_on_pc(True, 0.0, 30) and not D.show_on_pc(True, 29.9, 30), "telefono in uso: resta nascosto"
+    assert D.show_on_pc(True, 30.5, 30), "fermo da piu' di 30 s: si rivede sul PC"
+    assert not D.show_on_pc(True, 0.1, 30), "appena si tocca sparisce di nuovo"
+    assert not D.show_on_pc(False, 0.5, 30), "telefono appena sparito: si aspetta un riaggancio"
+    assert D.show_on_pc(False, D.PHONE_RECONNECT + 0.1, 30), "telefono scollegato: si rivede sul PC"
+    assert D.show_on_pc(True, 12, 10) and not D.show_on_pc(True, 12, 60), "il tempo lo sceglie l'utente"
+    print("ok  schermo inferiore sul PC solo se il telefono si scollega o resta fermo (tempo configurabile)")
+
+
+def test_impostazione_secondi_senza_uso():
+    """`screen_idle` (Impostazioni › Telefono): 30 secondi di default, modificabile e limitato fra 5 e 600."""
+    from fastapi.testclient import TestClient
+
+    from gamescraper import config
+    from gamescraper.app.server import create_app
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        d = Path(t)
+        cfg = config.Config(cache=d / "cache", output=d / "out")
+        cfg.config_path = d / "config.toml"
+        app = create_app(cfg)
+        with TestClient(app) as c:  # chiuso a fine test (database liberi)
+            hub = app.state.phone_hub
+            assert hub.conf["screen_idle"] == 30, "default: 30 secondi"
+            assert c.get("/api/phone").json()["screen_idle"] == 30
+            c.post("/api/phone", json={"screen_idle": 12})
+            assert hub.conf["screen_idle"] == 12 and config.read_settings(cfg)["app"]["phone"]["screen_idle"] == 12
+            assert c.post("/api/phone", json={"screen_idle": 9999}).json()["screen_idle"] == 600, "massimo 10 minuti"
+            assert c.post("/api/phone", json={"screen_idle": 1}).json()["screen_idle"] == 5, "minimo 5 secondi"
+            assert c.post("/api/phone", json={"screen_idle": "boh"}).status_code == 400
+    print("ok  secondi senza uso dello schermo inferiori: default 30, modificabili e limitati")
+
+
 if __name__ == "__main__":
     test_config_roundtrip()
     test_decision_and_geometry()
     test_nomi_emulatore_misti_e_casi_limite()
     test_telefono_collegato_anche_senza_controller()
     test_server_cycle_and_gate()
+    test_mostra_sul_pc_solo_se_telefono_fermo_o_scollegato()
+    test_impostazione_secondi_senza_uso()
     print("TUTTI I TEST OK")

@@ -1965,6 +1965,9 @@ async function loadRemote() {
         <span class="muted">(pistola ottica / touchpad: dà il controllo del mouse a chi ha un telefono abbinato)</span></label>
       <label class="chk"><input type="checkbox" id="ph-touch" ${ph.touchscreen ? "checked" : ""}> Il telefono fa da schermo touch nei giochi DS e 3DS
         <span class="muted">(se è collegato all'avvio: sul PC solo lo schermo superiore, il touch sul telefono; con melonDS, Citra, Azahar, Lime3DS)</span></label>
+      <label class="chk">Se il telefono non si usa per <input class="field" id="ph-touch-idle" type="number" min="5" max="600" step="5" value="${ph.screen_idle || 30}" style="width:70px"> secondi
+        lo schermo inferiore ricompare sul PC
+        <span class="muted">(prima resta nascosto dietro lo schermo superiore; se il telefono si scollega torna dopo pochi secondi)</span></label>
     </div>
     <div class="row wrap small">
       <label>Microfono del telefono (SingStar) → uscita del PC
@@ -3485,6 +3488,7 @@ function bind() {
     const t = e.target;
     if (t.id === "ph-mouse") phoneSet({ mouse: t.checked });
     if (t.id === "ph-touch") phoneSet({ touchscreen: t.checked });
+    else if (t.id === "ph-touch-idle") { const v = Math.min(600, Math.max(5, Number(t.value) || 30)); phoneSet({ screen_idle: v }); }
     else if (t.id === "ph-mic") phoneSet({ mic_device: t.value });
     else if (t.dataset.swap && t.value !== "") {
       try { await api("/api/phone/swap", { body: { a: +t.dataset.swap, b: +t.value } }); } catch (err) { toast(err.message, true); }

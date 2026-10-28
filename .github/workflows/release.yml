@@ -51,22 +51,8 @@ jobs:
       - name: Test
         env:
           PYTHONUTF8: "1"
-        run: |
-          python tests/test_policy.py
-          python tests/test_discover.py
-          python tests/test_frontend.py
-          python tests/test_pipeline.py
-          python tests/test_stores.py
-          python tests/test_launcher.py
-          python tests/test_switchmeta.py
-          python tests/test_wishlist.py
-          python tests/test_frontends.py
-          python tests/test_retroachievements.py
-          python tests/test_controllers.py
-          python tests/test_ports.py
-          python tests/test_version.py
-          python tests/test_sync.py
-          python tests/test_dualscreen.py
+          PYTHONUNBUFFERED: "1"  # l'output dei test arriva subito: un blocco si vede dove succede
+        run: python packaging/run_tests.py
 
       - name: Build
         run: pyinstaller packaging/gamescraper.spec --noconfirm --distpath dist --workpath build

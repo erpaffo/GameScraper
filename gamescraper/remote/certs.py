@@ -14,23 +14,41 @@ from pathlib import Path
 
 
 def lan_ips() -> list[str]:
-    """Indirizzi IPv4 del PC sulla rete locale (il primo e' quello della connessione principale)."""
-    ips: list[str] = []
+    """Indirizzi IPv4 del PC sulla rete locale (il primo e' quello della connessione principale).
+
+    Non risolve il nome host: su macOS `getaddrinfo(hostname)` puo' restare appeso per minuti quando il
+    nome (spesso qualcosa.local, senza mDNS raggiungibile) non risponde, e bloccherebbe l'interfaccia.
+    Gli indirizzi si leggono dal sistema con psutil (nessun DNS, millisecondi).
+    """
+    found: list[str] = []
     try:  # interfaccia usata per uscire verso internet (non invia nulla: UDP senza dati)
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("192.0.2.1", 9))
-        ips.append(s.getsockname()[0])
-        s.close()
+        try:
+            s.connect(("192.0.2.1", 9))
+            found.append(s.getsockname()[0])
+        finally:
+            s.close()
     except OSError:
         pass
     try:
-        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            ip = info[4][0]
-            if ip not in ips and not ip.startswith("127.") and not ip.startswith("169.254."):
-                ips.append(ip)
-    except OSError:
+        import psutil
+
+        for addrs in psutil.net_if_addrs().values():
+            for a in addrs:
+                if a.family == socket.AF_INET and a.address:
+                    found.append(a.address)
+    except Exception:  # psutil assente o rete non leggibile: restano gli indirizzi gia' trovati
         pass
-    return [ip for ip in ips if ipaddress.ip_address(ip).is_private]
+    ips: list[str] = []
+    for ip in found:
+        try:
+            addr = ipaddress.ip_address(ip)
+        except ValueError:
+            continue
+        if addr.is_private and not (addr.is_loopback or addr.is_link_local or addr.is_unspecified):
+            if str(addr) not in ips:
+                ips.append(str(addr))
+    return ips
 
 
 def ensure(folder: Path) -> tuple[Path, Path]:

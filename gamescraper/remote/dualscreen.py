@@ -31,6 +31,14 @@ KEYS = {
 SEP = {"melon": " = ", "citra": "="}
 FULLSCREEN_ARG = "-f"  # melonDS e citra-qt: schermo intero all'avvio
 MAX_SIDE = 640  # lato lungo dei fotogrammi mandati al telefono
+PHONE_RECONNECT = 3.0  # secondi di grazia prima di riportare sul PC lo schermo di un telefono sparito
+
+
+def show_on_pc(watching: bool, quiet: float, idle: float) -> bool:
+    """Lo schermo inferiore va mostrato sul PC? Di norma resta nascosto dietro lo schermo principale: si mostra solo
+    se il telefono non guarda piu' (dopo qualche secondo, il tempo di un riaggancio) oppure se non lo si usa da piu'
+    di `idle` secondi (impostazione dell'app, 30 di default)."""
+    return quiet > (float(idle) if watching else PHONE_RECONNECT)
 
 
 def family(emulator_id: str) -> str | None:

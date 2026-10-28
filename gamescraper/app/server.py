@@ -254,6 +254,24 @@ def create_app(cfg) -> FastAPI:
         threading.Thread(target=_ds_session, args=(getattr(launcher, "_proc", None),), daemon=True).start()
         return [DSC.FULLSCREEN_ARG]
 
+    def _ds_watch(proc, s):
+        """Sul PC lo schermo inferiore resta nascosto dietro lo schermo principale. Lo si mostra solo se il telefono
+        si scollega (dopo qualche secondo, il tempo di un riaggancio) o se non lo si usa da piu' di `screen_idle`
+        secondi (Impostazioni › Telefono, 30 di default); al primo tocco torna nascosto."""
+        idle = float(phone_hub.conf.get("screen_idle") or 30)
+        started, on_pc = time.time(), False
+        while proc.poll() is None and ds["state"] and phone_hub.screen is s:
+            watching = phone_hub.screen_clients > 0
+            seen = phone_hub.last_touch if watching else (phone_hub.screen_seen or started)
+            want = DSC.show_on_pc(watching, time.time() - seen, idle)
+            if want != on_pc:
+                on_pc = want
+                try:
+                    (s.pip if want else s.hide)()
+                except OSError:
+                    pass
+            time.sleep(0.25)
+
     def _ds_session(old):
         """Trova la finestra dello schermo inferiore del processo appena avviato e la passa al telefono."""
         for _ in range(100):
@@ -276,9 +294,7 @@ def create_app(cfg) -> FastAPI:
         s.find()
         s.hide()
         phone_hub.screen = s
-        time.sleep(10)
-        if phone_hub.screen is s and not phone_hub.screen_clients:
-            s.pip()  # il telefono non ha aperto lo schermo: resta usabile sul PC
+        _ds_watch(proc, s)
 
     events.on("game_stopped", _ds_restore)
     if cfg.app.get("dualscreen"):

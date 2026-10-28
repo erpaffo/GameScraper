@@ -1,5 +1,27 @@
 # Changelog
 
+## Non rilasciato
+
+### Corretto
+
+- macOS: l'app non resta piu' bloccata cercando gli indirizzi del PC per il telefono, gli indirizzi si leggono dal sistema senza risolvere il nome host
+- Giochi DS e 3DS sul telefono in verticale: croce e tasti sono tornati in basso sotto lo schermo (finivano in alto, sopra lo schermo)
+- Telefono: pulsante Home (🏠) sempre visibile nel controller, anche col telefono in verticale, e la barra dei comandi non esce piu' dallo schermo con i titoli lunghi
+- Telefono: dopo aver rifatto l'abbinamento la Home non dice piu' «libreria vuota» e il filtro per console salvato non nasconde i giochi, e dopo l'abbinamento si torna sempre alla Home
+- Telefono: abbinamento anche aprendo la pagina in chiaro (il cookie non viene piu' scartato dal browser)
+
+### Migliorato
+
+- Test della CI: ogni script ha un limite di tempo e, se si blocca, il log dice dove si e' fermato (niente piu' job appesi)
+
+### Aggiunto
+
+- Giochi DS e 3DS sul telefono anche in orizzontale: lo schermo touch prende tutta l'altezza e i comandi ci stanno sopra, semitrasparenti
+
+### Cambiato
+
+- Giocando col telefono lo schermo inferiore non compare piu' sul PC: ricompare in un riquadro solo se il telefono si scollega o se non lo si tocca per 30 secondi, tempo modificabile in Impostazioni > Telefono
+
 ## 0.6.4 (2026-10-28)
 
 ### Aggiunto

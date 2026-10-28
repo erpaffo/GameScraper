@@ -75,10 +75,15 @@ h2.sec { font-size: 17px; margin: 18px 0 8px; }
 /* controller */
 #pad { position: fixed; inset: 0; z-index: 30; background: radial-gradient(ellipse at 50% 30%, #1c2033, #0a0b10 70%);
   touch-action: none; user-select: none; -webkit-user-select: none; overflow: hidden; --s: 1; }
-.pad-bar { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; align-items: center; z-index: 3;
-  font-size: 12px; }
-.pad-bar button { background: rgba(255,255,255,.08); border: 0; border-radius: 9px; padding: 6px 9px; font-size: 12px; }
-#pad-info { color: var(--muted); max-width: 32vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* con il controller aperto la pagina sotto non scorre (su iOS il rimbalzo sposta i tasti) */
+body.pad-on { overflow: hidden; height: 100%; touch-action: none; }
+.pad-bar { position: absolute; top: calc(6px + var(--safe-t)); left: 50%; transform: translateX(-50%); display: flex; gap: 6px;
+  align-items: center; justify-content: center; flex-wrap: wrap; max-width: calc(100vw - 20px); z-index: 7; font-size: 12px; }
+.pad-bar button { background: rgba(255,255,255,.08); border: 0; border-radius: 9px; padding: 8px 10px; font-size: 12px;
+  min-width: 38px; }
+/* il pulsante per uscire dal controller e tornare alla Home: sempre visibile, anche con titoli lunghi */
+#pad-exit { background: rgba(91,140,255,.35); font-size: 17px; min-width: 44px; }
+#pad-info { color: var(--muted); min-width: 0; max-width: 32vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pad-area { position: absolute; inset: 0; }
 .pad-area > * { position: absolute; }
 .on-press, [data-btn].down, .dpad span.down { background: var(--accent) !important; color: #fff !important; transform: scale(.94); }
@@ -138,7 +143,7 @@ h2.sec { font-size: 17px; margin: 18px 0 8px; }
 #pad-hw[hidden] { display: none; }
 #pad-hw .hw-ico { font-size: 56px; }
 #pad-hw p { margin: 0; opacity: .75; max-width: 320px; }
-#pad-settings { position: absolute; inset: 6vh 10vw; background: var(--bg2); border-radius: 16px; padding: 14px 18px; z-index: 6;
+#pad-settings { position: absolute; inset: 6vh 10vw; background: var(--bg2); border-radius: 16px; padding: 14px 18px; z-index: 8;
   overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
 #pad-settings h3 { margin: 0; }
 #pad-settings label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
@@ -164,6 +169,8 @@ h2.sec { font-size: 17px; margin: 18px 0 8px; }
 #pad.portrait .pad-bar { top: calc(4px + var(--safe-t)); }
 @media (orientation: portrait) { #pad.portrait #pad-rotate { display: none; } }
 @media (orientation: landscape) { #pad.portrait #pad-rotate { display: flex; } }
+/* DS/3DS: niente avviso di rotazione, si gioca sia in verticale sia in orizzontale */
+#pad.free #pad-rotate { display: none !important; }
 /* Buzz!: pulsante rosso grande e 4 colori, telefono in verticale */
 .bz-red { left: 50%; top: 9vh; width: 62vw; height: 62vw; max-height: 36vh; max-width: 36vh; transform: translateX(-50%);
   border-radius: 50% !important; font-size: 30px; background: radial-gradient(circle at 40% 35%, #ff6b6b, #b40f1f) !important;
@@ -233,6 +240,28 @@ h2.sec { font-size: 17px; margin: 18px 0 8px; }
 .ds-dpad { left: 5vw; bottom: 13vh; width: 38vw; height: 38vw; max-height: 26vh; max-width: 26vh; }
 .ds-face { right: 5vw; bottom: 13vh; width: 40vw; height: 40vw; max-height: 27vh; max-width: 27vh; }
 .ds-mid { left: 22vw; right: 22vw; bottom: 3vh; height: 6.5vh; }
+/* la regola generale dei pannelli speciali azzera il bottom della croce: qui croce e tasti stanno sotto lo schermo */
+#sp-ds .ds-dpad { top: auto; bottom: 13vh; }
+#sp-ds .ds-face { top: auto; bottom: 13vh; }
+#sp-ds .ds-mid { top: auto; bottom: 3vh; }
+/* DS/3DS in orizzontale: lo schermo touch prende tutta l'altezza e i comandi ci stanno sopra, semitrasparenti.
+   Il riquadro 4:3 e' centrato: i suoi lati stanno a 50% ± meta' altezza (x 4/3), quindi i comandi si possono
+   appoggiare ai suoi angoli senza misure fisse. */
+@media (orientation: landscape) {
+  #sp-ds .ds-lr { top: 1vh; height: 8vh; }
+  #sp-ds .ds-lr > [data-btn] { flex: 0 0 18vw !important; }
+  #sp-ds .ds-area { inset: auto; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: auto; height: min(90vh, 74vw); aspect-ratio: 4 / 3; }
+  #sp-ds .ds-dpad { left: calc(50% - min(60vh, 49.3vw)); top: auto; bottom: calc(50% - min(45vh, 37vw) + 1vh);
+    width: min(30vh, 26vw); height: min(30vh, 26vw); }
+  #sp-ds .ds-face { right: calc(50% - min(60vh, 49.3vw)); top: auto; bottom: calc(50% - min(45vh, 37vw) + 1vh);
+    width: min(32vh, 28vw); height: min(32vh, 28vw); }
+  #sp-ds .ds-mid { left: 50%; right: auto; transform: translateX(-50%); top: auto; bottom: calc(50% - min(45vh, 37vw));
+    width: min(38vh, 34vw); height: 6.5vh; }
+  /* si vede lo schermo attraverso i comandi */
+  #sp-ds .ds-dpad span, #sp-ds .ds-face .fb, #sp-ds .ds-mid > [data-btn], #sp-ds .ds-lr > [data-btn] {
+    background: rgba(10, 12, 20, .42); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+}
 .ar-btns { right: 4vw; top: 20vh; width: 48vw; height: 56vh; display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.5vh 2vw; }
 .ar-btns > div { position: static; border-radius: 50% !important; font-size: 15px; aspect-ratio: 1; max-height: 26vh; justify-self: center; width: 26vh; }
 .ar-btns > div:nth-child(-n+3) { color: #4aa3ff; } .ar-btns > div:nth-child(n+4) { color: #ff5f5f; }
@@ -259,7 +288,7 @@ h2.sec { font-size: 17px; margin: 18px 0 8px; }
 #pad-info b.pl { padding: 1px 7px; border-radius: 99px; color: #111; }
 #pad.portrait #pad-info { flex: 0 0 auto; max-width: 18vw; }
 .wm-b { gap: 8px; }
-#pad-lobby { position: absolute; inset: 8vh 10vw; background: var(--bg2); border-radius: 16px; padding: 14px 18px; z-index: 6;
+#pad-lobby { position: absolute; inset: 8vh 10vw; background: var(--bg2); border-radius: 16px; padding: 14px 18px; z-index: 8;
   display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
 #pad-lobby h3 { margin: 0; }
 #lobby-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
