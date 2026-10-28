@@ -388,8 +388,10 @@ def close_launcher(name: str):
 
 
 class Launcher:
-    def __init__(self, cfg, userdata, on_event=None, shots=None, profile_of=None):
+    def __init__(self, cfg, userdata, on_event=None, shots=None, profile_of=None, prelaunch=None):
         self.cfg = cfg
+        # prelaunch(stato) -> argomenti in piu' prima di quelli del gioco (es. DS/3DS con il telefono come schermo touch)
+        self.prelaunch = prelaunch or (lambda st: [])
         self.user = userdata
         self.on_event = on_event or (lambda name, data: None)
         self.shots = shots  # archivio delle schermate (screens.Shots)
@@ -636,8 +638,8 @@ class Launcher:
                                   lambda m: self._set(message=m))
             core = str(_core_path(self.cfg, pl["core"])) if pl["core"] else ""
             args = [a.replace("{rom}", str(target)).replace("{core}", core) for a in pl["args"]]
-            cmd = [pl["exe"], *args]
             self._scripts(key, "before")
+            cmd = [pl["exe"], *self.prelaunch(dict(self.state)), *args]
             self.on_event("game_launching", dict(self.state))
             self._set(status="running", message=" ".join(f'"{c}"' if " " in c else c for c in cmd))
             t0 = time.time()

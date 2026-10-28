@@ -30,9 +30,9 @@ GUITAR = {"Green": "A", "Red": "B", "Yellow": "Y", "Blue": "X", "Orange": "LeftS
 
 
 # ------------------------------------------------------------------ ini
-def ini_update(text: str, changes: dict[str, dict[str, str]], replace: set[str] = frozenset()) -> str:
+def ini_update(text: str, changes: dict[str, dict[str, str]], replace: set[str] = frozenset(), sep: str = " = ") -> str:
     """Cambia le chiavi indicate lasciando il resto del file com'e' (commenti, ordine, sezioni duplicate comprese).
-    Le sezioni in `replace` vengono sostituite per intero."""
+    Le sezioni in `replace` vengono sostituite per intero. sep: "=" per i file di Qt (QSettings scrive senza spazi)."""
     blocks: list[list] = [[None, []]]  # [nome sezione, righe]
     for line in text.splitlines():
         m = re.match(r"\s*\[([^\]]+)\]\s*$", line)
@@ -47,20 +47,20 @@ def ini_update(text: str, changes: dict[str, dict[str, str]], replace: set[str] 
             continue
         kv = todo.pop(name)
         if name in replace:
-            b[1] = [lines[0]] + [f"{k} = {v}" for k, v in kv.items()] + [""]
+            b[1] = [lines[0]] + [f"{k}{sep}{v}" for k, v in kv.items()] + [""]
             continue
         for i, line in enumerate(lines[1:], 1):
             k = line.split("=", 1)[0].strip() if "=" in line else None
             if k in kv:
-                lines[i] = f"{k} = {kv.pop(k)}"
+                lines[i] = f"{k}{sep}{kv.pop(k)}"
         end = len(lines)
         while end > 1 and not lines[end - 1].strip():
             end -= 1
-        lines[end:end] = [f"{k} = {v}" for k, v in kv.items()]
+        lines[end:end] = [f"{k}{sep}{v}" for k, v in kv.items()]
     for name, kv in todo.items():  # sezioni nuove in fondo
         if blocks[-1][1] and blocks[-1][1][-1].strip():
             blocks[-1][1].append("")
-        blocks.append([name, [f"[{name}]"] + [f"{k} = {v}" for k, v in kv.items()] + [""]])
+        blocks.append([name, [f"[{name}]"] + [f"{k}{sep}{v}" for k, v in kv.items()] + [""]])
     out = "\n".join(line for _, lines in blocks for line in lines)
     return out.rstrip("\n") + "\n"
 

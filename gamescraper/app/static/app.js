@@ -1964,7 +1964,7 @@ async function loadRemote() {
       <label class="chk"><input type="checkbox" id="ph-mouse" ${ph.mouse ? "checked" : ""}> Il telefono può muovere il mouse del PC
         <span class="muted">(pistola ottica / touchpad: dà il controllo del mouse a chi ha un telefono abbinato)</span></label>
       <label class="chk"><input type="checkbox" id="ph-touch" ${ph.touchscreen ? "checked" : ""}> Il telefono fa da schermo touch nei giochi DS e 3DS
-        <span class="muted">(se all'avvio è aperto sul controller: sul PC solo lo schermo superiore; con melonDS, Citra, Azahar, Lime3DS)</span></label>
+        <span class="muted">(se è collegato all'avvio: sul PC solo lo schermo superiore, il touch sul telefono; con melonDS, Citra, Azahar, Lime3DS)</span></label>
     </div>
     <div class="row wrap small">
       <label>Microfono del telefono (SingStar) → uscita del PC

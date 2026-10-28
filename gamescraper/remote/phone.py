@@ -38,6 +38,7 @@ ALLOWED = [
     ("GET", r"/api/running"), ("POST", r"/api/running/stop"), ("POST", r"/api/running/screenshot"),
     ("GET", r"/img/\d+/[a-z0-9_]+"), ("GET", r"/icons/(platform|store)/[^/]+"), ("GET", r"/coll-img/[^/]+/(icon|cover)"),
     ("GET", r"/shots/\d+"), ("GET", r"/m/api/me"), ("POST", r"/m/api/logout"), ("WS", r"/m/ws"), ("WS", r"/m/mic"),
+    ("WS", r"/m/screen"),
 ]
 PLAYER_COLORS = ["#4aa3ff", "#ff5f5f", "#3ddc84", "#f5c518"]  # giocatore 1..4 (come i LED dei controller)
 PUBLIC = [("GET", r"/m/?"), ("GET", r"/m/static/[\w.-]+"), ("GET", r"/m/manifest\.webmanifest"), ("POST", r"/m/api/pair"),
@@ -115,12 +116,16 @@ class PhoneHub:
         self.slots: dict[int, dict] = {}  # slot -> {"cid", "device", "pad", "motion", "name", "rumble", "mouse"}
         self.rev = 0  # cambia a ogni collegamento, scollegamento o scambio: i telefoni aggiornano la sala giocatori
         self.mic_busy = False
+        self.screen = None  # schermo inferiore DS/3DS della partita in corso (remote/dualscreen.Session), se c'e'
+        self.screen_clients = 0
 
     # ------------------------------------------------------------ impostazioni
     @property
     def conf(self) -> dict:
         # mouse: il telefono puo' muovere il mouse del PC (touchpad / pistola ottica); spento finche' non lo attiva il PC
-        return {"enabled": False, "port": PORT, "devices": [], "mouse": False, "mic_device": "", **(self.cfg.app.get("phone") or {})}
+        # touchscreen: nei giochi DS/3DS il telefono fa da schermo inferiore (se e' collegato all'avvio)
+        return {"enabled": False, "port": PORT, "devices": [], "mouse": False, "mic_device": "", "touchscreen": True,
+                **(self.cfg.app.get("phone") or {})}
 
     def _save(self, **kw):
         c = {**self.conf, **kw}
@@ -205,15 +210,17 @@ class PhoneHub:
                 self.server.run()
             except (OSError, SystemExit) as e:
                 self.error = f"Porta {self.conf['port']} non disponibile ({e})"
+            except BaseException as e:
+                self.error = f"Errore server HTTPS ({e})"
             finally:
                 if self.server and not self.server.started:
                     self.server = None
         self.thread = threading.Thread(target=run, daemon=True)
         self.thread.start()
-        for _ in range(100):
+        for _ in range(150):
             if self.server is None or self.server.started:
                 break
-            time.sleep(0.05)
+            time.sleep(0.1)
         if self.server is None or not self.server.started:
             self.error = self.error or f"Server del telefono non avviato (porta {self.conf['port']} occupata?)"
             self.server = None
@@ -225,6 +232,9 @@ class PhoneHub:
         if self.server:
             self.server.should_exit = True
             self.server = None
+        if self.thread and self.thread.is_alive():
+            self.thread.join(timeout=3.0)
+        self.thread = None
         with self.lock:
             for c in self.slots.values():
                 c["kick"] = True
@@ -380,6 +390,7 @@ class PhoneHub:
         return {"enabled": self.conf["enabled"], "running": self.running(), "error": self.error, "port": self.conf["port"],
                 "urls": self.urls(), "devices": [d for d in self.devices() if d.get("kind") != "pc"], "vigem": ok, "vigem_error": err,
                 "dsu": bool(self.dsu), "dsu_error": self.dsu_error, "mouse": bool(self.conf.get("mouse")),
+                "touchscreen": bool(self.conf.get("touchscreen")),
                 "mic_device": self.conf.get("mic_device", ""), "mic_devices": _mic_devices(),
                 "controllers": [{**p, "motion": self.slots[p["slot"]]["motion"], "pad": bool(self.slots[p["slot"]]["pad"])}
                                 for p in self.players() if p["slot"] in self.slots]}
@@ -507,6 +518,50 @@ def register(app, hub: PhoneHub, static_dir: Path):
             if n is not None:
                 hub.close_slot(n)
 
+    @app.websocket("/m/screen")
+    async def m_screen(ws: WebSocket):
+        """Schermo inferiore DS/3DS: fotogrammi JPEG (binari) verso il telefono, tocchi del pennino verso l'emulatore.
+        Collegato = lo schermo sta sul telefono; chiuso l'ultimo, torna sul PC in un riquadro."""
+        import asyncio
+        await ws.accept()
+        with hub.lock:
+            hub.screen_clients += 1
+        shown = None
+        recv = asyncio.ensure_future(ws.receive_text())
+        try:
+            while True:
+                with hub.lock:
+                    s = hub.screen
+                if s is not shown:  # partita nuova (o finita): lo schermo va sul telefono
+                    shown = s
+                    if s:
+                        await asyncio.to_thread(s.hide)
+                    await ws.send_json({"t": "screen", "on": bool(s)})
+                if s:
+                    f = await asyncio.to_thread(s.frame)
+                    if f:
+                        await ws.send_bytes(f)
+                done, _ = await asyncio.wait({recv}, timeout=1 / 30 if s else 1)
+                if recv in done:
+                    m = json.loads(recv.result())
+                    recv = asyncio.ensure_future(ws.receive_text())
+                    if s and m.get("t") == "touch":
+                        await asyncio.to_thread(s.touch, float(m.get("x", 0)), float(m.get("y", 0)), bool(m.get("d")))
+        except (WebSocketDisconnect, RuntimeError, ValueError, OSError):
+            pass
+        finally:
+            recv.cancel()
+            with hub.lock:
+                hub.screen_clients -= 1
+                s, last = hub.screen, hub.screen_clients <= 0
+            if s and last:  # nessun telefono guarda più: lo schermo inferiore torna sul PC in un riquadro
+                try:
+                    if s.down:  # pennino sollevato
+                        s.touch(0, 0, False)
+                    await asyncio.to_thread(s.pip)
+                except OSError:
+                    pass
+
     @app.websocket("/m/mic")
     async def m_mic(ws: WebSocket):
         """Microfono del telefono (PCM 16 bit mono 16 kHz) -> uscita audio del PC scelta (cavo virtuale per SingStar)."""
@@ -568,6 +623,8 @@ def register(app, hub: PhoneHub, static_dir: Path):
             hub._save(port=int(body["port"]))
         if "mouse" in body:
             hub._save(mouse=bool(body["mouse"]))
+        if "touchscreen" in body:
+            hub._save(touchscreen=bool(body["touchscreen"]))
         if "mic_device" in body:
             hub._save(mic_device=str(body["mic_device"] or "")[:64])
         if "enabled" in body:

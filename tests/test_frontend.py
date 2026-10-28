@@ -582,19 +582,29 @@ def test_game_saves():
         (ed / "slot1.bin").write_bytes(b"v2-rovinato")
         r = SV.restore(cfg, "switch/x", b.name)
         assert (ed / "slot1.bin").read_bytes() == b"v1" and r["written"] == 1 and r["safety_copy"], r
-        with zipfile.ZipFile(SV.folder(cfg, "switch/x") / r["safety_copy"]) as z:
-            assert z.read("00/slot1.bin") == b"v2-rovinato"  # la copia di sicurezza ha i dati di prima
+        d = SV._game_dir(cfg, "switch/x")
+        with zipfile.ZipFile(d / r["safety_copy"]) as z:
+            assert z.read(SV._entry({}, SV._mkey(ed / "slot1.bin"))) == b"v2-rovinato"  # la copia di sicurezza ha i dati di prima
         rb = SV.backup(cfg, "gba/y", "Pokemon", rfiles)
         (ra / "saves" / "Pokemon Rosso.srm").write_bytes(b"xx")
         SV.restore(cfg, "gba/y", rb.name)
         assert (ra / "saves" / "Pokemon Rosso.srm").read_bytes() == b"s1"
-        # zip manomesso: un nome con ".." non deve uscire dalla cartella originale
-        evil = SV.folder(cfg, "switch/x") / "20990101-000000-x.zip"
-        with zipfile.ZipFile(evil, "w") as z:
-            z.writestr("manifest.json", json.dumps({"key": "switch/x", "items": [{"arc": "00", "path": str(ed), "dir": True}]}))
-            z.writestr("00/../../fuori.txt", "x")
-        SV.restore(cfg, "switch/x", evil.name)
-        assert not (ed.parent.parent / "fuori.txt").exists() and not (ed.parent / "fuori.txt").exists()
+        # mapping.yaml manomesso (arriva anche da Ludusavi o da un altro PC): niente eseguibili, percorsi relativi o nomi con ".."
+        import yaml
+        m = yaml.safe_load((d / "mapping.yaml").read_text(encoding="utf-8"))
+        bad = SV._mkey(tmp / "fuori.exe")
+        with zipfile.ZipFile(d / "evil.zip", "w") as z:
+            z.writestr(SV._entry(m["drives"], bad), "x")
+            z.writestr("drive-0/rel.txt", "x")
+        m["backups"] += [{"name": "evil.zip", "when": "2099-01-01T00:00:00Z", "files": {bad: {"hash": "", "size": 1},
+                          "rel.txt": {"hash": "", "size": 1}}}, {"name": "../evil.zip", "when": "2099-01-01T00:00:00Z"}]
+        (d / "mapping.yaml").write_text(yaml.safe_dump(m), encoding="utf-8")
+        assert SV.restore(cfg, "switch/x", "evil.zip")["written"] == 0 and not (tmp / "fuori.exe").exists()
+        try:
+            SV.restore(cfg, "switch/x", "../evil.zip")
+            raise AssertionError("nome con .. accettato")
+        except FileNotFoundError:
+            pass
         try:
             SV.restore(cfg, "gba/altro", b.name)
             raise AssertionError("copia di un altro gioco accettata")
@@ -680,6 +690,49 @@ def test_saves_versions():
         SV.delete(cfg, "pc/g", first.name)
         assert first.name not in [b["name"] for b in SV.list_backups(cfg, "pc/g")] and SV.session_point(cfg, "pc/g") is None
 
+        # formato di Ludusavi: mapping.yaml (nome, unita', file con SHA-1 e dimensione) e zip con drive-X/percorso
+        import hashlib
+        import re
+        import zipfile
+        import yaml
+        gd = SV._game_dir(cfg, "pc/g")
+        assert gd == SV.backup_root(cfg) / "Gioco"
+        m = yaml.safe_load((gd / "mapping.yaml").read_text(encoding="utf-8"))
+        b0 = m["backups"][-1]
+        key0 = SV._mkey(sav / "slot1")
+        assert m["name"] == "Gioco" and re.fullmatch(r"backup-\d{8}T\d{6}Z(-\d+)?\.zip", b0["name"]), m
+        drive = SV._DRIVE.match(key0)
+        assert m["drives"] == ({"drive-" + drive.group(1)[0]: drive.group(1)} if drive else {"drive-0": ""}), m["drives"]
+        with zipfile.ZipFile(gd / b0["name"]) as z:
+            assert sorted(z.namelist()) == sorted(SV._entry(m["drives"], k) for k in b0["files"]), z.namelist()
+            assert all(n.startswith("drive-") for n in z.namelist())
+            assert b0["files"][key0]["hash"] == hashlib.sha1(z.read(SV._entry(m["drives"], key0))).hexdigest()
+        assert SV.escape_name('A: "B"?.') == "A_ _B___" and SV.escape_name(".x") == "_x"
+        # copia «semplice» fatta da Ludusavi (cartella "." con drive-*): si vede e si ripristina
+        (gd / SV._entry(m["drives"], key0)).parent.mkdir(parents=True)
+        (gd / SV._entry(m["drives"], key0)).write_bytes(b"da-ludusavi")
+        m["backups"].append({"name": ".", "when": "2000-01-02T03:04:05Z", "files": {key0: {"hash": "x", "size": 11}},
+                             "registry": {"hash": None}, "children": []})
+        (gd / "mapping.yaml").write_text(yaml.safe_dump(m), encoding="utf-8")
+        lud = [b for b in SV.list_backups(cfg, "pc/g") if b["name"] == "."]
+        assert lud and lud[0]["reason"] == "ludusavi" and lud[0]["time"] == 946782245, lud
+        SV.restore(cfg, "pc/g", ".")
+        assert (sav / "slot1").read_bytes() == b"da-ludusavi"
+
+        # copie del formato precedente (zip con manifest.json): convertite alla prima lettura, fissate e note comprese
+        old = SV.folder(cfg, "pc/old") / "20200101-000000-manuale.zip"
+        old.parent.mkdir(parents=True)
+        with zipfile.ZipFile(old, "w") as z:
+            z.writestr("manifest.json", json.dumps({"key": "pc/old", "title": "Vecchio", "time": 1577836800, "reason": "manuale",
+                                                    "items": [{"arc": "00", "path": str(sav), "dir": True}]}))
+            z.writestr("00/slot1", b"antico")
+        (old.parent / "index.json").write_text(json.dumps({"pins": [old.name], "notes": {old.name: "n"}, "session": old.name}))
+        conv = SV.list_backups(cfg, "pc/old")
+        assert len(conv) == 1 and conv[0]["pinned"] and conv[0]["note"] == "n" and conv[0]["time"] == 1577836800, conv
+        assert not old.exists() and SV.session_point(cfg, "pc/old") == conv[0]["name"]
+        SV.restore(cfg, "pc/old", conv[0]["name"])
+        assert (sav / "slot1").read_bytes() == b"antico" and not (sav / "slot2").exists()
+
         # percorsi manuali: variabili espanse, cartelle troppo generiche rifiutate
         os.environ["GS_TEST_SAVES"] = str(sav)
         assert SV.set_paths(cfg, "pc/g", ["%GS_TEST_SAVES%"]) == ["%GS_TEST_SAVES%"]
@@ -712,6 +765,57 @@ def test_saves_versions():
         SV.answer_suggestion(cfg, "pc/k", str((game / "save").resolve()), accept=True)
         assert SV.resolved_manual(cfg, "pc/k") == [(game / "save").resolve()] and SV.suggestions(cfg, "pc/k") == []
     print("ok  salvataggi: regole emulatori, ID dalle ROM, versioni, rollback, percorsi manuali, proposte")
+
+
+def test_ludusavi_manifest():
+    """Manifest di Ludusavi: ridotto ai salvataggi Windows, gioco trovato per ID Steam/GOG, titolo o cartella,
+    segnaposto risolti; quelli non risolvibili (Linux, <root> ignoto) saltati."""
+    import os
+    from gamescraper.library import ludusavi as LM
+    full = {
+        "Gioco Uno": {"steam": {"id": 10}, "id": {"steamExtra": [11]}, "installDir": {"GiocoUno": {}}, "files": {
+            "<base>/Saves": {"tags": ["save"], "when": [{"os": "windows"}]},
+            "<winAppData>/Studio/*.sav": {"tags": ["save"]},
+            "<base>/config.ini": {"tags": ["config"]},
+            "<xdgData>/uno": {"tags": ["save"], "when": [{"os": "linux"}]},
+            "<root>/userdata/<storeUserId>/<storeGameId>/remote": {"when": [{"os": "windows", "store": "steam"}]},
+            "<home>/epic-only": {"when": [{"store": "epic"}]}}},
+        "Solo Config": {"files": {"<base>/x.ini": {"tags": ["config"]}}},
+        "Gioco Due": {"gog": {"id": 5}, "files": {"<winDocuments>/Due": {}}},
+    }
+    small = LM.reduce(full)
+    assert set(small["games"]) == {"Gioco Uno", "Gioco Due"} and small["steam"] == {"10": "Gioco Uno", "11": "Gioco Uno"}
+    assert len(small["games"]["Gioco Uno"]["files"]) == 4, small["games"]["Gioco Uno"]  # niente config e niente Linux
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        tmp = Path(t)
+        cfg = config.Config(cache=tmp / "cache")
+        LM.path(cfg).parent.mkdir(parents=True)
+        LM.path(cfg).write_text(json.dumps(small), encoding="utf-8")
+        man = LM.load(cfg)
+        assert LM.find(man, "steam", "11", "x") == "Gioco Uno" and LM.find(man, "gog", "5", "x") == "Gioco Due"
+        assert LM.find(man, "epic", "abc", "GIOCO uno!") == "Gioco Uno"
+        assert LM.find(man, "epic", "abc", "Altro", str(tmp / "GiocoUno")) == "Gioco Uno"
+        assert LM.find(man, "epic", "abc", "Altro") is None
+        base = tmp / "Giochi [1]" / "GiocoUno"
+        (base / "Saves").mkdir(parents=True)
+        (tmp / "Roaming" / "Studio").mkdir(parents=True)
+        (tmp / "Roaming" / "Studio" / "a.sav").write_bytes(b"a")
+        remote = tmp / "Steam" / "userdata" / "123" / "10" / "remote"
+        remote.mkdir(parents=True)
+        (tmp / "epic-only").mkdir()
+        old = os.environ.get("APPDATA")
+        os.environ["APPDATA"] = str(tmp / "Roaming")
+        try:
+            got = LM.save_paths(man, "Gioco Uno", "steam", "10", str(base), str(tmp / "Steam"))
+            assert sorted(p.name for p in got) == ["Saves", "a.sav", "remote"], got
+            # senza la cartella di Steam <root> non si risolve: quel percorso si salta
+            assert sorted(p.name for p in LM.save_paths(man, "Gioco Uno", "steam", "10", str(base))) == ["Saves", "a.sav"]
+        finally:
+            if old is None:
+                os.environ.pop("APPDATA", None)
+            else:
+                os.environ["APPDATA"] = old
+    print("ok  manifest di Ludusavi: giochi PC, segnaposto e store")
 
 
 def test_mark_started():
@@ -827,5 +931,6 @@ if __name__ == "__main__":
     test_eden_screenshot_dirs()
     test_game_saves()
     test_saves_versions()
+    test_ludusavi_manifest()
     test_mark_started()
     test_stream_optimize()

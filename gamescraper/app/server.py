@@ -231,15 +231,24 @@ def create_app(cfg) -> FastAPI:
             cfg.app.pop("dualscreen", None)
             C.save_settings(cfg, app={"dualscreen": None})
 
+    def _phone_here() -> bool:
+        """Telefono collegato adesso: un controller aperto, oppure un dispositivo abbinato visto da poco
+        (l'app del telefono aggiorna l'ultimo accesso a ogni richiesta: basta averla aperta)."""
+        if phone_hub.slots:
+            return True
+        now = time.time()
+        return any(now - float(d.get("last") or 0) < 600 for d in phone_hub.devices())
+
     def _ds_prelaunch(st: dict) -> list[str]:
         """Prima dell'avvio: con il telefono collegato, emulatore a finestre separate e schermo superiore a tutto schermo."""
         platform = (st.get("key") or "").split("/")[0]
-        if not DSC.wanted(platform, st.get("emulator_id"), bool(phone_hub.conf.get("touchscreen")), bool(phone_hub.slots)):
+        if not DSC.wanted(platform, st.get("emulator_id"), bool(phone_hub.conf.get("touchscreen")), _phone_here()):
             return []
         try:
             ds["state"] = DSC.apply(st["emulator_id"], st["exe"])
-        except OSError as e:  # file dell'emulatore non scrivibile: si gioca come sempre, con i due schermi sul PC
-            print(f"schermo touch sul telefono non attivato: {e}", file=sys.stderr)
+        except Exception as e:  # file dell'emulatore non scrivibile o emulatore non gestito: si gioca come sempre
+            print(f"schermo touch sul telefono non attivato: {type(e).__name__}: {e}", file=sys.stderr)
+            ds["state"] = None
             return []
         C.save_settings(cfg, app={"dualscreen": ds["state"]})  # per il ripristino anche se l'app si chiude a meta'
         threading.Thread(target=_ds_session, args=(getattr(launcher, "_proc", None),), daemon=True).start()

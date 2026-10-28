@@ -53,9 +53,20 @@ def ensure(folder: Path) -> tuple[Path, Path]:
         except Exception:
             pass
     pk = ec.generate_private_key(ec.SECP256R1())
-    host = socket.gethostname()
-    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, f"GameScraper ({host})")])
-    alt = [x509.DNSName("localhost"), x509.DNSName(host)] + [x509.IPAddress(ipaddress.ip_address(i)) for i in ["127.0.0.1", *ips]]
+    host = socket.gethostname() or "localhost"
+    cn = f"GameScraper ({host})"[:64]
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, cn)])
+    alt: list[x509.GeneralName] = [x509.DNSName("localhost")]
+    if host and host != "localhost":
+        try:
+            alt.append(x509.DNSName(host))
+        except Exception:
+            pass
+    for i in ["127.0.0.1", *ips]:
+        try:
+            alt.append(x509.IPAddress(ipaddress.ip_address(i)))
+        except Exception:
+            pass
     now = dt.datetime.now(dt.timezone.utc)
     cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(pk.public_key())
             .serial_number(x509.random_serial_number()).not_valid_before(now - dt.timedelta(days=1))

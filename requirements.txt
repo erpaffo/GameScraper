@@ -8,6 +8,7 @@ uvicorn[standard]>=0.29
 pillow>=10
 pywebview>=5
 psutil>=5
+pyyaml>=6          # salvataggi nel formato di Ludusavi (mapping.yaml) e manifest di Ludusavi
 howlongtobeatpy>=1.0
 qrcode>=7          # QR per abbinare il telefono
 cryptography>=42   # certificato HTTPS per l'app del telefono

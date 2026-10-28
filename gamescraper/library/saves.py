@@ -15,9 +15,9 @@ Dove gli emulatori salvano (portatile accanto all'exe prima della versione insta
 - Cemu: mlc01/usr/save/00050000/<id basso>;  Flycast: data/<ROM>_vmu_save_*.bin, <ROM>.nvmem*; vmu_save_*.bin condivise
 - xemu (un unico disco qcow2) e Xenia (ID non ricavabile dal file): percorsi manuali o rilevati dalla partita.
 
-Ogni copia e' uno zip in <cache>/saves/<gioco>/ con un manifest.json che ricorda il percorso originale di ogni
-elemento: il ripristino riscrive i file solo li', dopo aver salvato una copia dei salvataggi attuali. Accanto agli zip,
-index.json tiene percorsi manuali, versioni fissate, note e i percorsi proposti dal rilevamento.
+Le copie sono nel formato di Ludusavi (vedi «versioni» sotto): il ripristino riscrive i file nei percorsi originali,
+dopo aver salvato una copia dei salvataggi attuali. <cache>/saves/<hash della chiave>/index.json tiene percorsi
+manuali, cartella del gioco tra le copie, motivo di ogni copia e i percorsi proposti dal rilevamento.
 """
 
 from __future__ import annotations
@@ -28,9 +28,9 @@ import json
 import os
 import re
 import struct
+import sys
 import time
 import zipfile
-import zlib
 from pathlib import Path
 
 KEEP = 20  # versioni conservate per gioco (quelle fissate non contano)
@@ -291,7 +291,7 @@ def check_path(cfg, raw: str) -> Path:
     p = p.resolve()
     if p == Path(p.anchor) or any(p == x or p in x.parents for x in _protected(cfg)):
         raise ValueError(f"Cartella troppo generica, scegli quella dei salvataggi del gioco: {p}")
-    if Path(cfg.cache).resolve() in p.parents:
+    if any(x in (p, *p.parents) for x in (Path(cfg.cache).resolve(), backup_root(cfg).resolve())):
         raise ValueError("Questa e' la cartella delle copie dell'app")
     return p
 
@@ -319,84 +319,233 @@ def set_paths(cfg, key: str, paths: list[str]) -> list[str]:
     return idx["paths"]
 
 
-# ------------------------------------------------------------ versioni
-_NAME = re.compile(r"^\d{8}-\d{6}-(.+?)(?:-\d+)?\.zip$")
+# ------------------------------------------------------------ versioni, nel formato di Ludusavi
+# <cartella delle copie>/<nome del gioco>/mapping.yaml + backup-<AAAAMMGGThhmmssZ>.zip, con i file nello zip come
+# drive-C/Users/... e in mapping.yaml il percorso originale, l'hash SHA-1 e la dimensione di ognuno. Con la stessa
+# cartella, Ludusavi vede e ripristina le copie dell'app, e l'app quelle di Ludusavi (copie complete; le differenziali
+# di Ludusavi non si mostrano). Quello che Ludusavi non conosce (motivo della copia, cartelle copiate intere per il
+# rollback esatto, punto «prima della partita») sta nell'index.json del gioco, fuori dalla cartella delle copie.
+_INVALID = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+_RISKY = {".exe", ".dll", ".bat", ".cmd", ".ps1", ".vbs", ".js", ".lnk", ".scr", ".com", ".msi", ".reg"}  # mai ripristinati
+_DRIVE = re.compile(r"^([A-Za-z]:)/")
+_OLD = re.compile(r"^\d{8}-\d{6}-.+\.zip$")  # copie del formato precedente (zip con manifest.json)
 
 
-def list_backups(cfg, key: str) -> list[dict]:
-    d = folder(cfg, key)
-    if not d.is_dir():
-        return []
-    idx = _index(cfg, key)
-    pins, notes = set(idx.get("pins") or []), idx.get("notes") or {}
-    out = []
-    for p in d.glob("*.zip"):
-        st = p.stat()
-        m = _NAME.match(p.name)
-        out.append({"name": p.name, "size": st.st_size, "time": st.st_mtime, "reason": m.group(1) if m else "",
-                    "pinned": p.name in pins, "note": notes.get(p.name, "")})
-    return sorted(out, key=lambda x: -x["time"])
+def backup_root(cfg) -> Path:
+    """Cartella delle copie: quella scelta in Impostazioni (es. la cartella di Ludusavi) o <cache>/saves."""
+    return Path((getattr(cfg, "app", None) or {}).get("save_dir") or Path(cfg.cache) / "saves")
 
 
-def _content_hash(files: list[tuple[Path, str]]) -> str:
+def escape_name(name: str) -> str:
+    """Nome della cartella del gioco come lo calcola Ludusavi (escape_folder_name)."""
+    s = re.sub(r"^\.|\.$", "_", _INVALID.sub("_", name.strip()))
+    if not s.strip("_"):
+        import base64
+        s = "ludusavi-renamed-" + base64.b64encode(name.encode()).decode().replace("/", "_")
+    return s
+
+
+def _mkey(p: Path) -> str:
+    """Percorso come chiave di mapping.yaml: C:\\Users\\a.sav -> C:/Users/a.sav."""
+    return str(p.resolve()).replace("\\", "/")
+
+
+def _entry(drives: dict, key: str) -> str:
+    """Voce dello zip per una chiave: C:/Users/a.sav -> drive-C/Users/a.sav (drive-0 per i percorsi senza unita')."""
+    m = _DRIVE.match(key)
+    drive, rest = (m.group(1), key[3:]) if m else ("", key.lstrip("/"))
+    folder = next((k for k, v in drives.items() if v == drive), None)
+    return f"{folder or ('drive-' + escape_name(drive.replace(':', '')) if drive else 'drive-0')}/{rest}"
+
+
+def _sha1(f: Path) -> str:
     h = hashlib.sha1()
-    for f, _ in sorted(files, key=lambda x: os.path.normcase(str(x[0]))):
-        h.update(os.path.normcase(str(f)).encode())
-        with open(f, "rb") as fh:
-            for chunk in iter(lambda: fh.read(1 << 20), b""):
-                h.update(chunk)
+    with open(f, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
     return h.hexdigest()
 
 
-def _manifest(p: Path) -> dict:
+def _when(v) -> float:
+    """Data di una copia (stringa RFC 3339 o datetime, come la legge PyYAML) in secondi."""
+    import datetime as dt
+    if isinstance(v, dt.datetime):
+        return (v if v.tzinfo else v.replace(tzinfo=dt.timezone.utc)).timestamp()
     try:
-        with zipfile.ZipFile(p) as z:
-            return json.loads(z.read("manifest.json"))
-    except (OSError, KeyError, ValueError, zipfile.BadZipFile):
-        return {}
+        return dt.datetime.fromisoformat(str(v).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0.0
 
 
-def backup(cfg, key: str, title: str, paths: list[Path], reason: str = "manuale") -> Path | None:
-    """Zip con i salvataggi indicati; None se non c'e' nulla da copiare. Se il contenuto e' uguale all'ultima versione
-    non si crea un doppione: ritorna quella."""
-    files: list[tuple[Path, str]] = []
-    manifest = {"key": key, "title": title, "time": time.time(), "reason": reason, "items": []}
-    for i, p in enumerate(paths):
-        arc = f"{i:02d}"
-        if p.is_dir():
-            for f in p.rglob("*"):
-                if f.is_file():
-                    files.append((f, f"{arc}/{f.relative_to(p).as_posix()}"))
-            manifest["items"].append({"arc": arc, "path": str(p), "dir": True})
-        elif p.is_file():
-            files.append((p, f"{arc}/{p.name}"))
-            manifest["items"].append({"arc": arc, "path": str(p.parent), "dir": False})
-    if not files:
+def _game_dir(cfg, key: str, title: str | None = None) -> Path | None:
+    """Cartella del gioco tra le copie; con title la crea (la prima volta) e la ricorda nell'indice."""
+    idx = _index(cfg, key)
+    if idx.get("dir"):
+        return backup_root(cfg) / idx["dir"]
+    if not title:
         return None
-    manifest["hash"] = _content_hash(files)
-    d = folder(cfg, key)
-    last = list_backups(cfg, key)
-    if last and _manifest(d / last[0]["name"]).get("hash") == manifest["hash"]:
-        return _mark(cfg, key, d / last[0]["name"], reason)
+    idx["dir"] = escape_name(title)
+    _write_index(cfg, key, idx)
+    return backup_root(cfg) / idx["dir"]
+
+
+def _mapping(d: Path | None, name: str = "") -> dict:
+    import yaml
+    try:
+        m = yaml.safe_load((d / "mapping.yaml").read_text(encoding="utf-8")) if d else None
+    except (OSError, yaml.YAMLError):
+        m = None
+    m = m if isinstance(m, dict) else {}
+    m.setdefault("name", name)
+    m["drives"] = m.get("drives") or {}
+    m["backups"] = [b for b in m.get("backups") or [] if isinstance(b, dict) and b.get("name")]
+    return m
+
+
+def _write_mapping(d: Path, m: dict):
+    import yaml
     d.mkdir(parents=True, exist_ok=True)
-    out = d / f"{time.strftime('%Y%m%d-%H%M%S')}-{reason}.zip"
-    n = 1
-    while out.exists():  # due copie nello stesso secondo
-        out = d / f"{time.strftime('%Y%m%d-%H%M%S')}-{reason}-{n}.zip"
-        n += 1
-    tmp = out.with_suffix(".part")
+    tmp = d / "mapping.yaml.part"
+    tmp.write_text(yaml.safe_dump(m, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    tmp.replace(d / "mapping.yaml")
+
+
+def _os() -> str:
+    return "windows" if os.name == "nt" else "mac" if sys.platform == "darwin" else "linux"
+
+
+def _store(cfg, key: str, title: str, files: dict[str, tuple[Path | None, bytes | None]], reason: str, dirs: list[str],
+           when: float | None = None, protect: str = "") -> Path:
+    """Scrive una copia (file presi dal disco o gia' in memoria) e la aggiunge a mapping.yaml e all'indice."""
+    d = _game_dir(cfg, key, title)
+    m = _mapping(d, title)
+    when = when or time.time()
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(when))
+    names = {b["name"] for b in m["backups"]}
+    name, n = f"backup-{stamp}.zip", 1
+    while name in names or (d / name).exists():  # due copie nello stesso secondo
+        name, n = f"backup-{stamp}-{n}.zip", n + 1
+    meta = {}
+    d.mkdir(parents=True, exist_ok=True)
+    tmp = d / (name + ".part")
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
-        z.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=1))
-        for f, arc in files:
-            z.write(f, arc)
-    tmp.replace(out)
+        for k, (src, data) in sorted(files.items()):
+            mk = _DRIVE.match(k)
+            drive = mk.group(1) if mk else ""
+            folder = "drive-" + escape_name(drive.replace(":", "")) if drive else "drive-0"
+            m["drives"].setdefault(folder, drive)
+            if data is None:
+                z.write(src, _entry(m["drives"], k))
+                meta[k] = {"hash": _sha1(src), "size": src.stat().st_size}
+            else:
+                z.writestr(_entry(m["drives"], k), data)
+                meta[k] = {"hash": hashlib.sha1(data).hexdigest(), "size": len(data)}
+    tmp.replace(d / name)
+    m["backups"].append({"name": name, "when": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(when)), "os": _os(),
+                         "files": meta, "registry": {"hash": None}, "children": []})
+    _write_mapping(d, m)
+    idx = _index(cfg, key)
+    idx.setdefault("backups", {})[name] = {"reason": reason, "dirs": dirs}
+    _write_index(cfg, key, idx)
     keep = int((getattr(cfg, "app", None) or {}).get("save_keep") or KEEP)
-    for old in [b for b in list_backups(cfg, key) if not b["pinned"]][keep:]:
+    for old in [b for b in list_backups(cfg, key) if not b["pinned"] and b["name"] != protect][keep:]:
         try:
             delete(cfg, key, old["name"])
-        except OSError:  # zip aperto (es. la copia che si sta ripristinando): si toglie la prossima volta
+        except OSError:  # file aperto: si toglie la prossima volta
             pass
-    return _mark(cfg, key, out, reason)
+    return d / name
+
+
+_MIGRATING: set[str] = set()
+
+
+def _migrate(cfg, key: str):
+    """Converte le copie del formato precedente (zip con manifest.json) nel formato di Ludusavi, una volta sola."""
+    old_dir = folder(cfg, key)
+    olds = sorted(p for p in old_dir.glob("*.zip") if _OLD.match(p.name)) if old_dir.is_dir() else []
+    if not olds or key in _MIGRATING:  # _store e set_meta, chiamati qui sotto, rientrano qui
+        return
+    _MIGRATING.add(key)
+    try:
+        _convert(cfg, key, olds)
+    finally:
+        _MIGRATING.discard(key)
+
+
+def _convert(cfg, key: str, olds: list[Path]):
+    for p in olds:
+        try:
+            with zipfile.ZipFile(p) as z:
+                man = json.loads(z.read("manifest.json"))
+                if man.get("key") != key:
+                    continue
+                items = {it["arc"]: it for it in man.get("items") or []}
+                files = {}
+                for mname in z.namelist():
+                    arc, _, rel = mname.partition("/")
+                    it = items.get(arc)
+                    if not it or not rel or mname.endswith("/"):
+                        continue
+                    base = Path(it["path"]).resolve()
+                    dest = (base / rel).resolve()
+                    if base in dest.parents:
+                        files[_mkey(dest)] = (None, z.read(mname))
+            if files:
+                idx = _index(cfg, key)
+                new = _store(cfg, key, man.get("title") or key, files, man.get("reason") or "",
+                             [it["path"] for it in items.values() if it.get("dir")], when=man.get("time"))
+                if p.name in (idx.get("pins") or []) or (idx.get("notes") or {}).get(p.name):
+                    set_meta(cfg, key, new.name, pinned=p.name in (idx.get("pins") or []) or None,
+                             note=(idx.get("notes") or {}).get(p.name))
+                if idx.get("session") == p.name:
+                    idx = _index(cfg, key)
+                    idx["session"] = new.name
+                    _write_index(cfg, key, idx)
+            p.unlink()
+        except (OSError, KeyError, ValueError, zipfile.BadZipFile):
+            continue  # copia illeggibile: resta li', non si perde nulla
+
+
+def list_backups(cfg, key: str) -> list[dict]:
+    _migrate(cfg, key)
+    d = _game_dir(cfg, key)
+    if not d:
+        return []
+    info = _index(cfg, key).get("backups") or {}
+    out = []
+    for b in _mapping(d)["backups"]:
+        p = d / b["name"]
+        size = p.stat().st_size if p.is_file() else sum(int((x or {}).get("size") or 0) for x in (b.get("files") or {}).values())
+        out.append({"name": b["name"], "size": size, "time": _when(b.get("when")),
+                    "reason": (info.get(b["name"]) or {}).get("reason") or "ludusavi",
+                    "pinned": bool(b.get("locked")), "note": b.get("comment") or ""})
+    return sorted(out, key=lambda x: -x["time"])
+
+
+def backup(cfg, key: str, title: str, paths: list[Path], reason: str = "manuale", name: str | None = None,
+           protect: str = "") -> Path | None:
+    """Copia dei salvataggi indicati; None se non c'e' nulla da copiare. Se il contenuto e' uguale all'ultima versione
+    non si crea un doppione: ritorna quella. name = nome del gioco per Ludusavi (predefinito: il titolo)."""
+    _migrate(cfg, key)
+    files: dict[str, tuple[Path, None]] = {}
+    dirs = []
+    for p in paths:
+        if p.is_dir():
+            dirs.append(str(p))
+            files.update((_mkey(f), (f, None)) for f in p.rglob("*") if f.is_file())
+        elif p.is_file():
+            files[_mkey(p)] = (p, None)
+    if not files:
+        return None
+    d = _game_dir(cfg, key, name or title)
+    last = list_backups(cfg, key)
+    if last:
+        prev = next((b for b in _mapping(d)["backups"] if b["name"] == last[0]["name"]), {})
+        pf = {k: v or {} for k, v in (prev.get("files") or {}).items()}
+        if set(pf) == set(files) and all(pf[k].get("size") == f.stat().st_size and pf[k].get("hash") == _sha1(f)
+                                         for k, (f, _) in files.items()):
+            return _mark(cfg, key, d / last[0]["name"], reason)
+    return _mark(cfg, key, _store(cfg, key, name or title, files, reason, dirs, protect=protect), reason)
 
 
 def _mark(cfg, key: str, out: Path, reason: str) -> Path:
@@ -411,104 +560,121 @@ def _mark(cfg, key: str, out: Path, reason: str) -> Path:
 def session_point(cfg, key: str) -> str | None:
     """Versione da ripristinare per annullare l'ultima partita, se esiste ancora."""
     name = _index(cfg, key).get("session")
-    return name if name and (folder(cfg, key) / name).is_file() else None
+    return name if name and any(b["name"] == name for b in list_backups(cfg, key)) else None
 
 
 def _open(cfg, key: str, name: str) -> tuple[Path, dict]:
-    p = folder(cfg, key) / Path(name).name
-    if not p.is_file() or not zipfile.is_zipfile(p):
+    """(cartella del gioco, voce della copia in mapping.yaml)."""
+    _migrate(cfg, key)
+    d = _game_dir(cfg, key)
+    b = next((x for x in _mapping(d)["backups"] if x["name"] == name), None) if d else None
+    if not b or (name != "." and Path(name).name != name):
         raise FileNotFoundError(f"Copia non trovata: {name}")
-    man = _manifest(p)
-    if man.get("key") != key:
-        raise ValueError("La copia appartiene a un altro gioco")
-    return p, man
+    return d, b
 
 
-def _members(z: zipfile.ZipFile, man: dict):
-    """(voce dello zip, percorso di destinazione) per i file della copia; scarta i nomi che uscirebbero dalla cartella."""
-    items = {it["arc"]: it for it in man["items"]}
-    for m in z.namelist():
-        if m == "manifest.json" or m.endswith("/"):
-            continue
-        arc, _, rel = m.partition("/")
-        it = items.get(arc)
-        if not it or not rel:
-            continue
-        base = Path(it["path"]).resolve()
-        dest = (base / rel).resolve()
-        if base in dest.parents:  # rel con ".." o assoluto: ignorato
-            yield m, dest
+def _members(d: Path, b: dict, drives: dict):
+    """(funzione che legge il file della copia, percorso di destinazione, {hash, size}). I tipi eseguibili si saltano:
+    mapping.yaml puo' arrivare da fuori (Ludusavi, altro PC) e indicare qualunque percorso."""
+    zf = zipfile.ZipFile(d / b["name"]) if b["name"].endswith(".zip") else None
+    base = d if b["name"] == "." else d / b["name"]
+    try:
+        for k, meta in (b.get("files") or {}).items():
+            dest = Path(k)
+            if not dest.is_absolute() or dest.suffix.lower() in _RISKY or ".." in dest.parts:
+                continue
+            e = _entry(drives, k)
+            yield (lambda e=e: zf.read(e)) if zf else (lambda e=e: (base / e).read_bytes()), dest, meta or {}
+    finally:
+        if zf:
+            zf.close()
 
 
-def _extra(man: dict, inside: set[str]) -> list[Path]:
-    """File presenti adesso nelle cartelle della copia ma non nella copia (creati dopo)."""
-    return [f for it in man["items"] if it["dir"] for f in Path(it["path"]).rglob("*")
-            if f.is_file() and os.path.normcase(str(f.resolve())) not in inside]
+def _extra(dirs: list[str], inside: set[str]) -> list[Path]:
+    """File presenti adesso nelle cartelle copiate intere ma non nella copia (creati dopo)."""
+    return [f for x in dirs for f in Path(x).rglob("*") if f.is_file() and os.path.normcase(str(f.resolve())) not in inside]
 
 
 def diff(cfg, key: str, name: str) -> dict:
     """Cosa cambierebbe ripristinando la copia: file diversi, mancanti sul disco, e in piu' (che verrebbero tolti)."""
-    p, man = _open(cfg, key, name)
+    d, b = _open(cfg, key, name)
     changed, missing, same, inside = [], [], 0, set()
-    with zipfile.ZipFile(p) as z:
-        for m, dest in _members(z, man):
-            inside.add(os.path.normcase(str(dest)))
-            if not dest.is_file():
-                missing.append(str(dest))
-            elif zlib.crc32(dest.read_bytes()) != z.getinfo(m).CRC:
-                changed.append(str(dest))
-            else:
-                same += 1
-    return {"changed": changed, "missing": missing, "extra": [str(f) for f in _extra(man, inside)], "same": same}
+    for _, dest, meta in _members(d, b, _mapping(d)["drives"]):
+        inside.add(os.path.normcase(str(dest.resolve())))
+        if not dest.is_file():
+            missing.append(str(dest))
+        elif dest.stat().st_size != meta.get("size") or _sha1(dest) != meta.get("hash"):
+            changed.append(str(dest))
+        else:
+            same += 1
+    dirs = ((_index(cfg, key).get("backups") or {}).get(name) or {}).get("dirs") or []
+    return {"changed": changed, "missing": missing, "extra": [str(f) for f in _extra(dirs, inside)], "same": same}
 
 
 def restore(cfg, key: str, name: str) -> dict:
-    """Riporta i salvataggi alla copia scelta, nei percorsi originali (solo li': niente percorsi dal contenuto dello zip).
-    Nelle cartelle copiate intere si tolgono anche i file creati dopo, cosi' il rollback e' esatto.
-    Prima salva una copia dei salvataggi attuali, cosi' il ripristino si puo' annullare."""
-    p, man = _open(cfg, key, name)
-    with zipfile.ZipFile(p) as z:
-        members = list(_members(z, man))
-        current = [Path(it["path"]) for it in man["items"] if it["dir"]]
-        cur_files = [dest for _, dest in members if dest.is_file()
-                     and not any(c.resolve() in dest.parents for c in current)]
-        safety = backup(cfg, key, man.get("title", ""), current + cur_files, "prima-del-ripristino")
-        inside = {os.path.normcase(str(dest)) for _, dest in members}
-        removed = 0
-        for f in _extra(man, inside):
-            f.unlink(missing_ok=True)
-            removed += 1
-        for m, dest in members:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(z.read(m))
-    return {"written": len(members), "removed": removed, "safety_copy": safety.name if safety else None}
+    """Riporta i salvataggi alla copia scelta, nei percorsi originali. Nelle cartelle copiate intere si tolgono anche
+    i file creati dopo, cosi' il rollback e' esatto. Prima salva una copia dei salvataggi attuali (annullabile)."""
+    d, b = _open(cfg, key, name)
+    m = _mapping(d)
+    dirs = [x for x in ((_index(cfg, key).get("backups") or {}).get(name) or {}).get("dirs") or [] if Path(x).is_dir()]
+    members = list(_members(d, b, m["drives"]))
+    cur_files = [dest for _, dest, _ in members if dest.is_file()
+                 and not any(Path(x).resolve() in dest.resolve().parents for x in dirs)]
+    safety = backup(cfg, key, m["name"], [Path(x) for x in dirs] + cur_files, "prima-del-ripristino", protect=name)
+    inside = {os.path.normcase(str(dest.resolve())) for _, dest, _ in members}
+    removed = 0
+    for f in _extra(dirs, inside):
+        f.unlink(missing_ok=True)
+        removed += 1
+    written = 0
+    for read, dest, _ in _members(d, b, m["drives"]):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(read())
+        written += 1
+    return {"written": written, "removed": removed, "safety_copy": safety.name if safety else None}
 
 
 def delete(cfg, key: str, name: str):
-    name = Path(name).name
-    (folder(cfg, key) / name).unlink(missing_ok=True)
+    d = _game_dir(cfg, key)
+    if not d:
+        return
+    m = _mapping(d)
+    if not any(b["name"] == name for b in m["backups"]) or (name != "." and Path(name).name != name):
+        return
+    import shutil
+    p = d / name
+    if name == ".":  # copia «semplice» unica di Ludusavi: le cartelle drive-* accanto a mapping.yaml
+        for x in d.glob("drive-*"):
+            shutil.rmtree(x, ignore_errors=True)
+    elif p.is_dir():
+        shutil.rmtree(p)
+    else:
+        p.unlink(missing_ok=True)
+    m["backups"] = [b for b in m["backups"] if b["name"] != name]
+    _write_mapping(d, m)
     idx = _index(cfg, key)
-    if name in (idx.get("pins") or []) or name in (idx.get("notes") or {}):
-        idx["pins"] = [x for x in idx.get("pins") or [] if x != name]
-        (idx.get("notes") or {}).pop(name, None)
-        _write_index(cfg, key, idx)
+    (idx.get("backups") or {}).pop(name, None)
+    if idx.get("session") == name:
+        idx.pop("session")
+    _write_index(cfg, key, idx)
 
 
 def set_meta(cfg, key: str, name: str, pinned: bool | None = None, note: str | None = None):
-    name = Path(name).name
-    if not (folder(cfg, key) / name).is_file():
-        raise FileNotFoundError(f"Copia non trovata: {name}")
-    idx = _index(cfg, key)
+    """Versione fissata = «locked» di Ludusavi (mai cancellata), nota = «comment»."""
+    d, _ = _open(cfg, key, name)
+    m = _mapping(d)
+    b = next(x for x in m["backups"] if x["name"] == name)
     if pinned is not None:
-        pins = [x for x in idx.get("pins") or [] if x != name]
-        idx["pins"] = pins + [name] if pinned else pins
-    if note is not None:
-        notes = idx.setdefault("notes", {})
-        if note.strip():
-            notes[name] = note.strip()[:200]
+        if pinned:
+            b["locked"] = True
         else:
-            notes.pop(name, None)
-    _write_index(cfg, key, idx)
+            b.pop("locked", None)
+    if note is not None:
+        if note.strip():
+            b["comment"] = note.strip()[:200]
+        else:
+            b.pop("comment", None)
+    _write_mapping(d, m)
 
 
 # ------------------------------------------------------------ rilevamento: file cambiati durante la partita

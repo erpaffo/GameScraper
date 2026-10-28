@@ -1,7 +1,6 @@
 # Changelog
 
-## Non rilasciato
-
+## 0.6.4 (2026-10-28)
 
 ### Aggiunto
 
@@ -11,13 +10,16 @@
 - Esportazione della libreria come pagina web statica (index.html + copertine): ricerca, filtro per console, ordinamento e scheda del gioco, senza server ne' risorse esterne
 - Big Picture accessibile: palette per il daltonismo, alto contrasto, tre dimensioni dei testi e lettura vocale di cio' che si seleziona
 - Telefono come telecomando completo: nuova scheda Attivita' con i lavori in corso del PC (store, copertine, libreria) e i comandi Aggiorna store, Cerca nuovi giochi, Ricostruisci libreria e Chiudi gioco; in libreria ordinamento per anno, valutazione, tempo di gioco e ultimo avviato
+- Doppio schermo DS e 3DS: il telefono collegato mostra e riceve i tocchi dello schermo touch, mentre sul PC resta lo schermo principale (se il telefono non è collegato, il PC mostra entrambi gli schermi)
 
 ### Corretto
 
 - I database dell'app si chiudono all'uscita (su Windows un file ancora aperto bloccava la cartella dati), quindi backup e spostamenti della cartella dati non trovano piu' file in uso
-### In corso
+- Certificati HTTPS e sincronizzazione tra PC: troncamento sicuro del nome host nel certificato per compatibilità con macOS e runner CI
 
-- Telefono come schermo touch per DS e 3DS — `gamescraper/remote/dualscreen.py` `tests/test_dualscreen.py`
+### Migliorato
+
+- Integrazione continua: workflow GitHub Actions aggiornati a Node.js 24 (actions/checkout@v6, actions/setup-python@v6)
 
 ## 0.6.3 (2026-10-28)
 ### Corretto
