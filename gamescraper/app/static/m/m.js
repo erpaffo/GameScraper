@@ -142,7 +142,9 @@ async function openGame(id) {
   const g = L.byId.get(id);
   const box = $(".sheet-box");
   $("#sheet").hidden = false;
-  box.innerHTML = `<div class="g-head"><img src="${g && g.cover ? `/img/${id}/cover?w=300` : ""}" alt=""><div><h2>${esc(g ? g.title : "")}</h2>
+  box.innerHTML = `<div class="g-head">${g && g.cover
+    ? `<img src="/img/${id}/cover?w=300" alt="" onerror="this.remove()">`
+    : `<div class="g-nocover">${esc(g ? g.title : "")}</div>`}<div><h2>${esc(g ? g.title : "")}</h2>
     <div class="muted" id="g-meta">…</div></div></div><div class="g-btns" id="g-btns"></div><div class="g-desc" id="g-desc"></div>`;
   let d;
   try { d = await api(`/api/game/${id}`); } catch (e) { return toast(e.message, true); }

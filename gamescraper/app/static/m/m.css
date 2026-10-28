@@ -39,7 +39,8 @@ h2.sec { font-size: 17px; margin: 18px 0 8px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; }
 .card { position: relative; }
 .card .cv { aspect-ratio: 3/4; border-radius: 10px; overflow: hidden; background: var(--bg3); position: relative; }
-.card .cv img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* la copertina sta sopra il riquadro colorato col titolo (che resta visibile finche' l'immagine non arriva) */
+.card .cv img { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: cover; display: block; }
 .card .cv .ph { position: absolute; inset: 0; display: flex; align-items: flex-end; padding: 8px; font-size: 12px; font-weight: 700;
   background: linear-gradient(160deg, hsl(var(--h) 40% 32%), hsl(var(--h) 40% 15%)); }
 .card .tag { position: absolute; top: 5px; left: 5px; font-size: 9px; font-weight: 700; background: rgba(0,0,0,.72); border-radius: 4px; padding: 1px 5px; }
@@ -67,6 +68,8 @@ h2.sec { font-size: 17px; margin: 18px 0 8px; }
 @keyframes up { from { transform: translateY(40%); opacity: .5; } to { transform: none; opacity: 1; } }
 .g-head { display: flex; gap: 14px; }
 .g-head img { width: 104px; aspect-ratio: 3/4; object-fit: cover; border-radius: 10px; background: var(--bg3); }
+.g-head .g-nocover { width: 104px; aspect-ratio: 3/4; border-radius: 10px; background: var(--bg3); display: flex;
+  align-items: center; justify-content: center; padding: 6px; font-size: 11px; font-weight: 700; text-align: center; }
 .g-head h2 { margin: 2px 0 6px; font-size: 19px; }
 .g-btns { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
 .g-status { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }

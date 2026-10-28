@@ -36,6 +36,8 @@ ALLOWED = [
     ("GET", r"/api/library"), ("GET", r"/api/game/\d+"), ("POST", r"/api/game/\d+/play"),
     ("POST", r"/api/game/\d+/flag"), ("GET", r"/api/game/\d+/shots"),
     ("GET", r"/api/running"), ("POST", r"/api/running/stop"), ("POST", r"/api/running/screenshot"),
+    # scheda Attivita' del telefono: lavori in corso sul PC e comandi (store, ricerca, ricostruzione, chiudi gioco)
+    ("GET", r"/api/mobile/state"), ("POST", r"/api/mobile/action"),
     ("GET", r"/img/\d+/[a-z0-9_]+"), ("GET", r"/icons/(platform|store)/[^/]+"), ("GET", r"/coll-img/[^/]+/(icon|cover)"),
     ("GET", r"/shots/\d+"), ("GET", r"/m/api/me"), ("POST", r"/m/api/logout"), ("WS", r"/m/ws"), ("WS", r"/m/mic"),
     ("WS", r"/m/screen"),

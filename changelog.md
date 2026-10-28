@@ -9,6 +9,8 @@
 - Telefono: pulsante Home (🏠) sempre visibile nel controller, anche col telefono in verticale, e la barra dei comandi non esce piu' dallo schermo con i titoli lunghi
 - Telefono: dopo aver rifatto l'abbinamento la Home non dice piu' «libreria vuota» e il filtro per console salvato non nasconde i giochi, e dopo l'abbinamento si torna sempre alla Home
 - Telefono: abbinamento anche aprendo la pagina in chiaro (il cookie non viene piu' scartato dal browser)
+- Telefono: la scheda Attivita' ora funziona davvero (stato e comandi erano bloccati dal cancello di rete: rispondevano 403)
+- Telefono: si vedono di nuovo le copertine dei giochi in Home e in Libreria (erano coperte dal riquadro colorato col titolo)
 
 ### Migliorato
 

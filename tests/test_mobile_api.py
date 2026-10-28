@@ -112,9 +112,74 @@ def test_chiudi_gioco_senza_gioco(tmp_path):
     print("ok  «Chiudi gioco» senza gioco in corso: nessun errore")
 
 
+def test_cancello_del_telefono(tmp_path):
+    """Il cancello dell'app del telefono deve lasciar passare TUTTO cio' che la pagina /m usa: libreria,
+    copertine e scheda Attivita' (stato e comandi). Prima /api/mobile/* rispondeva 403 e l'Attivita' restava vuota."""
+    import base64
+    import sqlite3
+
+    from gamescraper.library.build import SCHEMA
+    from gamescraper.remote.phone import PhoneGate
+
+    cache = tmp_path / "cache"
+    (cache / "media" / "gba").mkdir(parents=True)
+    png = base64.b64decode(  # PNG 1x1 trasparente: basta che il file esista
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8AAAwAB/wF/"
+        "AAB0GAf8AAAAASUVORK5CYII=")
+    (cache / "media" / "gba" / "aaa.png").write_bytes(png)
+    db = sqlite3.connect(cache / "library.db")
+    db.executescript(SCHEMA)
+    db.execute("INSERT INTO games(key, platform, title, sort_title, year, genres, files, media, found, grp, is_primary, origin) "
+               "VALUES('gba/AAA','gba','Pokemon Rubino','pokemon rubino',2003,'[]','[]',?,1,'gba/s:AXV',1,'{}')",
+               (json.dumps({"cover": "media/gba/aaa.png"}),))
+    db.commit()
+    db.close()
+
+    cfg = config.Config(cache=cache, output=tmp_path / "out")
+    cfg.config_path = tmp_path / "config.toml"
+    app = create_app(cfg)
+    hub = app.state.phone_hub
+    gate = TestClient(PhoneGate(app, hub), base_url="https://testserver")
+    try:
+        code = hub.new_code()
+        token = gate.post("/m/api/pair", json={"code": code, "name": "Pixel"}).cookies.get("gs_phone")
+        ck = {"gs_phone": token}
+
+        lib = gate.get("/api/library?part=owned", cookies=ck)
+        assert lib.status_code == 200, lib.text
+        cols = lib.json()["games"]["cols"]
+        row = lib.json()["games"]["rows"][0]
+        gid = row[cols.index("id")]
+        assert row[cols.index("cover")] == 1, row     # la pagina sa che c'e' la copertina da mostrare
+
+        img = gate.get(f"/img/{gid}/cover?w=260", cookies=ck)
+        assert img.status_code == 200 and img.headers["content-type"].startswith("image/"), \
+            f"copertine non raggiungibili dal telefono: {img.status_code}"
+
+        st = gate.get("/api/mobile/state", cookies=ck)
+        assert st.status_code == 200, f"Attivita' non raggiungibile dal telefono: {st.status_code} {st.text}"
+        assert set(st.json()) == {"running", "jobs", "counts"}
+
+        act = gate.post("/api/mobile/action", json={"action": "stop-game"}, cookies=ck)
+        assert act.status_code == 200 and "state" in act.json(), act.text
+
+        # il cancello continua a fermare tutto il resto, e senza abbinamento non si passa
+        assert gate.get("/api/settings", cookies=ck).status_code == 403
+        gate.cookies.clear()  # come un browser che non ha il cookie di abbinamento
+        assert gate.get("/api/mobile/state").status_code == 401
+    finally:
+        for handler in getattr(app.router, "on_shutdown", []):
+            try:
+                handler()
+            except Exception:
+                pass
+        gate.close()
+    print("ok  cancello del telefono: libreria, copertine e Attivita' passano, il resto no")
+
+
 if __name__ == "__main__":
     for fn in (test_stato_compaito, test_comando_sconosciuto, test_aggiorna_store_senza_store,
-               test_aggiorna_store_accoda, test_chiudi_gioco_senza_gioco):
+               test_aggiorna_store_accoda, test_chiudi_gioco_senza_gioco, test_cancello_del_telefono):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
             fn(Path(t))
     print("TUTTI I TEST OK")
