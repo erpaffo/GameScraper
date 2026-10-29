@@ -13,6 +13,7 @@ from fastapi import Body, HTTPException
 from .. import config as C
 from .. import platforms as P
 from .. import ports as PT
+from ..library.launcher import LaunchError
 
 # stato dell'installazione/aggiornamento di un port (uno alla volta); lo legge anche il controllo dei lavori in corso
 PORT_JOB: dict = {"status": "idle", "log": [], "slug": "", "done": 0, "total": 0}
@@ -57,6 +58,23 @@ def register(app, cfg, lib, launcher, start_store_job):
     def _port_game_id(slug: str):
         g = lib.by_key.get(f"windows/ports:{slug}")
         return g["id"] if g else None
+
+    def _setup_roms(slug: str, say) -> None:
+        """Copia automaticamente le ROM compatibili nella prima installazione."""
+        m = PT.all_installed(cfg).get(slug)
+        if not m:
+            return
+        links = _port_links()
+        entry = next((x for x in links.get("catalog", {}).get("items") or [] if x["slug"] == slug), {})
+        paths = [Path(f) for g in links["by_slug"].get(slug, []) for f in g.get("files") or []]
+        for sf in (entry.get("launcher") or {}).get("setupFiles") or []:
+            destination = sf.get("destination") or ""
+            if not destination or (Path(m["folder"]) / destination).is_file():
+                continue
+            hit = PT.find_rom(sf, paths)
+            if hit:
+                PT.setup_rom(Path(m["folder"]), sf, *hit)
+                say(f"ROM copiata automaticamente in {destination}")
 
     def _refresh_ports_store():
         try:
@@ -180,6 +198,7 @@ def register(app, cfg, lib, launcher, start_store_job):
             c = Cache(cfg.cache)
             try:
                 PT.install(cfg, c, slug, progress, say)
+                _setup_roms(slug, say)
             finally:
                 c.close()
         return _start_port_job(slug, run)
@@ -223,6 +242,22 @@ def register(app, cfg, lib, launcher, start_store_job):
                                                                           m.get("consoles"), progress, say,
                                                                           provider=m.get("provider") or "github"))
         return api_ports_install({"slug": slug})
+
+    @app.post("/api/ports/{slug}/play")
+    def api_port_play(slug: str):
+        """Avvia il port direttamente dal catalogo, anche prima del refresh della libreria."""
+        m = _port_or_404(slug)
+        folder = Path(m["folder"]).resolve()
+        exe = (folder / (m.get("exe") or "")).resolve()
+        if not m.get("exe") or folder not in exe.parents or not exe.is_file():
+            raise HTTPException(409, "Questo port non ha un eseguibile avviabile")
+        try:
+            launcher.launch_pc(f"windows/ports:{slug}", m.get("name") or slug,
+                               {"type": "exe", "target": str(exe), "args": [], "cwd": str(folder)},
+                               str(folder), "Port e app", slug)
+        except LaunchError as e:
+            raise HTTPException(409, str(e)) from e
+        return {"ok": True}
 
     @app.post("/api/ports/{slug}/exe")
     def api_port_exe(slug: str, body: dict = Body(...)):

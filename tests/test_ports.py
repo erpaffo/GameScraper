@@ -109,6 +109,7 @@ def test_install_update_rom(tmp: Path):
         assert j["status"] == "done", j
         folder = PT.ports_dir(cfg) / "SnowRecomp"
         assert (folder / "snow.exe").read_text() == "exe1" and (folder / "portable.txt").exists(), "cartella appiattita + portable.txt"
+        assert (folder / "rom.z64").read_bytes() == ROM, "ROM compatibile copiata automaticamente dopo il download"
         m = cl.get("/api/ports/snow-recomp").json()
         assert m["exe"] == "snow.exe" and m["candidates"] == ["snow.exe"], m  # crashpad_handler scartato
         for _ in range(400):

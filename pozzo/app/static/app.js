@@ -236,7 +236,31 @@ function render() {
       el.style.transform = `translate(${S.pad + j * (S.tw + S.gap)}px, ${row.y}px)`;
     });
   }
-  for (const [k, el] of S.nodes) if (!keep.has(k)) { el.remove(); S.nodes.delete(k); }
+  for (const [k, el] of S.nodes) if (!keep.has(k)) { stopCover(el); el.remove(); S.nodes.delete(k); }
+  // copertine solo a scorrimento fermo: uno scorrimento veloce non deve riempire la coda del browser
+  clearTimeout(S.coverT);
+  S.coverT = setTimeout(loadCovers, 120);
+}
+
+/** Copertina non ancora arrivata: togliere src fa annullare la richiesta al browser (ha al massimo 6 connessioni). */
+function stopCover(el) {
+  const img = el.querySelector("img[src]:not(.ok)");
+  if (img) img.removeAttribute("src");
+}
+
+/** Carica le copertine dello schermo piu' una riga sopra e una sotto; annulla quelle uscite da questa fascia. */
+function loadCovers() {
+  const pad = S.th + S.gap, top = scroller.scrollTop - pad, bottom = scroller.scrollTop + scroller.clientHeight + pad;
+  const band = new Set();
+  for (let i = firstRow(top); i < S.rows.length && S.rows[i].y < bottom; i++) {
+    if (S.rows[i].type !== "h") for (const g of S.rows[i].items) band.add(g.id);
+  }
+  for (const [k, el] of S.nodes) {
+    const img = el.querySelector("img[data-src]");
+    if (!img) continue;
+    if (!band.has(k)) stopCover(el);
+    else if (!img.getAttribute("src")) img.src = img.dataset.src;
+  }
 }
 
 function platIcon(pid) {
@@ -278,11 +302,12 @@ function tileEl(g) {
     // un errore puo' essere passeggero (app che riparte, disco occupato) o dovuto a numeri di gioco vecchi dopo una
     // ricostruzione della libreria: si ricontrolla la libreria e si riprova prima di rinunciare
     img.onerror = () => {
+      if (!img.getAttribute("src")) return; // annullata da stopCover: non e' un errore
       if (++tries > 2) return img.remove();
       syncLibrary();
-      setTimeout(() => { if (img.isConnected) img.src = `${src}&r=${tries}`; }, 1200 * tries);
+      setTimeout(() => { if (img.isConnected && img.getAttribute("src")) img.src = img.dataset.src = `${src}&r=${tries}`; }, 1200 * tries);
     };
-    img.src = src;
+    img.dataset.src = src; // la richiesta parte da loadCovers, solo se la tessera e' sullo schermo
   }
   return el;
 }
@@ -825,13 +850,8 @@ async function openDetail(id) {
   const storePages = pages.filter((s) => !s.update);
   // una fonte sola: pulsante unico; due o piu' (es. NXBrew e Ziperto): un pulsante per sito
   const mainBtn = online
-    ? (dlBase.length > 1
-      ? dlBase.map((s, i) => `<button class="btn${i === 0 ? " primary" : ""}" data-open="${esc(s.url)}"
-          title="Apri la pagina di download su ${esc(s.site || "questo sito")}">⬇ ${esc((s.site || "sito").replace(/^www\./, ""))}</button>`).join("")
+    ? (minerva ? "" : `<button class="btn primary" id="d-download" title="Apre i link del gioco, dell'aggiornamento e dei DLC già pronti per il download, saltando le pagine pubblicitarie">⬇ Scarica</button>`)
       // Minerva: la pagina web offre solo il torrent del set intero, il download vero e' il torrent del singolo file
-      : minerva && oneFile ? ""
-      : `<button class="btn primary" id="d-install" title="Apre la pagina di download nel browser">⬇ Scarica (browser)</button>`)
-      // solo i magnet di questo gioco: gli altri scaricherebbero l'intero set
       + (oneFile ? `<button class="btn${minerva && dlBase.length <= 1 ? " primary" : ""}" id="d-torrent" title="Apre il link nel client torrent: scarica solo questo gioco, non tutto il set">`
         + `${minerva && dlBase.length <= 1 ? "⬇ Scarica" : "🧲 Torrent"} (solo questo gioco)</button>` : "")
     : pc && !d.installed
@@ -874,6 +894,12 @@ async function openDetail(id) {
       ${updates.map((s) => `<button class="btn" data-open="${esc(s.url)}"
         title="${esc(s.name || "Aggiornamento")}">⬆ ${s.version ? "v" + esc(s.version) : "Update"}${s.size ? " · " + fmtSize(s.size) : ""}</button>`).join("")}
       </div>` : ""}
+    ${online && dlBase.length ? `<div class="d-emu muted" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span>🌐 Pagina dello store:</span>
+      ${dlBase.map((s) => `<button class="btn" data-open="${esc(s.url)}"
+        title="Apri la pagina di download su ${esc(s.site || "questo sito")}">${esc((s.site || "sito").replace(/^www\./, ""))} ↗</button>`).join("")}
+      </div>` : ""}
+    ${online || storePages.length ? `<div id="d-links"></div>` : ""}
     ${ratingBlock(d)}
     ${online ? "" : `<div class="d-status">${Object.entries(STATUS).map(([k, s]) =>
       `<button class="btn st-btn${u.status === k ? " on st-" + k : ""}" data-status="${k}">${s.icon} ${s.label}</button>`).join("")}</div>`}
@@ -909,6 +935,7 @@ async function openDetail(id) {
   renderDetailSections(d);
   if (d.shots) loadDetailShots(d.id);
   loadSaves(d);
+  if (online || storePages.length) loadGameLinks(d);
   if (d.platform === "switch") loadSwitchContents(d);
   if (!pc) loadRA(d);
   GS.emit("gameOpened", d);
@@ -946,6 +973,87 @@ async function loadSwitchContents(d) {
   const grid = $("#detail .d-grid");
   if (grid) grid.insertAdjacentHTML("afterbegin", `<dt>Contenuti</dt><dd>${[r.update ? `<span class="tag">Aggiornamento ${esc(r.update)}</span>` : "",
     r.dlc ? `<span class="tag">${r.dlc} DLC</span>` : ""].join(" ")}</dd>`);
+}
+
+/* ---- link di download elencati nella pagina dello store (nxbrew, ziperto): gioco, update, DLC, provider, parti */
+let DL_STATE = null; // ultimi link letti per il gioco aperto: { id, rows, kinds, labels, order }
+
+/** Un link per tipo (gioco, aggiornamento, DLC), dalla stessa fonte: quella che ne ha di più. */
+function dlPick(state) {
+  const one = {};
+  for (const row of state.rows) if (!one[row.kind]) one[row.kind] = row.items;
+  const count = {};
+  Object.values(one).forEach((items) => items.forEach((x) => { count[x.provider] = (count[x.provider] || 0) + 1; }));
+  const best = Object.entries(count).sort((a, b) => b[1] - a[1])[0];
+  const prov = best ? best[0] : "";
+  return Object.values(one).map((items) => (items.find((x) => x.provider === prov) || items[0]).url);
+}
+
+async function loadGameLinks(d, force = false) {
+  const box = $("#d-links");
+  if (!box) return;
+  box.innerHTML = `<p class="muted small">Cerco i link di download…</p>`;
+  let r;
+  try { r = await api(`/api/game/${d.id}/links${force ? "?refresh=1" : ""}`); }
+  catch (e) { box.innerHTML = `<p class="muted small">${esc(e.message)}</p>`; return; }
+  if (S.detail !== d) return;
+  const links = (r.links || []).filter((x) => x.url);
+  if (!links.length) {
+    box.innerHTML = `<p class="muted small">Nessun link di download nella pagina dello store${r.error ? ` (${esc(r.error)})` : ""}.</p>`;
+    return;
+  }
+  const KL = r.kind_labels || {}, KO = r.kind_order || [];
+  const rows = []; // una riga per tipo di file: le parti e le versioni in altre lingue restano righe separate
+  for (const x of links) {
+    const key = `${x.kind}|${x.label}`;
+    let row = rows.find((y) => y.key === key);
+    if (!row) rows.push(row = { key, kind: x.kind, label: x.label, items: [] });
+    row.items.push(x);
+  }
+  rows.sort((a, b) => KO.indexOf(a.kind) - KO.indexOf(b.kind));
+  const kinds = [...new Set(rows.map((x) => x.kind))];
+  DL_STATE = { id: d.id, rows, kinds, labels: KL, order: KO };
+  const btn = (x) => `<button class="btn" data-dl="${esc(x.url)}"
+    title="${esc(x.provider)} → ${esc(x.host)}${x.short ? " (la pubblicità viene saltata)" : ""}">${esc(x.provider)}</button>`;
+  box.innerHTML = `<div class="d-h">⬇ Link di download <span class="muted small">${esc([...new Set(links.map((x) => x.site))].join(" · "))}</span>
+      <a href="#" id="dl-refresh" class="muted small" title="Rileggi la pagina dello store">↻</a></div>
+    ${kinds.length > 1 ? `<div class="d-emu muted" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn primary" id="dl-all" title="Apre un link per tipo, dalla stessa fonte">⬇ Scarica ${esc(kinds.map((k) => (KL[k] || k).toLowerCase()).join(" + "))}</button>
+      <span>niente pagine dello store: si aprono i file, la pubblicità si salta da sola</span></div>` : ""}
+    ${rows.map((row) => `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0">
+      <span class="muted small" style="min-width:180px">${esc(KL[row.kind] || row.kind)}${row.label ? " · " + esc(row.label) : ""}</span>
+      ${row.items.map(btn).join("")}</div>`).join("")}`;
+  box.onclick = async (e) => {
+    e.preventDefault();
+    if (e.target.id === "dl-refresh") return loadGameLinks(d, true);
+    const one = e.target.closest("[data-dl]");
+    if (one) return downloadLinks(d, [one.dataset.dl], box);
+    if (e.target.id === "dl-all") return downloadLinks(d, dlPick(DL_STATE), box);
+  };
+}
+
+async function downloadLinks(d, urls, box) {
+  const btns = box ? [...box.querySelectorAll("button")] : [];
+  btns.forEach((b) => { b.disabled = true; });
+  box?.insertAdjacentHTML("afterbegin", `<p class="muted small" id="dl-state">Preparo i link: la prima volta la pagina con pubblicità si apre una volta sola…</p>`);
+  try {
+    const r = await api(`/api/game/${d.id}/download`, { body: { links: urls } });
+    const skipped = r.opened.filter((x) => x.shortened).length;
+    toast(`${r.opened.length} link apert${r.opened.length === 1 ? "o" : "i"}${skipped ? `, ${skipped} senza pubblicità` : ""}`
+      + (r.failed.length ? ` · ${r.failed.length} non riusciti` : ""), r.failed.length > 0);
+  } catch (e) { toast(e.message, true); }
+  finally {
+    $("#dl-state")?.remove();
+    btns.forEach((b) => { b.disabled = false; });
+  }
+}
+
+async function downloadMain(d) {
+  if (!DL_STATE || DL_STATE.id !== d.id) {
+    await loadGameLinks(d);
+    if (!DL_STATE || DL_STATE.id !== d.id) return toast("Nessun link da aprire in questa pagina: usa «🌐 Pagina dello store»", true);
+  }
+  return downloadLinks(d, dlPick(DL_STATE), $("#d-links"));
 }
 
 /* ---- salvataggi del gioco: versioni prima e dopo ogni partita, rollback, percorsi manuali e rilevati */
@@ -1625,7 +1733,7 @@ async function renderPort(pv, slug) {
     <p>${esc(i.description)}</p>
     <div class="d-actions">
       ${!inst ? `<button class="btn primary" id="pt-install">⬇ Installa</button>`
-        : `${inst.game_id ? `<button class="btn primary" id="pt-play">▶ Gioca</button><button class="btn" id="pt-lib">Scheda nella libreria</button>
+        : `<button class="btn primary" id="pt-play">▶ Gioca</button>${inst.game_id ? `<button class="btn" id="pt-lib">Scheda nella libreria</button>
              <button class="btn" id="pt-folder">📁 Cartella</button>` : ""}
            ${inst.update ? `<button class="btn primary" id="pt-update">⬆ Aggiorna a ${esc(inst.latest)}</button>
              <button class="btn" id="pt-skip" title="Non segnalare più questa versione">Salta questa versione</button>` : ""}
@@ -1660,7 +1768,14 @@ async function renderPort(pv, slug) {
       try { await api(t.id === "pt-install" ? "/api/ports/install" : `/api/ports/${enc}/update`, { body: { slug } }); } catch (err) { return toast(err.message, true); }
       return followPortJob(pv);
     }
-    if (t.id === "pt-play") return play(inst.game_id);
+    if (t.id === "pt-play") {
+      try {
+        if (inst.game_id) await api(`/api/game/${inst.game_id}/play`, { body: {} });
+        else await api(`/api/ports/${enc}/play`, { body: {} });
+        pollRunning();
+      } catch (err) { toast(err.message, true); }
+      return;
+    }
     if (t.id === "pt-lib") return openDetail(inst.game_id);
     if (t.id === "pt-folder") return api(`/api/game/${inst.game_id}/open-folder`, { body: {} }).catch((err) => toast(err.message, true));
     if (t.id === "pt-skip") {
@@ -3768,6 +3883,7 @@ function bind() {
       document.querySelectorAll("#detail .star").forEach((b) => b.classList.toggle("on", +b.dataset.myrate <= n));
     }
     else if (t.dataset.open) { e.preventDefault(); api("/api/open", { body: { url: t.dataset.open } }); }
+    else if (t.id === "d-download") downloadMain(d);
     else if (t.id === "d-hide") setFlag("hidden", !d.user.hidden);
     else if (t.id === "d-folder") api(`/api/game/${d.id}/open-folder`, { body: {} }).catch((err) => toast(err.message, true));
     else if (t.id === "d-emu-cfg") { e.preventDefault(); openSettings("emu"); }

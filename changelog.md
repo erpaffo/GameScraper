@@ -9,10 +9,13 @@
 - Download dei Port e app verificato con lo SHA-256 della release (catalogo Quiver o digest di GitHub): un file diverso viene rifiutato
 - «Aggiorna tutto» e opzione «Aggiorna da solo»: le patch le installa il launcher, senza aprire quello del gioco
 - Port aggiunti a mano anche da GitLab o Codeberg (gitlab:utente/progetto o indirizzo completo)
+- Store online: tutti i link di download nella scheda (gioco, aggiornamento, DLC, parti, provider) aperti insieme saltando la pubblicità
 
 ### Migliorato
 
 - Port PC: l'aggiunta manuale da repository supporta anche GitLab e Codeberg (`gitlab:utente/progetto`, `codeberg:utente/progetto` o indirizzi web completi), oltre a GitHub
+- Avvio diretto dei port e copia automatica delle ROM compatibili
+- Attività: titoli separati dallo stato e pulizia dei lavori terminati
 
 ### Corretto
 

@@ -84,7 +84,8 @@ digitato): le impostazioni e i file del PC restano fuori portata. L'**ospite a d
 - **⏳ Attività**: i lavori del PC in corso — ricerca nuovi giochi, store ufficiali e online, copertine e descrizioni,
   durate, migliori giochi, immagini delle collezioni, database locali, ricostruzione della libreria — con la
   percentuale, più i comandi **Aggiorna store**, **Cerca nuovi giochi**, **Ricostruisci libreria**, **Chiudi gioco** e,
-  mentre la ricerca è in corso, **Interrompi ricerca**. Nella stessa scheda c'è anche il **🎛 Telecomando del PC**.
+  mentre la ricerca è in corso, **Interrompi ricerca**. Le attività terminate si possono rimuovere dalla finestra
+  Attività, singolarmente o con i comandi di pulizia. Nella stessa scheda c'è anche il **🎛 Telecomando del PC**.
 - Scheda del gioco con **Avvia**, stato, preferito e **Togli da Giocati di recente**.
 - **Schermate** del gioco in corso.
 - **🎛 Telecomando del PC**: volume, muto, play/pausa e brano successivo, più Esc, Invio, Indietro, Alt+Tab, schermo

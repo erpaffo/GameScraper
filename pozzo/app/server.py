@@ -39,6 +39,7 @@ from .. import backup as BK
 from .. import ports as PT
 from .. import relink as RL
 from .. import storerefresh as SR
+from .. import storelinks as SL
 from ..library import launcher as L
 from . import extensions as X
 from .icons import CREDIT
@@ -56,6 +57,21 @@ from ..matching import normalize
 
 STATIC = Path(__file__).parent / "static"
 THUMB_WIDTHS = (200, 300, 450, 700, 1280)
+
+# Clicca da soli i pulsanti degli accorciatori con pubblicita' (stessa logica dello userscript ouo_skipper):
+# "I'm a human" sblocca il conteggio, "Get Link" porta al file. Un pulsante disattivato ignora il clic.
+SKIPPER_JS = """
+(function () {
+  const press = (needle) => {
+    const el = Array.from(document.querySelectorAll('button, a, input[type=submit]'))
+      .find((b) => ((b.innerText || b.value || '').trim().toLowerCase().includes(needle)));
+    if (el && !el.disabled) el.click();
+  };
+  press("i'm a human");
+  press("get link");
+  press("continue");
+})();
+"""
 
 
 class _ActiveUser:
@@ -404,6 +420,7 @@ def create_app(cfg) -> FastAPI:
     job: dict = {"current": J.ScrapeJob(), "stores": J.StoreJob(), "storemeta": J.StoreMetaJob(),
                  "hltb": J.HltbJob(), "collart": J.CollArtJob(),  # copertine degli store online: "netmeta:<pid>", uno per console
                  "pcstores": J.PcStoreJob(), "top": J.TopGamesJob(), "store_refresh": J.StoreRefreshJob()}
+    activity_hidden: set[str] = set()
     # ultime risposte di /api/library gia' pronte: telefono e PC la richiedono a ogni apertura (costruirla
     # costa 0,2-0,6 s e qualche MB con una libreria grande) e cambia solo quando cambia libreria o dati utente
     lib_payloads: dict = {}
@@ -415,6 +432,7 @@ def create_app(cfg) -> FastAPI:
         with start_lock:
             if name in job and job[name].status == "running":
                 return False
+            activity_hidden.discard(name)
             j.status = "running"
             job[name] = j
             return True
@@ -694,6 +712,70 @@ def create_app(cfg) -> FastAPI:
         except L.LaunchError as e:
             raise HTTPException(409, str(e))
         return {"ok": True}
+
+    def _download_pages(g: dict) -> list[str]:
+        """Pagine degli store del gioco (una per sito), dove sono elencati i link di download."""
+        urls = [s.get("url") for s in (g.get("launch") or {}).get("sources") or [] if isinstance(s, dict)]
+        urls += [s.get("url") for s in json.loads(g.get("store_pages") or "[]") if isinstance(s, dict)]
+        seen, out = set(), []
+        for u in urls:
+            if u and u.startswith("http") and u not in seen:
+                seen.add(u)
+                out.append(u)
+        return out
+
+    @app.get("/api/game/{gid}/links")
+    def api_game_links(gid: int, refresh: int = 0):
+        """Tutti i link di download elencati nelle pagine del gioco: tipo (gioco/update/DLC), provider, parti."""
+        g = lib.game(gid)
+        pages = _download_pages(g)
+        if not pages:
+            raise HTTPException(404, "Questo gioco non ha una pagina con i link di download")
+        from ..cache import Cache
+        c = Cache(cfg.cache)
+        try:
+            links, errors, fetched = [], [], 0
+            for u in pages[:4]:
+                data = None if refresh else SL.cached(c, u)
+                if data is None:
+                    if fetched >= 2:  # due pagine nuove per richiesta: le altre arrivano alla prossima apertura
+                        continue
+                    fetched += 1
+                    try:
+                        data = SL.put(c, u, SL.fetch(u))
+                    except (httpx.HTTPError, ValueError, RuntimeError) as e:
+                        errors.append(f"{SL.host(u)}: {type(e).__name__}")
+                        continue
+                site = data.get("site") or SL.host(u)
+                links += [{**x, "page": u, "site": site} for x in data.get("links") or []]
+            return {"pages": pages, "links": links, "error": "; ".join(errors),
+                    "kind_labels": SL.KIND_LABELS, "kind_order": list(SL.KIND_ORDER)}
+        finally:
+            c.close()
+
+    @app.post("/api/game/{gid}/download")
+    def api_game_download(gid: int, body: dict = Body(default={})):
+        """Apre i link scelti (anche più assieme), passando prima dagli accorciatori pubblicitari."""
+        lib.game(gid)
+        urls = [str(u) for u in body.get("links") or [] if str(u).startswith("http")][:12]
+        if not urls:
+            raise HTTPException(400, "Nessun link da aprire")
+        from ..cache import Cache
+        c = Cache(cfg.cache)
+        opened, failed = [], []
+        try:
+            for u in urls:
+                try:
+                    final = SL.resolve(c, u)
+                    L.open_uri(final)
+                    opened.append({"link": u, "opened": final, "shortened": final != u})
+                except (L.LaunchError, OSError) as e:
+                    failed.append({"link": u, "error": str(e)})
+        finally:
+            c.close()
+        if not opened:
+            raise HTTPException(409, "Nessun link aperto" + (f": {failed[0]['error']}" if failed else ""))
+        return {"ok": True, "opened": opened, "failed": failed}
 
     @app.post("/api/game/{gid}/play")
     def api_play(gid: int):
@@ -3004,6 +3086,8 @@ def create_app(cfg) -> FastAPI:
             elif state.get("total"):
                 prog = (state.get("done") or 0) / state["total"]
             log = state.get("log") or []
+            if jid in activity_hidden:
+                return None
             return {"id": jid, "name": name, "kind": kind, "status": state.get("status"),
                     "phase": state.get("phase") or state.get("message") or "",
                     "progress": round(prog, 3) if prog is not None else None,
@@ -3056,6 +3140,26 @@ def create_app(cfg) -> FastAPI:
         if jid not in job_stops:
             raise HTTPException(400, "Questa operazione non si puo' interrompere")
         job_stops[jid]()
+        return api_activity()
+
+    @app.post("/api/activity/{jid}/remove")
+    def api_activity_remove(jid: str):
+        rows = {r["id"]: r for r in _job_rows()}
+        row = rows.get(jid)
+        if not row:
+            raise HTTPException(404, "Attività non trovata")
+        if row["status"] == "running":
+            raise HTTPException(409, "Non puoi rimuovere un'attività in corso")
+        activity_hidden.add(jid)
+        return api_activity()
+
+    @app.post("/api/activity/clear")
+    def api_activity_clear(body: dict = Body(default={})):
+        mode = body.get("mode") or "finished"
+        allowed = {"done", "error", "cancelled"} if mode == "finished" else {"done", "error"}
+        for row in _job_rows():
+            if row["status"] in allowed:
+                activity_hidden.add(row["id"])
         return api_activity()
 
     @app.get("/activity")
@@ -4051,6 +4155,37 @@ def run(cfg, port: int = 8765, browser: bool = False, bigpicture: bool = False):
                                                           js_api=api)
                 return True
 
+            def resolve_link(self, link):
+                """Link vero dietro un accorciatore pubblicitario (ouo): la pagina chiede un browser, quindi
+                si apre in una finestra nascosta e si cliccano da soli i pulsanti del sito, come lo userscript
+                ouo_skipper. None se non si arriva al file."""
+                import time as _time
+                from urllib.parse import urlparse as _urlparse
+                win = webview.create_window("Pozzo", link, width=420, height=360, hidden=True, focus=False)
+                if win is None:
+                    return None
+                end = _time.time() + 45
+                try:
+                    while _time.time() < end:
+                        _time.sleep(0.5)
+                        try:
+                            cur = win.get_current_url() or ""
+                        except Exception:
+                            return None
+                        if cur.startswith("http") and (_urlparse(cur).hostname or "").replace("www.", "") not in \
+                                ("ouo.io", "ouo.press", "hikarinoakari.com"):
+                            return cur
+                        try:
+                            win.evaluate_js(SKIPPER_JS)
+                        except Exception:
+                            pass  # pagina non ancora pronta: si riprova al giro dopo
+                    return None
+                finally:
+                    try:
+                        win.destroy()
+                    except Exception:
+                        pass
+
             def pick_folder(self):
                 win = webview.windows[0]
                 kind = getattr(getattr(webview, "FileDialog", None), "FOLDER", None) or webview.FOLDER_DIALOG
@@ -4061,6 +4196,7 @@ def run(cfg, port: int = 8765, browser: bool = False, bigpicture: bool = False):
         activity_win: dict = {}
         api = Api()
         WINDOW_FOCUS["fn"] = api.focus_window
+        SL.set_resolver(api.resolve_link)  # link veri dietro gli accorciatori pubblicitari (ouo)
         from .. import notify
         ico = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2])) / "packaging" / "icon.ico"
         notify.start_tray(str(ico), api.focus_window, lambda: webview.windows[0].destroy())  # icona vicino a volume e rete

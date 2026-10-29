@@ -44,8 +44,15 @@ Nella stessa finestra:
 - Il titolo viene **ripulito** dalle parole dei siti: «Zumba World – The Marble Adventure Switch NSP (eShop)» diventa
   «Zumba World – The Marble Adventure». La parola «Switch» che fa parte del titolo resta («1-2-Switch»).
 - **Stesso gioco da più fonti**: se due siti offrono lo stesso gioco, anche con nomi leggermente diversi, la libreria
-  mostra **una sola scheda** con un pulsante per ogni fonte («⬇ nxbrew.net», «⬇ ziperto.com») e il pulsante Torrent
-  quando c'è un link magnet **per il singolo file**. Con una sola fonte resta **⬇ Scarica (browser)**.
+  mostra **una sola scheda** con la pagina di ogni fonte («🌐 nxbrew.net ↗», «🌐 ziperto.com ↗») e il pulsante Torrent
+  quando c'è un link magnet **per il singolo file**.
+- **⬇ Scarica** apre direttamente i file elencati nella pagina del gioco, non la pagina dello store. La scheda
+  mostra tutti i link disponibili, uno per provider, divisi per tipo: **gioco** (anche a parti: «Part 2», «Part 3»),
+  **aggiornamento**, **DLC/espansioni** e le eventuali **versioni in altre lingue**. Il pulsante grande apre un link
+  per tipo, tutti insieme e dalla stessa fonte; ogni provider si può aprire anche da solo.
+- **Pubblicità saltata**: molti provider nascondono il file dietro un accorciatore (ouo.io). L'app apre il link vero
+  al posto tuo, nella finestra nascosta dell'app, cliccando da sola i pulsanti del sito come farebbe lo userscript
+  `ouo_skipper`; il risultato resta in cache, quindi la seconda volta l'apertura è immediata.
 - **Torrent**: si offre solo per i magnet che indicano il file (nome con estensione); quelli che scaricherebbero
   l'intero set non hanno il pulsante, e la scheda lo dice, così non si scaricano decine di giochi per sbaglio.
 - I giochi solo online **non contano come posseduti**: non entrano nel conteggio della console, in «Multigiocatore

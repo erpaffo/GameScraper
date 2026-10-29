@@ -103,8 +103,9 @@ libreria), **Installati**, **Da aggiornare**. La scheda di una ROM mostra **Disp
   cartella `Ports\<cartella>`, con `portable.txt` dove il port lo prevede.
 - Il file scaricato viene **verificato con lo SHA-256** della release del catalogo (o con il `digest` pubblicato da
   GitHub): se non corrisponde il download viene rifiutato.
-- Il port diventa un **gioco PC**: tempo di gioco, Big Picture e avvio dal telefono funzionano come per gli altri,
-  e si avvia direttamente, senza passare dal launcher del gioco.
+- Il port diventa un **gioco PC**: tempo di gioco, Big Picture e avvio dal telefono funzionano come per gli altri.
+  Il pulsante **Gioca** è disponibile subito nella scheda del port, anche mentre la libreria si aggiorna, e l'avvio
+  passa sempre dal launcher dell'app.
 - **Aggiorna tutto** (e l'opzione **Aggiorna da solo** nelle impostazioni della pagina) installa le versioni nuove
   dal launcher: le patch non richiedono di aprire altri programmi.
 - Se il port ha più eseguibili si sceglie quale avviare, e la scelta resta ricordata.
@@ -113,8 +114,11 @@ libreria), **Installati**, **Da aggiornare**. La scheda di una ROM mostra **Disp
 
 ### ROM richiesta
 
-Molti port richiedono la ROM originale. Per i port che indicano l'hash richiesto, **Copia dalla libreria** mette la
-ROM giusta nella cartella del port dopo averla controllata.
+Molti port richiedono la ROM originale. Per i port che indicano l'hash richiesto, dopo il download l'app cerca
+automaticamente nella libreria la ROM giusta, la controlla con l'hash e la copia nella cartella del port. **Copia
+dalla libreria** resta disponibile per ripetere l'operazione manualmente. Le impostazioni del port (eseguibile,
+ROM e mod) si gestiscono dalla sua scheda nell'app; dalla scheda del gioco si può aprire anche il **Profilo di avvio**
+per gli script e le opzioni aggiuntive.
 
 ### Aggiornamenti
 
