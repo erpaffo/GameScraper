@@ -1,4 +1,4 @@
-"""Port PC installati (vedi pozzo/ports.py): diventano giochi PC con tempo di gioco, Big Picture, telefono."""
+"""Port e app installati (vedi pozzo/ports.py): diventano giochi PC con tempo di gioco, Big Picture, telefono."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from .base import StoreGame, StoreProvider
 
 class Ports(StoreProvider):
     id = "ports"
-    name = "Port PC"
+    name = "Port e app"
 
     def detected(self) -> bool:
         return True

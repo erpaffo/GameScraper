@@ -184,6 +184,17 @@ def test_content_kind():
     assert content_kind("Gioco [Update v1.2.0]") == "update"
     assert content_kind("Patch Quest") == "game"  # un gioco non è un aggiornamento
     assert content_kind("Blood and Wine", "dlc") == "dlc"  # tipo dichiarato dallo store
+    from pozzo.storekind import catalog_kind
+    # etichette No-Intro nel nome originale: il titolo pulito non le ha piu'
+    assert catalog_kind("Persona 5 - Set (Japan) (DLC).zip", "Persona 5 - Set", 30_000_000, "psvita") == "dlc"
+    assert catalog_kind("Helldivers (USA) (v6.00) (Patch).zip", "Helldivers", 30_000_000, "psvita") == "update"
+    assert catalog_kind("Aqua Kitty DX - Octopus (Europe) (Avatar).zip", "Aqua Kitty DX - Octopus", 7720, "psvita") == "extra"
+    assert catalog_kind("Senran Kagura - Academy Theme (Europe).zip", "Senran Kagura - Academy Theme", 4_000_000, "psvita") == "extra"
+    assert catalog_kind("FIFA 13 (Mexico) (Unknown).zip", "FIFA 13", 196, "psvita") == "extra"  # troppo piccolo per un gioco
+    assert catalog_kind("Soul Sacrifice - Pre Order Entitlement (Europe).zip", "Soul Sacrifice - Pre Order Entitlement", 1_600_000, "psvita") == "dlc"
+    assert catalog_kind("Tetris (World).zip", "Tetris", 30_000, "gb") == "game"           # sulle console vecchie si'
+    assert catalog_kind("Theme Park (Europe).zip", "Theme Park", 3_000_000, "psx") == "game"
+    assert catalog_kind("WipEout 2048 (Europe).zip", "WipEout 2048", 1_600_000_000, "psvita") == "game"
     assert update_base("Gioco [Update v1.2.0]") == "Gioco"
     assert switch_kind("0100152000022000") == "game" and switch_kind("0100152000022800") == "update" \
         and switch_kind("0100152000023001") == "dlc" and switch_kind("") == ""

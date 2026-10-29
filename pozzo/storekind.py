@@ -16,7 +16,8 @@ SIZE_RATIO = 0.35  # meno di un terzo del gioco omonimo: quasi sempre una DLC
 # parole intere, per non colpire giochi veri ("Pack-Man", "Bundle of Joy")
 DLC = re.compile(r"\b(dlc|add-?ons?|add-?on content|aoc|season pass|expansion pass|expansion|espansione|"
                  r"story pack|mission pack|level pack|character pack|content pack|texture pack|starter pack|"
-                 r"booster pack|cosmetic pack|skin pack|weapon pack|costume pack|upgrade pack|supporter pack)\b",
+                 r"booster pack|cosmetic pack|skin pack|weapon pack|costume pack|upgrade pack|supporter pack|"
+                 r"pre-?order (?:bonus|entitlement)|entitlement)\b",
                  re.I)
 EXTRA = re.compile(r"\b(soundtrack|original score|art ?book|digital comic|comic book|wallpaper|avatars?|"
                    r"bonus content|bundle|dedicated server|sdk|benchmark)\b", re.I)
@@ -42,6 +43,31 @@ def content_kind(title: str, declared: str = "") -> str:
     if DLC.search(t):
         return "dlc"
     return "game"
+
+
+# etichette No-Intro/Redump nel nome del file: «Gioco (Europe) (DLC).zip», «Gioco (USA) (v1.03) (Patch).zip»
+_TAGS = re.compile(r"\(([^)]*)\)|\[([^\]]*)\]")
+TAG_KINDS = (("update", re.compile(r"\b(update|patch)\b", re.I)),
+             ("extra", re.compile(r"\b(theme|dynamic theme|avatars?|soundtrack|wallpaper|bios)\b", re.I)),
+             ("dlc", re.compile(r"\b(dlc|add-?on|unlock(?: key)?|addcont\w*)\b", re.I)))
+# console in cui un gioco non puo' pesare meno di 1 MB: sotto e' una licenza, un tema o un avatar
+BIG_GAMES = {"psvita", "ps3", "ps4", "ps5", "switch", "wiiu", "xbox360", "xboxone"}
+MIN_GAME_SIZE = 1024 ** 2
+
+
+def catalog_kind(name: str, title: str, size: int | None = None, pid: str = "") -> str:
+    """Tipo di una voce di catalogo console: prima le etichette del nome originale (il titolo pulito le ha
+    perse), poi le parole del titolo, infine il peso minimo dei giochi della console."""
+    tags = [a or b for a, b in _TAGS.findall(name or "")]
+    for kind, rx in TAG_KINDS:
+        if any(rx.search(t) for t in tags):
+            return kind
+    kind = content_kind(title)
+    if kind == "game" and re.search(r"\b(?:dynamic )?theme\s*$", title or "", re.I):
+        return "extra"  # «Gioco - Academy Theme»: un tema del menu, non «Theme Park»
+    if kind == "game" and pid in BIG_GAMES and size and size < MIN_GAME_SIZE:
+        return "extra"
+    return kind
 
 
 def update_base(title: str) -> str:

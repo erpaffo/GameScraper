@@ -649,17 +649,40 @@ def create_app(cfg) -> FastAPI:
             raise HTTPException(409, str(e))
         return {"ok": True}
 
+    def _single_magnet(g: dict) -> str | None:
+        """Magnet che scarica solo questo gioco da un torrent di set (Minerva), letto una volta dalla sua pagina."""
+        from .. import catalog
+        from ..cache import Cache
+        pages = [s["url"] for s in (g.get("launch") or {}).get("sources") or [] if catalog.MINERVA_ROM.match(s.get("url") or "")]
+        if not pages:
+            return None
+        c = Cache(cfg.cache)
+        try:
+            hit = c.kv_get("minerva:so:" + pages[0])
+            if hit is None:
+                try:
+                    r = httpx.get(pages[0], timeout=20, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
+                    hit = catalog.single_file_magnet(r.text) if r.status_code == 200 else None
+                except httpx.HTTPError:
+                    return None  # rete giu': si riprova al prossimo clic
+                c.kv_set("minerva:so:" + pages[0], hit or "")
+            return hit or None
+        finally:
+            c.close()
+
     @app.post("/api/game/{gid}/torrent")
     def api_torrent(gid: int):
         g = lib.game(gid)
         mag = (g.get("launch") or {}).get("magnet")
         if not mag:
             raise HTTPException(400, "Nessun link magnet per questo gioco")
+        single = _single_magnet(g)
         try:
-            L.open_uri(mag)
-        except L.LaunchError as e:
+            L.open_uri(single or mag)
+        except L.LaunchError:
             raise HTTPException(409, "Nessun client torrent installato per aprire i link magnet")
-        return {"ok": True}
+        return {"ok": True, "single": bool(single) or "&so=" in mag or bool(re.search(r"dn=[^&]*\.", mag)),
+                "file": g.get("canonical") or g["title"]}
 
     @app.post("/api/game/{gid}/store-page")
     def api_store_page(gid: int):
@@ -2289,7 +2312,7 @@ def create_app(cfg) -> FastAPI:
              "name": g["title"] if g.get("store") else f"{g['title']} ({P.PLATFORMS[g['platform']].name if g['platform'] in P.PLATFORMS else g['platform']})"}
         if g.get("store") == "ports":  # port PC: con portable.txt i salvataggi stanno nella sua cartella
             m = PT.all_installed(cfg).get(g["key"].split(":", 1)[1])
-            r.update(emulator="Port PC", paths=PT.user_files(Path(m["folder"]), m) if m else [],
+            r.update(emulator="Port e app", paths=PT.user_files(Path(m["folder"]), m) if m else [],
                      roots=[Path(m["folder"])] if m else [])
         elif g.get("store"):  # gioco PC: percorsi dal manifest di Ludusavi, manuali o rilevati dalla partita
             r.update(emulator=g["store"], roots=[Path(g["install_dir"])] if g.get("install_dir") else [])
@@ -2529,7 +2552,7 @@ def create_app(cfg) -> FastAPI:
                     "SELECT source, COUNT(*), SUM(length(value)+length(field)+length(key)) FROM resources GROUP BY source ORDER BY 3 DESC"):
                 sources.append({"source": src, "rows": nrow, "bytes": nb or 0})
             labels = {"catalog": "Elenchi degli store online", "netmeta": "Copertine e descrizioni degli store",
-                      "storemeta": "Dati degli store PC", "store": "Store PC", "ports": "Port PC", "art": "Immagini",
+                      "storemeta": "Dati degli store PC", "store": "Store PC", "ports": "Port e app", "art": "Immagini",
                       "hltb": "Durata (HowLongToBeat)", "collart": "Immagini delle collezioni", "size": "Dimensioni"}
             for k, nrow, nb in c.db.execute(
                     "SELECT substr(k,1,instr(k||':',':')-1), COUNT(*), SUM(length(v)) FROM kv GROUP BY 1 ORDER BY 3 DESC"):

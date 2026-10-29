@@ -24,7 +24,7 @@ L'app si collega a servizi esterni solo per le funzioni che usi. Alcuni controll
 | Giochi PC | Steam, Epic Games, GOG, Amazon, Battle.net, Xbox, Minecraft: launcher installati e, dove serve, l'accesso con il tuo account |
 | Obiettivi | RetroAchievements, con le tue credenziali |
 | Giochi gratis e prezzi | allkeyshop (riquadro delle offerte gratuite), GamerPower, feed LootScraper, Epic Games Store, IsThereAnyDeal, GG.deals, Steam |
-| Port PC | Quiver, GitHub, GitLab, Codeberg, Thunderstore |
+| Port e app | Quiver, GitHub, GitLab, Codeberg, Thunderstore |
 | Store online | solo i siti che aggiungi tu |
 | Aggiornamenti e store delle estensioni | GitHub |
 | Discord | il client Discord sul PC (canale locale, nessun server) |

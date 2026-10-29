@@ -2,9 +2,35 @@
 
 ## Non rilasciato
 
+### Aggiunto
+
+- Store Minerva: download torrent per singolo gioco. Se un gioco proviene da un set archivio (Minerva / Myrient), la scheda del gioco propone «Scarica (solo questo gioco)» aprendo direttamente il magnet con l'indice del file (`&so=`), senza dover scaricare l'intero set da decine di gigabyte
+- Port e app: il catalogo Quiver comprende anche giochi, emulatori e strumenti (non solo port) e si filtrano per tipo
+- Download dei Port e app verificato con lo SHA-256 della release (catalogo Quiver o digest di GitHub): un file diverso viene rifiutato
+- «Aggiorna tutto» e opzione «Aggiorna da solo»: le patch le installa il launcher, senza aprire quello del gioco
+- Port aggiunti a mano anche da GitLab o Codeberg (gitlab:utente/progetto o indirizzo completo)
+
+### Migliorato
+
+- Port PC: l'aggiunta manuale da repository supporta anche GitLab e Codeberg (`gitlab:utente/progetto`, `codeberg:utente/progetto` o indirizzi web completi), oltre a GitHub
+
+### Corretto
+
+- Archivi .7z/.rar estratti con 7-Zip quando il tar di Windows non ha il codec; scartati sorgenti, SDK, asset e build per console
+
+## 0.9.7 (2026-10-29)
+
+### Aggiunto
+
+- Store Riot Games: giochi installati rilevati automaticamente dal registro di Windows (League of Legends, Valorant, Teamfight Tactics, Legends of Runeterra) e avviati tramite Riot Client; gli altri giochi del catalogo compaiono come disponibili
+
 ### Corretto
 
 - Battle.net (Hearthstone e gli altri giochi): il gioco parte appena il client e' pronto, senza l'attesa fissa di 40+8 secondi dopo l'apertura del launcher
+
+### Migliorato
+
+- Port PC: supporto a download con autorizzazione (token) e verifica del checksum SHA-256 della release per garantire l'integrità dei file scaricati
 
 ## 0.9.6 (2026-10-29)
 ### Migliorato

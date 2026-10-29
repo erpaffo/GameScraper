@@ -139,7 +139,8 @@ function computeItems() {
   let it = S.games.filter((g) => inView(g, S.view));
   // DLC nascoste per console (check box nella vista della console) e aggiornamenti: mai come riquadri,
   // stanno tra i download del gioco base (vedi build.py: _attach_updates)
-  it = it.filter((g) => g.content !== "update" && !(g.content === "dlc" && S.hideDlc?.has(g.platform)));
+  // «Nascondi DLC»: via anche gli extra (temi, avatar, colonne sonore), che non sono giochi nemmeno loro
+  it = it.filter((g) => g.content !== "update" && !((g.content === "dlc" || g.content === "extra") && S.hideDlc?.has(g.platform)));
   if (S.view.type === "shop") it = shopFilter(it, S.shopF);
   const d = discover(it, S.disc);
   it = d.items;
@@ -556,7 +557,7 @@ function viewTitle() {
   const v = S.view;
   if (v.type === "favorites" && v.plat) return `★ Preferiti · ${platName(v.plat)}`;
   if (v.type === "apps") return "🧩 Applicazioni";
-  return { shots: "Schermate", free: "Giochi gratis", ports: "Port PC", wishlist: "Lista desideri", stats: "Statistiche",
+  return { shots: "Schermate", free: "Giochi gratis", ports: "Port e app", wishlist: "Lista desideri", stats: "Statistiche",
     top: !v.id || v.id === "all" ? "🏆 Migliori giochi" : `🏆 Top 100 · ${platName(v.id)}`,
     status: `${STATUS[v.id]?.icon || ""} ${STATUS[v.id]?.label || ""}`,
     smart: `${S.smart.find((x) => x.id === v.id)?.icon || "⚡"} ${S.smart.find((x) => x.id === v.id)?.name || "Collezione"}`,
@@ -595,7 +596,7 @@ function updateHeader() {
     : S.view.type === "shop"
       ? `<button class="btn smeta-btn" id="smeta-open" title="Cerca descrizioni, generi, giocatori e valutazioni dei giochi degli store SOLO nei database offline (LaunchBox, TheGamesDB): nessuna richiesta online">📚 Scraping metadati store <span class="pill">offline</span></button>`
     : S.view.type === "platform" && S.view.id !== "windows"
-      ? `<label class="icon-btn" title="Nascondi le DLC di questa console: restano comunque tra i download del gioco base">`
+      ? `<label class="icon-btn" title="Nascondi DLC, temi e avatar di questa console: le DLC restano comunque tra i download del gioco base">`
         + `<input type="checkbox" id="hide-dlc"${S.hideDlc?.has(S.view.id) ? " checked" : ""}> Nascondi DLC</label>`
         + `<button class="icon-btn" id="plat-scan" title="Cerca nuovi giochi nella cartella di questa console: compaiono subito, i dati arrivano dopo">⟳ Cerca nuovi giochi</button>`
         + `<button class="icon-btn" id="top-open" title="I 100 migliori giochi di questa console, posseduti e scaricabili">🏆 Top 100</button>`
@@ -818,15 +819,21 @@ async function openDetail(id) {
   // gli aggiornamenti non sono il gioco: pulsanti a parte (⬆), non nella riga dei download
   const updates = (online ? dlSources : pages).filter((s) => s.update);
   const dlBase = dlSources.filter((s) => !s.update);
+  // magnet che scarica solo questo gioco: per-file (nome del file dentro) o di un set Minerva (il server aggiunge so=<file>)
+  const minerva = dlSources.some((s) => /minerva-archive\.org\/rom\?id=/i.test(s.url));
+  const oneFile = !!d.magnet && (/dn=[^&]*\./.test(d.magnet) || /[?&]so=/.test(d.magnet) || minerva);
   const storePages = pages.filter((s) => !s.update);
   // una fonte sola: pulsante unico; due o piu' (es. NXBrew e Ziperto): un pulsante per sito
   const mainBtn = online
     ? (dlBase.length > 1
       ? dlBase.map((s, i) => `<button class="btn${i === 0 ? " primary" : ""}" data-open="${esc(s.url)}"
           title="Apri la pagina di download su ${esc(s.site || "questo sito")}">⬇ ${esc((s.site || "sito").replace(/^www\./, ""))}</button>`).join("")
+      // Minerva: la pagina web offre solo il torrent del set intero, il download vero e' il torrent del singolo file
+      : minerva && oneFile ? ""
       : `<button class="btn primary" id="d-install" title="Apre la pagina di download nel browser">⬇ Scarica (browser)</button>`)
-      // solo i magnet per-file (con il nome del file dentro): gli altri scaricherebbero l'intero set
-      + (d.magnet && /dn=[^&]*\./.test(d.magnet) ? `<button class="btn" id="d-torrent" title="Apre il link nel client torrent">🧲 Torrent</button>` : "")
+      // solo i magnet di questo gioco: gli altri scaricherebbero l'intero set
+      + (oneFile ? `<button class="btn${minerva && dlBase.length <= 1 ? " primary" : ""}" id="d-torrent" title="Apre il link nel client torrent: scarica solo questo gioco, non tutto il set">`
+        + `${minerva && dlBase.length <= 1 ? "⬇ Scarica" : "🧲 Torrent"} (solo questo gioco)</button>` : "")
     : pc && !d.installed
     ? `<button class="btn primary" id="d-install" ${d.can_install ? "" : "disabled"}>⬇ Installa</button>`
     : `<button class="btn primary" id="d-play" ${d.emulator ? "" : "disabled"}>▶ Gioca</button>`;
@@ -849,7 +856,7 @@ async function openDetail(id) {
     </div>
     ${d.missing && d.missing.length ? `<div class="d-missing"><span>Mancano: ${esc(d.missing.join(", "))}</span>`
       + `<button class="btn" id="d-scrape" title="Riprova tutte le fonti per questo gioco (tutte le sue versioni)">⟳ Cerca dati mancanti</button></div>` : ""}
-    ${online && d.magnet && !/dn=[^&]*\./.test(d.magnet) ? `<div class="d-note">Il link magnet scarica l'intero set:
+    ${online && d.magnet && !oneFile ? `<div class="d-note">Il link magnet scarica l'intero set:
       nel client torrent seleziona solo il file «${esc(d.file_name || d.title)}».</div>` : ""}
     <div class="d-emu muted">${online ? `${d.page_url ? `<img class="sico" src="/icons/site?url=${encodeURIComponent(d.page_url)}" alt="">` : "🌐"} Disponibile online${d.kind === "repack" ? " · 📦 Repack (gioco compresso: il download è corto, l'installazione lunga)" : d.kind === "direct" ? " · ⬇ Download diretto" : ""}${dlBase.length > 1 ? ` · ${dlBase.length} fonti (${dlBase.map((s) => esc(s.site)).join(", ")})` : ""} · ${esc(d.file_name || "")}`
       : pc ? `${esc(d.store_name)} · ${d.installed ? "installato" : "non installato"}`
@@ -1449,8 +1456,10 @@ function freeBadge(d) {
 const FREE_KIND = { "Free to keep": "Da tenere", "Free with Prime": "Con Prime", "Free with PS+": "Con PS Plus", Gamepass: "Game Pass",
   "Free DLC": "DLC gratis", "Free weekend": "Weekend gratis", "Free to play": "Free to play", "In arrivo": "In arrivo" };
 
-/* ---- pagina: port PC (ricompilazioni e decomp dal catalogo di Quiver Launcher) */
-const PORTS_F = { console: store.get("portsConsole", ""), mine: "", q: "", open: null };
+/* ---- pagina: port e app PC (port, giochi ed emulatori dal catalogo di Quiver Launcher) */
+const PORTS_F = { console: store.get("portsConsole", ""), type: store.get("portsType", ""), mine: "", q: "", open: null };
+// tipi del catalogo Quiver: quasi tutte sono ricompilazioni (port) ma ci sono anche giochi ed emulatori
+const PORT_KIND = { port: "🕹 Port", game: "🎮 Gioco", emulator: "🖥 Emulatore", tool: "🔧 Strumento" };
 /** Il catalogo si apre subito dalla copia salvata e si aggiorna in background: a fine aggiornamento la pagina si ridisegna. */
 async function followPortsRefresh(pv) {
   if (PORTS_F.following) return;
@@ -1474,29 +1483,35 @@ async function renderPorts(pv, force = false) {
   d.items.sort((a, b) => rank(a) - rank(b) || b.recommended - a.recommended || collator.compare(a.name, b.name));
   const cons = Object.entries(d.consoles).map(([id, name]) => [id, name, d.items.filter((i) => i.consoles.includes(id)).length])
     .sort((a, b) => b[2] - a[2]);
+  const kinds = Object.entries(PORT_KIND).map(([id, label]) => [id, label, d.items.filter((i) => (i.type || "port") === id).length])
+    .filter((k) => k[2]);
+  const upd = d.items.filter((i) => i.installed?.update).length;
   const chip = (k, v, l) => `<button class="pchip${PORTS_F[k] === v ? " on" : ""}" data-f="${k}" data-v="${esc(v)}">${esc(l)}</button>`;
   pv.innerHTML = `<div class="page">
-    <div class="page-head"><div><h2>🕹 Port PC</h2>
-      <p class="muted small">Giochi console ricompilati o ricostruiti per girare su Windows senza emulatore. Quasi tutti chiedono
-        la tua ROM originale: quelli segnati «🎮 ROM» li hai già nella libreria. Catalogo:
+    <div class="page-head"><div><h2>🕹 Port e app</h2>
+      <p class="muted small">Giochi console ricompilati o ricostruiti per Windows senza emulatore, più i giochi e gli emulatori
+        del catalogo che si distribuiscono con le release di GitHub/GitLab: li installa e li aggiorna il launcher, senza aprirne altri.
+        Quasi tutti i port chiedono la tua ROM originale: quelli segnati «🎮 ROM» li hai già nella libreria. Catalogo:
         <a href="#" data-open="https://github.com/tgeorgiadis/quiver-launcher">Quiver Launcher</a>${d.time ? ` · aggiornato ${new Date(d.time * 1000).toLocaleString("it", { dateStyle: "short", timeStyle: "short" })}` : ""}</p>
       ${d.error ? `<p class="warn small">⚠ Il catalogo non ha risposto (${esc(d.error)}): ${d.stale ? "elenco dell'ultima volta" : "nessun elenco salvato"}.</p>` : ""}</div>
-      <span class="fc-btns pt-tools"><button class="btn" id="pt-add">＋ Aggiungi a mano</button><button class="btn" id="pt-set">⚙</button>
+      <span class="fc-btns pt-tools">${upd ? `<button class="btn primary" id="pt-update-all">⬆ Aggiorna tutto (${upd})</button>` : ""}<button class="btn" id="pt-add">＋ Aggiungi a mano</button><button class="btn" id="pt-set">⚙</button>
         <button class="btn" id="pt-refresh">↻ Aggiorna</button></span></div>
     <div id="pt-form"></div>
     <div class="pchips"><input id="pt-q" class="field" placeholder="Cerca…" value="${esc(PORTS_F.q)}" autocomplete="off">
       ${chip("mine", "", "Tutti")}${chip("mine", "rom", "🎮 Ho la ROM")}${chip("mine", "inst", "✓ Installati")}${chip("mine", "upd", "⬆ Da aggiornare")}
+      ${kinds.length > 1 ? `<span class="sep"></span>${chip("type", "", "Ogni tipo")}${kinds.map(([id, label, n]) => chip("type", id, `${label} (${n})`)).join("")}` : ""}
       <span class="sep"></span>${chip("console", "", "Ogni console")}${cons.map(([id, name, n]) => chip("console", id, `${name} (${n})`)).join("")}</div>
     <div class="free-grid" id="pt-grid"></div></div>`;
   const draw = () => {
     const q = fold(PORTS_F.q);
     const items = d.items.filter((i) => (!PORTS_F.console || i.consoles.includes(PORTS_F.console))
+      && (!PORTS_F.type || (i.type || "port") === PORTS_F.type)
       && (!PORTS_F.mine || (PORTS_F.mine === "rom" ? i.roms.length : PORTS_F.mine === "inst" ? i.installed : i.installed?.update))
       && (!q || fold(`${i.name} ${i.project} ${i.developer} ${i.tags.join(" ")}`).includes(q)));
     $("#pt-grid", pv).innerHTML = items.map((i) => `<div class="free-card" data-slug="${esc(i.slug)}">
       <div class="fc-cover">${i.cover ? `<img loading="lazy" src="${remoteImg(gridThumb(i.cover))}" data-full="${esc(remoteImg(i.cover))}" alt=""
           onerror="if (this.dataset.full && this.src.indexOf('thumb') > 0) { this.src = this.dataset.full; this.dataset.full = '' } else this.remove()">` : ""}
-        <span class="fc-kind">${esc(i.consoles.map((c) => d.consoles[c] || c).join(", "))}</span>
+        <span class="fc-kind">${esc((i.type && i.type !== "port" ? [PORT_KIND[i.type] || i.type] : []).concat(i.consoles.map((c) => d.consoles[c] || c)).join(" · ") || PORT_KIND.port)}</span>
         ${i.installed?.update ? `<span class="fc-new">⬆ ${esc(i.installed.latest)}</span>` : i.installed ? `<span class="fc-owned">✓ Installato</span>` : ""}
         ${i.roms.length ? `<span class="fc-wish pt-rom" title="Hai la ROM: ${esc(i.roms.map((r) => r.title).join(", "))}">🎮 ROM</span>`
           : i.in_store?.length ? `<span class="fc-wish pt-rom" title="ROM non posseduta, scaricabile dagli store">🛒 ROM negli store</span>` : ""}</div>
@@ -1511,30 +1526,58 @@ async function renderPorts(pv, force = false) {
     if (f) {
       PORTS_F[f.dataset.f] = f.dataset.v;
       if (f.dataset.f === "console") store.set("portsConsole", f.dataset.v);
+      if (f.dataset.f === "type") store.set("portsType", f.dataset.v);
       pv.querySelectorAll(`[data-f="${f.dataset.f}"]`).forEach((b) => b.classList.toggle("on", b === f));
       return draw();
     }
     const o = e.target.closest("[data-open]");
     if (o) { e.preventDefault(); api("/api/open", { body: { url: o.dataset.open } }); return; }
+    if (e.target.id === "pt-update-all") {
+      // un'installazione alla volta: il server ne accetta una sola, qui si aspetta la fine di ciascuna
+      const todo = d.items.filter((i) => i.installed?.update);
+      if (!todo.length) return;
+      $("#pt-form", pv).innerHTML = `<div class="d-note"><p class="small" id="pt-all-msg"></p></div>`;
+      e.target.disabled = true;
+      for (let n = 0; n < todo.length; n++) {
+        const msg = $("#pt-all-msg", pv);
+        if (msg) msg.textContent = `Aggiorno ${n + 1}/${todo.length}: ${todo[n].name}…`;
+        try { await api(`/api/ports/${encodeURIComponent(todo[n].slug)}/update`, { body: { slug: todo[n].slug } }); }
+        catch (err) { toast(`${todo[n].name}: ${err.message}`, true); continue; }
+        let j;
+        do {
+          await new Promise((ok) => setTimeout(ok, 1000));
+          j = await api("/api/ports/job").catch(() => ({ status: "done" }));
+        } while (j.status === "running");
+        if (j.status === "error") toast(`${todo[n].name}: ${j.log.slice(-1)[0] || "aggiornamento non riuscito"}`, true);
+      }
+      toast("Aggiornamento finito");
+      pollStores(true);
+      S.ports = null;
+      return renderPorts(pv);
+    }
     if (e.target.id === "pt-refresh") return renderPorts(pv, true);
     if (e.target.id === "pt-set") {
       $("#pt-form", pv).innerHTML = `<div class="d-note"><p class="small">Cartella dei port (vuota = predefinita):</p>
         <input class="field" id="pt-dir" value="${esc(d.dir)}" style="width:100%">
         <p class="small">Token GitHub (facoltativo: senza, GitHub permette 60 richieste all'ora) ${d.token ? "· <b>impostato</b>" : ""}</p>
         <input class="field" id="pt-tok" type="password" placeholder="${d.token ? "lascia vuoto per non cambiarlo" : "ghp_…"}" style="width:100%">
+        <label class="small" style="display:flex;gap:6px;align-items:center;margin-top:8px">
+          <input type="checkbox" id="pt-auto"${d.auto ? " checked" : ""}> Aggiorna da solo le app installate: la patch la mette il launcher,
+          senza aprire quello del gioco</label>
         <p><button class="btn primary" id="pt-set-save">Salva</button></p></div>`;
       return;
     }
     if (e.target.id === "pt-set-save") {
-      const body = { dir: $("#pt-dir", pv).value };
+      const body = { dir: $("#pt-dir", pv).value, auto: $("#pt-auto", pv).checked };
       if ($("#pt-tok", pv).value) body.token = $("#pt-tok", pv).value;
       try { await api("/api/ports-settings", { body }); } catch (err) { return toast(err.message, true); }
       toast("Impostazioni dei port salvate");
       return renderPorts(pv);
     }
     if (e.target.id === "pt-add") {
-      $("#pt-form", pv).innerHTML = `<div class="d-note"><p class="small">Un port che non è nel catalogo: repository GitHub
-        (<code>utente/progetto</code>, si installa l'ultima release) <b>oppure</b> una cartella già scaricata con il suo .exe.</p>
+      $("#pt-form", pv).innerHTML = `<div class="d-note"><p class="small">Un port o un'app che non sono nel catalogo: repository
+        (<code>utente/progetto</code>, anche <code>gitlab:utente/progetto</code> o un indirizzo completo; si installa l'ultima release)
+        <b>oppure</b> una cartella già scaricata con il suo .exe.</p>
         <input class="field" id="pt-repo" placeholder="utente/progetto" style="width:100%">
         <input class="field" id="pt-folder" placeholder="oppure: C:\\Giochi\\MioPort" style="width:100%">
         <input class="field" id="pt-name" placeholder="Nome (facoltativo)">
@@ -1574,10 +1617,10 @@ async function renderPort(pv, slug) {
   const cname = (c) => S.ports.consoles[c] || c;
   const romFile = (r) => r.file.split(/[\\/]/).pop();
   pv.innerHTML = `<div class="page port-page">
-    <p><button class="btn" id="pt-back">← Tutti i port</button></p>
+    <p><button class="btn" id="pt-back">← Port e app</button></p>
     ${i.hero ? `<div class="pt-hero"><img src="${remoteImg(i.hero)}" alt="" onerror="this.parentNode.remove()"></div>` : ""}
     <h2>${esc(i.name)}</h2>
-    <p class="muted">${esc([i.project !== i.name ? i.project : "", i.consoles.map(cname).join(", "), i.developer, inst ? `installato ${inst.version}` : i.version ? `ultima versione ${i.version}` : ""].filter(Boolean).join(" · "))}</p>
+    <p class="muted">${esc([i.type && i.type !== "port" ? PORT_KIND[i.type] : "", i.project !== i.name ? i.project : "", i.consoles.map(cname).join(", "), i.developer, inst ? `installato ${inst.version}${inst.sha256 ? " ✓ verificato" : ""}` : i.version ? `ultima versione ${i.version}` : ""].filter(Boolean).join(" · "))}</p>
     ${i.broken ? `<p class="warn small">⚠ ${i.broken} giocator${i.broken === 1 ? "e lo segnala" : "i lo segnalano"} come non funzionante.</p>` : ""}
     <p>${esc(i.description)}</p>
     <div class="d-actions">
@@ -1592,13 +1635,13 @@ async function renderPort(pv, slug) {
     <div id="pt-job"></div>
     ${m && m.candidates.length > 1 ? `<div class="d-h">Eseguibile da avviare</div>
       <select class="field" id="pt-exe">${m.candidates.map((x) => `<option${x === m.exe ? " selected" : ""}>${esc(x)}</option>`).join("")}</select>` : ""}
-    <div class="d-h">ROM originale</div>
+    ${i.type === "port" || i.roms.length || i.in_store?.length ? `<div class="d-h">ROM originale</div>
     ${i.roms.length ? i.roms.map((r) => `<div class="sv-row"><span>🎮 ${esc(r.title)}</span><span class="muted small" title="${esc(r.file)}">${esc(romFile(r))}</span>
         <button class="btn" data-game="${r.id}">Apri</button></div>`).join("")
       : i.in_store?.length ? `<p class="warn small">Non hai la ROM originale, ma è disponibile negli store: scaricala e poi torna qui.</p>`
         + i.in_store.map((r) => `<div class="sv-row"><span>🛒 ${esc(r.title)}</span><span class="muted small">${esc(platName(r.platform))}</span>
         <button class="btn primary" data-game="${r.id}">⬇ Scarica la ROM</button></div>`).join("")
-      : `<p class="muted small">Non hai la ROM di questo gioco nella libreria. Il port ha bisogno della tua copia originale.</p>`}
+      : `<p class="muted small">Non hai la ROM di questo gioco nella libreria. Il port ha bisogno della tua copia originale.</p>`}` : ""}
     ${m && m.setup.length ? m.setup.map((s) => `<div class="sv-row"><span>${esc(s.label)} <span class="muted small">→ ${esc(s.destination)}${s.accepted.filter(Boolean).length ? ` (${esc(s.accepted.filter(Boolean).join(", "))})` : ""}</span></span>
         ${s.present ? `<span class="muted small">✓ presente</span>` : ""}
         ${i.roms.length ? `<button class="btn" data-setup="${esc(s.id)}">${s.present ? "Ricopia" : "Copia dalla libreria"}</button>` : ""}</div>`).join("")
@@ -3703,7 +3746,9 @@ function bind() {
     const t = e.target;
     if (t.id === "d-play") play(d.id);
     else if (t.id === "d-install") installGame(d.id);
-    else if (t.id === "d-torrent") api(`/api/game/${d.id}/torrent`, { body: {} }).then(() => toast("Link aperto nel client torrent"))
+    else if (t.id === "d-torrent") api(`/api/game/${d.id}/torrent`, { body: {} })
+      .then((r) => toast(r.single ? `Aperto nel client torrent: scarica solo «${r.file}» (se ti propone tutti i file, tieni solo questo)`
+        : `Aperto nel client torrent: è l'intero set, seleziona solo «${r.file}»`))
       .catch((err) => toast(err.message, true));
     else if (t.dataset.install) installGame(+t.dataset.install);
     else if (t.dataset.port) { closeDetail(); PORTS_F.open = t.dataset.port; setView({ type: "ports" }); }

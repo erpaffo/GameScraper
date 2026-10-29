@@ -87,7 +87,8 @@ def register(app, cfg, lib, launcher, start_store_job):
         return port_job
 
     def _refresh_catalog():
-        """Aggiorna catalogo e versioni dei port installati; la pagina li rilegge quando refreshing torna False."""
+        """Aggiorna catalogo e versioni dei port installati; la pagina li rilegge quando refreshing torna False.
+        Con «aggiorna da solo» attivo installa anche le versioni nuove: la patch la mette il launcher."""
         from ..cache import Cache
         c = Cache(cfg.cache)
         try:
@@ -95,6 +96,10 @@ def register(app, cfg, lib, launcher, start_store_job):
             tok = PT._token(cfg)
             for m in PT.all_installed(cfg).values():
                 PT.update_info(c, m, tok)
+            if cfg.app.get("ports_auto_update") and not port_job["status"] == "running":
+                done = PT.update_all(cfg, c, tok, say=lambda m: port_job["log"].append(str(m)))
+                if done:
+                    _refresh_ports_store()
         except Exception:  # rete assente: resta la copia salvata
             pass
         finally:
@@ -136,6 +141,8 @@ def register(app, cfg, lib, launcher, start_store_job):
                     if isinstance(e.get("developer"), dict) else e.get("developer") or "",
                     "cover": art.get("capsule") or e.get("artwork") or "", "hero": art.get("hero") or "",
                     "version": e.get("lastReleaseVersion") or "", "tags": e.get("tags") or [],
+                    "type": e.get("projectType") or "port",
+                    "verified": ((e.get("verified") or {}).get("version") or ""),
                     "recommended": e.get("recommended") or 0, "broken": e.get("reportBroken") or 0,
                     "issues": e.get("reportIssues") or 0, "setup": sf, "mods": bool((e.get("launcher") or {}).get("mods")),
                     "roms": [{"id": g["id"], "title": g["title"], "platform": g["platform"], "file": (g.get("files") or [""])[0]}
@@ -144,7 +151,8 @@ def register(app, cfg, lib, launcher, start_store_job):
                                  for g in links["in_store"].get(e["slug"], [])],
                     "installed": {"version": m.get("version") or "", "exe": m.get("exe") or "", "folder": m["folder"],
                                   "manual": bool(m.get("manual")), "skip": m.get("skip"), "game_id": _port_game_id(e["slug"]),
-                                  "repository": m.get("repository") or "", **upd.get(e["slug"], {})} if m else None}
+                                  "sha256": bool(m.get("sha256")), "repository": m.get("repository") or "",
+                                  **upd.get(e["slug"], {})} if m else None}
         items = [card(e, inst.get(e["slug"])) for e in cat.get("items") or []]
         known = {e["slug"] for e in cat.get("items") or []}
         items += [card({**m, "slug": s}, m) for s, m in inst.items() if s not in known]  # aggiunti a mano
@@ -153,7 +161,7 @@ def register(app, cfg, lib, launcher, start_store_job):
                     for i in items for cid in i["consoles"]}
         return {"items": items, "time": cat.get("time"), "error": cat.get("error"), "stale": cat.get("stale", False),
                 "consoles": consoles, "dir": str(PT.ports_dir(cfg)), "token": bool(PT._token(cfg)),
-                "refreshing": refresh["running"]}
+                "auto": bool(cfg.app.get("ports_auto_update")), "refreshing": refresh["running"]}
 
     @app.get("/api/ports/refreshing")
     def api_ports_refreshing():
@@ -212,7 +220,8 @@ def register(app, cfg, lib, launcher, start_store_job):
             if not m.get("repository"):
                 raise HTTPException(400, "Questo port non e' legato a un repository")
             return _start_port_job(slug, lambda progress, say: PT.add_repo(cfg, m["repository"], m.get("name", ""),
-                                                                          m.get("consoles"), progress, say))
+                                                                          m.get("consoles"), progress, say,
+                                                                          provider=m.get("provider") or "github"))
         return api_ports_install({"slug": slug})
 
     @app.post("/api/ports/{slug}/exe")
@@ -307,9 +316,11 @@ def register(app, cfg, lib, launcher, start_store_job):
             vals["ports_dir"] = d or None
         if "token" in body:
             vals["github_token"] = (body.get("token") or "").strip() or None
+        if "auto" in body:
+            vals["ports_auto_update"] = bool(body.get("auto"))
         C.save_settings(cfg, app=vals)
         if "ports_dir" in vals:
             _refresh_ports_store()
-        return {"dir": str(PT.ports_dir(cfg)), "token": bool(PT._token(cfg))}
+        return {"dir": str(PT.ports_dir(cfg)), "token": bool(PT._token(cfg)), "auto": bool(cfg.app.get("ports_auto_update"))}
 
     return _port_links

@@ -393,7 +393,7 @@ def _catalog_to_store_game(item: CatalogItem, console_pid: str, meta: dict | Non
     content = ""
     if console_pid == "switch" and meta:
         content = storekind.switch_kind(meta.get("title_id") or "")
-    content = content or storekind.content_kind(title)
+    content = content or storekind.catalog_kind(name, title, item.get("size"), console_pid)
     return {
         "key": f"{console_pid}/net:{hashlib.sha1(item['url'].encode()).hexdigest()[:16]}",
         "pid": console_pid,
@@ -530,7 +530,7 @@ def _catalog_entries(cfg, cache, merged: dict) -> tuple[list[dict], dict]:
             tk = tkey(title, pid)
             meta = {} if is_file_list else storemeta.cached(cache, it["url"])
             content = (storekind.switch_kind(meta.get("title_id")) if pid == "switch" else "") \
-                or storekind.content_kind(title)
+                or storekind.catalog_kind(it["name"], title, it.get("size"), pid)
             if content == "update":
                 base = storekind.update_base(title)
                 updates.append({"pid": pid, "base": normalize(base), "tk": tkey(base, pid),

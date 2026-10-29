@@ -18,7 +18,7 @@ miniature WebP leggere.
 | **🛒 Store** | Giochi da installare o scaricare: posseduti negli store ma non installati, e giochi degli store online |
 | **👥 Multigiocatore locale** | Giochi con almeno 2 giocatori sullo stesso schermo |
 | **🎁 Giochi gratis** | Offerte gratuite del momento (vedi [Giochi gratis](extra.md#giochi-gratis)) |
-| **🕹 Port PC** | Giochi console ricompilati per PC (vedi [Port PC](extra.md#port-pc)) |
+| **🕹 Port e app** | Giochi console ricompilati per PC e giochi/emulatori dalle release GitHub (vedi [Port e app](extra.md#port-e-app)) |
 | **♡ Lista desideri** | Giochi che vuoi comprare, con prezzi e avvisi (vedi [Lista desideri](extra.md#lista-desideri)) |
 | **📷 Schermate** | Le schermate fatte durante le partite |
 | **🏆 Migliori giochi** | Classifiche Top 100 e Top 1000 (vedi [Migliori giochi](#migliori-giochi)) |

@@ -27,7 +27,8 @@ ROM = b"N64ROM" * 2000
 
 def test_assets():
     names = ["Game-linux-x64.tar.gz", "Game-macos.dmg", "Game-windows-arm64.zip", "Game-windows-x64.zip",
-             "Game-win32.zip", "Game.pdb.zip", "Game-windows-x64.zip.sha256", "Game-android.apk", "Game-setup.exe"]
+             "Game-win32.zip", "Game.pdb.zip", "Game-windows-x64.zip.sha256", "Game-android.apk", "Game-setup.exe",
+             "Game-source.zip", "Game-dedicated-win64.zip"]
     assets = [{"name": n, "url": n, "size": 0} for n in names]
     assert [a["name"] for a in assets if PT.is_windows_asset(a["name"])] == [
         "Game-windows-arm64.zip", "Game-windows-x64.zip", "Game-win32.zip", "Game-setup.exe"]
@@ -83,6 +84,7 @@ def test_install_update_rom(tmp: Path):
               "2.0": _zip({"SnowRecomp/snow.exe": "exe2", "SnowRecomp/data.bin": "d2"})}
     PT.releases = lambda provider, repo, token="": [{"tag": release["v"], "prerelease": False, "url": "u",
                                                      "assets": [{"name": "Snow-windows-x64.zip", "url": "z", "size": 0}]}]
+    PT.catalog_releases = lambda cache, slug: []  # niente rete: nessuna release «verificata» da confrontare
     PT._fetch_catalog = lambda: [entry]  # «↻ Aggiorna» rilegge il catalogo: niente rete nei test
     PT._download = lambda url, dest, progress=None, token="": Path(dest).write_bytes(builds[release["v"]])
 
@@ -91,6 +93,7 @@ def test_install_update_rom(tmp: Path):
         d = cl.get("/api/ports").json()
         it = d["items"][0]
         assert it["roms"] and it["roms"][0]["title"] == "Snow Game" and not it["installed"], it
+        assert it["type"] == "port", it  # il catalogo puo' avere anche giochi ed emulatori
         rom_game = it["roms"][0]["id"]
         assert cl.get(f"/api/game/{rom_game}").json()["ports"] == [{"slug": "snow-recomp", "name": "Snow Game"}]
         print("ok  catalogo: il port riconosce la ROM della libreria e la scheda della ROM mostra il port")
@@ -158,9 +161,101 @@ def test_install_update_rom(tmp: Path):
     print("ok  ROM trovata anche negli zip; percorsi fuori dal port rifiutati")
 
 
+def test_checksum_e_repository(tmp: Path):
+    """Lo SHA-256 della release del catalogo verifica il download (un file diverso viene rifiutato) e
+    «gitlab:utente/progetto» (o un indirizzo completo) diventa provider + repository."""
+    (tmp / "roms").mkdir()
+    (tmp / "config.toml").write_text('[paths]\nroms = "roms"\ncache = "cache"\n[scrape]\nsources = []\n', encoding="utf-8")
+    cfg = config.load(tmp / "config.toml")
+    data = _zip({"App/app.exe": "exe"})
+    good = hashlib.sha256(data).hexdigest()
+    saved = (PT._download, PT.catalog_releases)
+    PT._download = lambda url, dest, progress=None, token="": Path(dest).write_bytes(data)
+    try:
+        # stessa release di GitHub, ma il catalogo Quiver ne dichiara il checksum
+        PT.catalog_releases = lambda cache, slug: [
+            {"tag": "v1.0", "prerelease": False, "url": "", "released": 1,
+             "assets": [{"name": "App-windows-x64.zip", "url": "z", "size": 0, "sum": good}]}]
+        assert PT.verified_asset(None, "app", "V1.0")["sum"] == good, "tag «V1.0» e «v1.0» sono la stessa release"
+        assert PT.verified_asset(None, "app", "v9") is None
+        asset = PT.verified_asset(None, "app", "v1.0")
+        man = PT.deploy(cfg, "App", {"slug": "app", "name": "App", "files_to_add": [], "preferred": []},
+                        {"tag": "v1.0", "url": "u"}, asset, say=lambda m: None)
+        assert man["sha256"] == good and PT.read_manifest(PT.ports_dir(cfg) / "App")["sha256"] == good
+        try:
+            PT.deploy(cfg, "Rotto", {"slug": "rotto", "name": "Rotto", "files_to_add": [], "preferred": []},
+                      {"tag": "v1.0", "url": "u"}, {**asset, "sum": "0" * 64}, say=lambda m: None)
+            raise AssertionError("doveva rifiutare un file con il checksum sbagliato")
+        except RuntimeError as e:
+            assert "checksum" in str(e), e
+        assert not (PT.ports_dir(cfg) / "Rotto").exists()
+    finally:
+        PT._download, PT.catalog_releases = saved
+    assert PT.split_repo("utente/progetto") == ("github", "utente/progetto")
+    assert PT.split_repo("gitlab:gruppo/sottogruppo/progetto") == ("gitlab", "gruppo/sottogruppo/progetto")
+    assert PT.split_repo("https://github.com/a/b.git") == ("github", "a/b")
+    assert PT.split_repo("https://gitlab.com/a/b") == ("gitlab", "a/b")
+    try:
+        PT.split_repo("non un repository")
+        raise AssertionError("repository non valido accettato")
+    except ValueError:
+        pass
+    print("ok  SHA-256 della release verificato (file diverso rifiutato) e repository GitLab/GitHub riconosciuti")
+
+
+def test_aggiorna_da_solo(tmp: Path):
+    """«Aggiorna da solo» installa solo le voci con una versione nuova (quelle saltate restano ferme)."""
+    (tmp / "roms").mkdir()
+    (tmp / "config.toml").write_text('[paths]\nroms = "roms"\ncache = "cache"\n[scrape]\nsources = []\n', encoding="utf-8")
+    cfg = config.load(tmp / "config.toml")
+    data = _zip({"App/app.exe": "exe"})
+    saved = (PT._download, PT.update_info, PT.install)
+    PT._download = lambda url, dest, progress=None, token="": Path(dest).write_bytes(data)
+    try:
+        for slug in ("uno", "due"):
+            PT.deploy(cfg, "App-" + slug, {"slug": slug, "name": slug, "files_to_add": [], "preferred": []},
+                      {"tag": "1.0", "url": "u"}, {"name": "App-windows-x64.zip", "url": "z", "size": 0},
+                      say=lambda m: None)
+        PT.update_info = lambda cache, m, token="", force=False, offline=False: {
+            "latest": "2.0", "update": m["slug"] != "due"}  # «due» ha la versione saltata
+        calls = []
+        PT.install = lambda cfg, cache, slug, progress=None, say=print: calls.append(slug) or {"slug": slug}
+        assert PT.update_all(cfg, None, say=lambda m: None) == ["uno"], calls
+    finally:
+        PT._download, PT.update_info, PT.install = saved
+    print("ok  aggiornamento automatico: solo le voci da aggiornare, quella saltata resta ferma")
+
+
+def test_estrazione_7z(tmp: Path):
+    """Un .7z che tar non riesce ad aprire: senza 7-Zip l'errore lo dice chiaramente (niente eccezioni oscure)."""
+    arc = tmp / "finto.7z"
+    arc.write_bytes(b"non e' un archivio 7z")
+    saved = PT._7zip
+    try:
+        PT._7zip = lambda: None
+        try:
+            PT._extract(arc, tmp / "uno", "finto.7z")
+            raise AssertionError("doveva rifiutare un archivio non estraibile")
+        except RuntimeError as e:
+            assert "7-Zip" in str(e), e
+        with zipfile.ZipFile(tmp / "vero.zip", "w") as z:  # gli zip non hanno bisogno di nulla
+            z.writestr("game.exe", "x")
+        PT._extract(tmp / "vero.zip", tmp / "due", "vero.zip")
+        assert (tmp / "due" / "game.exe").is_file()
+    finally:
+        PT._7zip = saved
+    print("ok  estrazione: zip diretto, .7z con 7-Zip (senza, errore chiaro)")
+
+
 if __name__ == "__main__":
     test_assets()
     test_rom_negli_store()
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_estrazione_7z(Path(t))
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_checksum_e_repository(Path(t))
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_aggiorna_da_solo(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_install_update_rom(Path(t))
     print("TUTTI I TEST OK")

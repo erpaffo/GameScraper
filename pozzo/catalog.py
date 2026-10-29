@@ -100,6 +100,21 @@ def _per_file(magnet: str | None, exts: set[str]) -> bool:
 
 # --------------------------------------------------------------------------- type_a: elenco paginato
 
+# Minerva: ogni ROM ha una pagina (rom?id=N) con l'indice del file nel torrent del set ("so_id")
+MINERVA_ROM = re.compile(r"^https?://(?:www\.)?minerva-archive\.org/rom\?id=\d+", re.I)
+_SO_ID = re.compile(r'"so_id"\s*:\s*(\d+)')
+
+
+def single_file_magnet(page: str) -> str | None:
+    """Magnet del set con «so=<indice>» (BEP 53): il client torrent scarica solo quel file, non l'intera console."""
+    so = _SO_ID.search(page or "")
+    mags = [html.unescape(x) for x in _MAGNET.findall(page or "")]
+    if not so or not mags:
+        return None
+    m = max(mags, key=len)  # quello del pulsante, con i tracker (l'altro, nei dati della pagina, ne e' privo)
+    return re.sub(r"&so=[\d,-]*", "", m) + f"&so={so.group(1)}"
+
+
 def _require_soup() -> None:
     if BeautifulSoup is None:
         raise RuntimeError("beautifulsoup4 richiesto dai parser type_a/type_b (pip install beautifulsoup4)")

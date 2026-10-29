@@ -27,7 +27,7 @@ const SHORT = { megadrive: "MD", mastersystem: "SMS", gamegear: "GG", psx: "PS1"
   psvita: "VITA", gamecube: "GC", gc: "GC", wiiu: "WII U", switch: "SWITCH", xbox360: "X360", dreamcast: "DC",
   saturn: "SAT", segacd: "MCD", sega32x: "32X", pcengine: "PCE", nds: "DS", "3ds": "3DS", n64: "N64", windows: "PC" };
 const STORE_SHORT = { steam: "STEAM", epic: "EPIC", gog: "GOG", amazon: "AMAZON", battlenet: "BATTLE.NET", riot: "RIOT", xbox: "XBOX",
-  minecraft: "MINECRAFT", manual: "PC" };
+  minecraft: "MINECRAFT", ports: "APP", manual: "PC" };
 const STORE_ICON = { steam: "◉", epic: "◆", gog: "◎", amazon: "◗", battlenet: "✦", riot: "✪", xbox: "⬢", minecraft: "▣", manual: "⌂" };
 
 function fmtSize(n) {

@@ -1,12 +1,16 @@
-"""Port PC: ricompilazioni e decomp di giochi console (Zelda64Recomp, Ship of Harkinian, sm64 port...).
+"""Port e app PC: ricompilazioni e decomp di giochi console (Zelda64Recomp, Ship of Harkinian, sm64 port...)
+piu' i giochi e gli emulatori del catalogo che si distribuiscono con le release di GitHub/GitLab.
 
 Catalogo dall'API pubblica di Quiver Launcher (https://github.com/tgeorgiadis/quiver-launcher, MIT), in cache 24 ore;
 installazione dalle release GitHub/GitLab/Codeberg nella cartella Ports\\<folderName>.
 
-Ogni port installato ha un manifesto (.pozzo-port.json) nella sua cartella: e' l'unica fonte di verita'
+Ogni voce installata ha un manifesto (.pozzo-port.json) nella sua cartella: e' l'unica fonte di verita'
 (versione, eseguibile scelto, versione saltata, file della release, mod), quindi resta valido anche se si
 reinstalla l'app. I file della cartella che NON vengono dalla release sono dell'utente (salvataggi, configurazione,
 mod): si conservano negli aggiornamenti e finiscono nel backup dei salvataggi.
+
+Le release del catalogo portano il checksum SHA-256 di ogni file (come le release «verificate» di Quiver): il
+download viene rifiutato se non corrisponde. Per le release lette da GitHub si usa il `digest` dell'asset, quando c'e'.
 """
 
 from __future__ import annotations
@@ -34,6 +38,7 @@ from .matching import normalize
 
 API = ("https://api.quiverlauncher.com/api/v1", "https://famous-wildebeest-660.convex.site/api/v1")
 TTL = 24 * 3600
+CATALOG_V = 2  # formato del catalogo salvato: dalla 0.9.x comprende port, giochi, emulatori e strumenti
 RELEASE_TTL = 12 * 3600  # controllo aggiornamenti: al massimo ogni 12 ore per repository (come updates.py)
 MANIFEST = ".pozzo-port.json"
 UA = {"User-Agent": f"PozzoLauncher/{__version__} (+https://github.com/erpaffo/Pozzo-Launcher)"}
@@ -77,7 +82,7 @@ def _fetch_catalog() -> list[dict]:
         try:
             items, cursor = [], ""
             for _ in range(100):  # 100 pagine x 100: ben oltre il catalogo attuale (~600)
-                j = _get(f"{base}/apps", {"os": "windows", "projectType": "port", "limit": 100, "cursor": cursor})
+                j = _get(f"{base}/apps", {"os": "windows", "limit": 100, "cursor": cursor})
                 items += j.get("items") or []
                 cursor = j.get("nextCursor") or ""
                 if j.get("isDone") or not cursor:
@@ -95,6 +100,8 @@ def cached(cache) -> dict | None:
     """Ultimo catalogo salvato, anche scaduto, senza rete."""
     if not _MEM.get("cat"):
         _MEM["cat"] = cache.kv_get("ports:catalog")
+        if (_MEM["cat"] or {}).get("v") != CATALOG_V:  # copia senza giochi/emulatori o senza tipo: si rilegge
+            _MEM["cat"] = None
     return _MEM["cat"]
 
 
@@ -104,7 +111,8 @@ def catalog(cache, force: bool = False) -> dict:
     if hit and not force and time.time() - hit.get("time", 0) < TTL:
         return hit
     try:
-        hit = {"time": time.time(), "items": [i for i in _fetch_catalog() if "windows" in (i.get("supportedOS") or [])]}
+        hit = {"v": CATALOG_V, "time": time.time(),
+               "items": [i for i in _fetch_catalog() if "windows" in (i.get("supportedOS") or [])]}
         cache.kv_set("ports:catalog", hit)
         _MEM["cat"] = hit
         return hit
@@ -147,9 +155,60 @@ def releases(provider: str, repo: str, token: str = "") -> list[dict]:
     base = "https://codeberg.org/api/v1" if provider == "codeberg" else "https://api.github.com"
     j = _get(f"{base}/repos/{repo}/releases", {"per_page": 10}, token)
     return [{"tag": r.get("tag_name") or "", "prerelease": bool(r.get("prerelease")), "url": r.get("html_url") or "",
-             "assets": [{"name": a.get("name") or "", "url": a.get("browser_download_url"), "size": a.get("size") or 0}
+             "assets": [{"name": a.get("name") or "", "url": a.get("browser_download_url"), "size": a.get("size") or 0,
+                         "sum": (a.get("digest") or "").removeprefix("sha256:").lower()}
                         for a in r.get("assets") or []]}
             for r in j if not r.get("draft")]
+
+
+def catalog_releases(cache, slug: str) -> list[dict]:
+    """Release del catalogo Quiver, con il checksum SHA-256 di ogni file: sono le stesse release «verificate»
+    che usa Quiver, quindi un download si puo' controllare. In cache 12 ore; [] se l'API non risponde."""
+    key = "ports:crel:" + slug
+    hit = cache.kv_get(key, max_age=RELEASE_TTL)
+    if hit is not None:
+        return hit
+    for base in API:
+        try:
+            j = _get(f"{base}/apps/{quote(slug, safe='')}/releases")
+        except (httpx.HTTPError, ValueError):
+            continue
+        out = []
+        for r in j.get("items") or []:
+            assets = [{"name": a.get("filename") or "", "url": a.get("url") or "", "size": a.get("size") or 0,
+                       "sum": (a.get("checksum") or "").removeprefix("sha256:").lower()}
+                      for a in r.get("assets") or [] if (a.get("os") or "") in ("windows", "any")]
+            if any(a["url"] for a in assets):
+                out.append({"tag": r.get("version") or "", "prerelease": bool(r.get("prerelease")), "url": "",
+                            "released": r.get("releasedAt") or 0, "assets": assets})
+        out.sort(key=lambda r: -r["released"])  # la piu' nuova per prima
+        cache.kv_set(key, out)
+        return out
+    return cache.kv_get(key) or []
+
+
+def pick_catalog_asset(assets: list[dict]) -> dict | None:
+    """File migliore tra quelli che il catalogo dichiara per Windows: x64, poi x86, poi ARM; zip prima di 7z/exe."""
+    def rank(a):
+        n = a["name"].lower()
+        arch = 0 if re.search(r"x64|amd64|x86[_-]64|win64", n) else \
+            1 if re.search(r"x86(?!_64)|win32", n) else 3 if "arm" in n else 2
+        ext = next((i for i, e in enumerate((".zip", ".7z", ".rar", ".exe", ".msi")) if n.endswith(e)), 5)
+        return arch, ext
+    return min(assets, key=rank) if assets else None
+
+
+def same_tag(a: str, b: str) -> bool:
+    """«V1» e «v1.0» sono tag diversi; «V1» e «v1» sono la stessa release."""
+    return bool(a) and bool(b) and a.strip().lstrip("vV").lower() == b.strip().lstrip("vV").lower()
+
+
+def verified_asset(cache, slug: str, tag: str, name_filter: str = "") -> dict | None:
+    """Il file della stessa release nel catalogo Quiver (con checksum SHA-256), se c'e'."""
+    for r in catalog_releases(cache, slug):
+        if same_tag(r["tag"], tag):
+            return pick_catalog_asset([a for a in r["assets"] if name_filter.lower() in a["name"].lower()])
+    return None
 
 
 # regole come PlatformAssetMatcher di Quiver: scarta iOS/console dedicate, simboli di debug, file accessori
@@ -157,17 +216,23 @@ def releases(provider: str, repo: str, token: str = "") -> list[dict]:
 _NON_WIN = ("linux", "macos", "osx", "darwin", "apple", ".deb", ".rpm", "appimage", "flatpak", ".dmg", ".pkg",
             "android", "arm64-v8a", ".apk", "switch")
 _WIN = ("windows", "win64", "win32", "win-x64", "win-x86", "-win.", "_win.", ".exe", ".msi", "msvc", "mingw")
-_DEVICE = re.compile(r"(?:^|[^a-z0-9])(?:ios|ipados|iphone|ipad|iphoneos|xbox|portmaster|stockos\d*|rg\d{2,3}[a-z0-9]*)"
+_DEVICE = re.compile(r"(?:^|[^a-z0-9])(?:ios|ipados|iphone|ipad|iphoneos|xbox(?:360)?|portmaster|stockos\d*|rg\d{2,3}[a-z0-9]*|"
+                     r"3ds|nds|gba|gbc|gcn|wiiu|wii|switch|psp|vita|ps[1-5]|n64|snes|saturn|dreamcast)"
                      r"(?:$|[^a-z0-9])|\.ipa(?:$|[._-])")
-_DEBUG = re.compile(r"(?:^|[._-])(?:pdb|symbols|debugsymbols|debug[._-]symbols)(?:$|[._-])")
+_DEBUG = re.compile(r"(?:^|[._-])(?:pdb|pdbs|symbols|debugsymbols|debug[._-]symbols)(?:$|[._-])")
+# archivi del codice sorgente o del solo server dedicato: non sono il gioco per Windows
+_SOURCE = re.compile(r"(?:^|[._-])(?:source|sources|src|srcdist|sourcecode)(?:$|[._-])|(?:^|[._-])dedicated(?:$|[._-])")
+# pacchetti che non sono il gioco: SDK, editor, documentazione, asset, ridistribuibili
+_EXTRA_PACK = re.compile(r"(?:^|[._-])(?:sdk|devkit|docs?|wiki|assets|template|convert[-_]kit|vc[_]?redist|redist)"
+                         r"(?:$|[._-])")
 _AUX = (".sha256", ".sha1", ".md5", ".sig", ".asc", ".txt", ".json", ".md", ".yml", ".blockmap")
 _ARCHIVES = (".zip", ".7z", ".rar")
 
 
 def is_windows_asset(name: str) -> bool:
     n = (name or "").lower()
-    if not n or _DEVICE.search(n) or _DEBUG.search(n) or n.endswith(_AUX) or any(m in n for m in _NON_WIN) \
-            or re.search(r"(?:^|[^a-z0-9])mac(?:$|[^a-z0-9])", n):
+    if not n or _DEVICE.search(n) or _DEBUG.search(n) or _SOURCE.search(n) or _EXTRA_PACK.search(n) \
+            or n.endswith(_AUX) or any(m in n for m in _NON_WIN) or re.search(r"(?:^|[^a-z0-9])mac(?:$|[^a-z0-9])", n):
         return False
     return any(m in n for m in _WIN) or bool(re.search(r"[_-]win[_-]|[_-]win\d|^win[_-]", n)) or n.endswith(_ARCHIVES)
 
@@ -213,6 +278,17 @@ def _download(url: str, dest: Path, progress=None, token: str = ""):
                     progress(done, total)
 
 
+def _7zip() -> str | None:
+    """7z.exe, se c'e': nel PATH (scoop, winget) o nella cartella standard di 7-Zip."""
+    exe = shutil.which("7z") or shutil.which("7za")
+    if exe:
+        return exe
+    for p in (r"C:\Program Files\7-Zip\7z.exe", r"C:\Program Files (x86)\7-Zip\7z.exe"):
+        if Path(p).is_file():
+            return p
+    return None
+
+
 def _extract(archive: Path, out: Path, name: str):
     out.mkdir(parents=True)
     n = name.lower()
@@ -223,11 +299,21 @@ def _extract(archive: Path, out: Path, name: str):
         with tarfile.open(archive) as t:
             t.extractall(out, filter="data")
     elif n.endswith((".7z", ".rar")):
-        # tar.exe di Windows (libarchive) legge 7z e rar: nessuna dipendenza in piu'
-        r = subprocess.run(["tar", "-xf", str(archive), "-C", str(out)], capture_output=True,
-                           creationflags=0x08000000 if sys.platform == "win32" else 0)
-        if r.returncode:
-            raise RuntimeError(f"estrazione di {name} non riuscita: {r.stderr.decode(errors='replace')[:200]}")
+        # tar.exe di Windows (libarchive) legge 7z e rar, ma alcune build non hanno il codec LZMA: in quel caso 7-Zip
+        flags = 0x08000000 if sys.platform == "win32" else 0
+        try:
+            r = subprocess.run(["tar", "-xf", str(archive), "-C", str(out)], capture_output=True, creationflags=flags)
+        except OSError:  # niente tar: si prova direttamente 7-Zip
+            r = None
+        if r is None or r.returncode:
+            seven = _7zip()
+            if not seven:
+                raise RuntimeError(f"estrazione di {name} non riuscita: serve 7-Zip per gli archivi .7z/.rar")
+            shutil.rmtree(out, ignore_errors=True)
+            out.mkdir(parents=True)
+            r = subprocess.run([seven, "x", "-y", f"-o{out}", str(archive)], capture_output=True, creationflags=flags)
+            if r.returncode:
+                raise RuntimeError(f"estrazione di {name} non riuscita: {r.stdout.decode(errors='replace')[-200:]}")
     else:  # .exe portatile o installer: si copia cosi' com'e'
         shutil.copy2(archive, out / name)
     # archivio con una sola cartella dentro: il contenuto sale di un livello
@@ -250,13 +336,29 @@ def _work(cfg, name: str) -> Path:
     return d
 
 
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for b in iter(lambda: f.read(1 << 20), b""):
+            h.update(b)
+    return h.hexdigest().lower()
+
+
 def _stage(cfg, asset: dict, folder_name: str, files_to_add: list[str], progress=None) -> tuple[Path, list[str]]:
-    """Scarica ed estrae l'asset in una cartella temporanea; ritorna (cartella, file della release)."""
+    """Scarica ed estrae l'asset in una cartella temporanea; ritorna (cartella, file della release).
+    Se la release dichiara il checksum SHA-256, un file diverso viene rifiutato."""
     work = _work(cfg, folder_name)
     arc = work / ("download" + "".join(Path(asset["name"]).suffixes[-2:]))
-    _download(asset["url"], arc, progress, _token(cfg))
-    staged = work / "files"
-    _extract(arc, staged, asset["name"])
+    try:
+        _download(asset["url"], arc, progress, _token(cfg))
+        want = (asset.get("sum") or "").lower()
+        if want and _sha256(arc) != want:
+            raise RuntimeError("il file scaricato non corrisponde al checksum della release: download rifiutato")
+        staged = work / "files"
+        _extract(arc, staged, asset["name"])
+    except Exception:
+        shutil.rmtree(work, ignore_errors=True)
+        raise
     arc.unlink()
     for f in files_to_add or []:  # es. portable.txt: il port salva i dati nella sua cartella
         p = _inside(staged, f)
@@ -330,11 +432,15 @@ def install(cfg, cache, slug: str, progress=None, say=print) -> dict:
         raise RuntimeError("il catalogo non indica il repository di questo port")
     launcher = e.get("launcher") or {}
     say(f"Cerco l'ultima release di {proj['repository']}…")
-    got = pick_release(releases(proj.get("provider"), proj["repository"], _token(cfg)), launcher.get("releaseAssetFilter") or "")
+    flt = launcher.get("releaseAssetFilter") or ""
+    got = pick_release(releases(proj.get("provider"), proj["repository"], _token(cfg)), flt)
     if not got:
         raise RuntimeError("nessun file per Windows nelle release del progetto")
     rel, asset = got
+    # stessa release nel catalogo Quiver: si scarica il suo file «verificato» (checksum SHA-256)
+    asset = verified_asset(cache, slug, rel["tag"], flt) or asset
     man = {"slug": slug, "name": e.get("name") or slug, "consoles": e.get("consoles") or [],
+           "type": e.get("projectType") or "port",
            "games": [g.get("title") for g in e.get("games") or [] if g.get("title")],
            "provider": proj.get("provider") or "github", "repository": proj["repository"],
            "art": e.get("libraryArt") or {}, "description": e.get("description") or "",
@@ -380,7 +486,7 @@ def deploy(cfg, folder_name: str, man: dict, rel: dict, asset: dict, progress=No
     cands = exe_candidates(folder, man.get("preferred"))
     exe = (old or {}).get("exe")
     man = {**(old or {}), **man, "version": rel["tag"], "release_url": rel["url"], "asset": asset["name"],
-           "files": files, "installed_at": time.time(),
+           "files": files, "installed_at": time.time(), "sha256": (asset.get("sum") or "").lower(),
            "exe": exe if exe in cands else (cands[0] if cands else ""), "skip": None}
     write_manifest(folder, man)
     say(f"Installato {man['name']} {rel['tag']}")
@@ -408,17 +514,33 @@ def add_folder(cfg, path: str, name: str = "", consoles: list[str] | None = None
     return {**man, "folder": str(folder), "candidates": cands}
 
 
-def add_repo(cfg, repo: str, name: str = "", consoles: list[str] | None = None, progress=None, say=print) -> dict:
-    """Port aggiunto a mano da un repository qualsiasi (utente/repo, GitHub)."""
-    repo = re.sub(r"^https?://github\.com/|\.git$|/$", "", repo.strip())
-    if not re.fullmatch(r"[\w.-]+/[\w.-]+", repo):
-        raise ValueError("scrivi il repository come utente/progetto")
-    got = pick_release(releases("github", repo, _token(cfg)))
+def split_repo(repo: str, provider: str = "github") -> tuple[str, str]:
+    """'utente/progetto', 'gitlab:utente/progetto' o un indirizzo completo -> (provider, utente/progetto)."""
+    r = (repo or "").strip()
+    m = re.match(r"https?://(gitlab\.com|github\.com|codeberg\.org)/(.+?)(?:\.git)?/?$", r)
+    if m:
+        provider, r = {"gitlab.com": "gitlab", "github.com": "github", "codeberg.org": "codeberg"}[m.group(1)], m.group(2)
+    else:
+        m = re.match(r"(github|gitlab|codeberg)\s*:\s*(.+)", r, re.I)
+        if m:
+            provider, r = m.group(1).lower(), m.group(2)
+    r = r.strip("/")
+    r = r[:-4] if r.endswith(".git") else r
+    if not re.fullmatch(r"[\w.-]+(?:/[\w.-]+)+", r):
+        raise ValueError("scrivi il repository come utente/progetto (anche gitlab:utente/progetto)")
+    return provider, r
+
+
+def add_repo(cfg, repo: str, name: str = "", consoles: list[str] | None = None, progress=None, say=print,
+             provider: str = "github") -> dict:
+    """Port o app aggiunti a mano da un repository qualsiasi (GitHub, GitLab, Codeberg)."""
+    provider, repo = split_repo(repo, provider)
+    got = pick_release(releases(provider, repo, _token(cfg)))
     if not got:
         raise RuntimeError("nessun file per Windows nelle release del progetto")
-    name = name or repo.split("/")[1]
+    name = name or repo.split("/")[-1]
     man = {"slug": "manual-" + re.sub(r"[^a-z0-9]+", "-", repo.lower()).strip("-"), "name": name,
-           "consoles": consoles or [], "games": [name], "provider": "github", "repository": repo, "manual": True}
+           "consoles": consoles or [], "games": [name], "provider": provider, "repository": repo, "manual": True}
     return deploy(cfg, re.sub(r"[^\w.-]+", "-", repo.replace("/", "-")), man, *got, progress=progress, say=say)
 
 
@@ -491,6 +613,25 @@ def update_info(cache, man: dict, token: str = "", force: bool = False, offline:
     tag = lt.get("tag") or ""
     newer = bool(tag) and tag != man.get("version") and tag != man.get("skip")
     return {"latest": tag, "latest_url": lt.get("url") or "", "update": newer}
+
+
+def update_all(cfg, cache, token: str = "", say=print) -> list[str]:
+    """Aggiorna da sola le voci installate con una versione nuova (quelle saltate restano ferme).
+    E' il «patch in casa»: la patch la installa il launcher, senza aprire quello del gioco."""
+    done = []
+    for slug, m in all_installed(cfg).items():
+        if not update_info(cache, m, token)["update"]:  # cache di 12 ore: nessuna raffica di richieste
+            continue
+        try:
+            if m.get("manual"):
+                add_repo(cfg, m["repository"], m.get("name", ""), m.get("consoles"), say=say,
+                         provider=m.get("provider") or "github")
+            else:
+                install(cfg, cache, slug, say=say)
+            done.append(slug)
+        except Exception as e:  # una voce che non si aggiorna (cartella in uso, rete) non ferma le altre
+            say(f"{slug}: aggiornamento non riuscito ({type(e).__name__}: {e})")
+    return done
 
 
 # ---------------------------------------------------------------- ROM della libreria (8.4, 8.6)
