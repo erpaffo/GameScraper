@@ -109,8 +109,22 @@ libreria), **Installati**, **Da aggiornare**. La scheda di una ROM mostra **Disp
 - **Aggiorna tutto** (e l'opzione **Aggiorna da solo** nelle impostazioni della pagina) installa le versioni nuove
   dal launcher: le patch non richiedono di aprire altri programmi.
 - Se il port ha più eseguibili si sceglie quale avviare, e la scelta resta ricordata.
+- Al primo **Gioca** si sceglie come aprire la finestra: **Finestra**, **Senza bordi** (grande quanto lo schermo) o
+  **Schermo intero** (Alt+Invio al gioco; se non lo supporta, senza bordi). Con **Ricorda la scelta** non viene più
+  chiesto: la modalità si cambia dal menu **Finestra all'avvio** nella pagina del port («Chiedi ogni volta» per
+  tornare alla domanda). Pozzo privilegia i processi figli; per gli altri processi root aspetta 5 secondi che
+  avviino il gioco e applica la modalità solo dopo che la finestra è stabile. Esplora file, i launcher riconoscibili
+  e le finestre standard di selezione ROM non vengono modificati.
 - **Disinstalla** sposta la cartella nel Cestino.
+- **Percorso troppo lungo**: alcuni port (SMS Launcher) compilano il gioco dentro la propria cartella e Windows non
+  apre i file oltre un certo numero di caratteri di percorso, quindi il gioco non parte. Pozzo tiene il percorso
+  corto da solo: se `Ports\<cartella>` sarebbe troppo lungo il port si installa in una cartella breve
+  (`C:\PozzoPorts\<cartella>`, altrimenti la prima scrivibile fra le altre unità e `Public`), e un port già
+  installato si sposta con **📦 Sposta in una cartella breve** dalla sua scheda, che spiega il motivo e chiede
+  conferma. Salvataggi e impostazioni vengono copiati e la cartella di prima resta in `Ports\.backup`; gli
+  aggiornamenti successivi restano nella cartella breve. La cartella breve si cambia dal ⚙ dei port.
 - **Aggiungi a mano**: da un repository GitHub (`utente/progetto`) o da una cartella già scaricata.
+
 
 ### ROM richiesta
 

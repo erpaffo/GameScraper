@@ -46,6 +46,11 @@ UA = {"User-Agent": f"PozzoLauncher/{__version__} (+https://github.com/erpaffo/P
 CONSOLES = {"gcn": "gc", "ps1": "psx", "og xbox": "xbox", "x360": "xbox360", "gen": "megadrive", "sms": "mastersystem",
             "gg": "gamegear", "32x": "sega32x", "vb": "virtualboy", "ami": "amiga"}
 MOD_META = {"manifest.json", "icon.png", "readme.md", "changelog.md", "license", "license.md", "license.txt"}
+# Port che compilano il gioco dentro la propria cartella: il percorso deve restare corto, altrimenti il
+# compilatore di Windows non apre i file. Il limite e' la lunghezza massima della cartella del port:
+# SMS Launcher costruisce "SMS-Launcher-Portable" accanto all'exe e si ferma a 92 caratteri (0.1.68).
+# shortcut: limiti scritti a mano, da rivedere se il port cambia; il catalogo non li dichiara.
+SHORT_PATH = {"chasem-dev/sms-launcher": 70}
 
 
 def platform_of(console: str) -> str | None:
@@ -57,6 +62,48 @@ def ports_dir(cfg) -> Path:
     d = Path(cfg.app.get("ports_dir") or C.settings_path(cfg).parent / "Ports")
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def short_dir(cfg) -> Path:
+    """Cartella breve per i port che compilano sul posto: la prima scrivibile tra quelle predefinite
+    (C:\\PozzoPorts spesso non si puo' creare senza permessi da amministratore)."""
+    if cfg.app.get("ports_short_dir"):
+        d = Path(cfg.app["ports_short_dir"])
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+    public = Path(os.environ.get("PUBLIC") or Path.home() / "Public")
+    for d in [Path("C:/PozzoPorts"), *(Path(f"{x}:/PozzoPorts") for x in "DEFGH"), public / "PozzoPorts"]:
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            probe = d / ".scrivibile"
+            probe.touch()
+            probe.unlink()
+            return d
+        except OSError:
+            continue
+    raise RuntimeError("Non trovo una cartella breve scrivibile per questo port: indicala nelle impostazioni dei port")
+
+
+def path_problem(cfg, man: dict) -> dict | None:
+    """Percorso troppo lungo per un port che compila dentro la sua cartella: {folder, length, limit, short}."""
+    limit = SHORT_PATH.get((man.get("repository") or "").lower())
+    if sys.platform != "win32" or not limit:
+        return None
+    folder = str(man.get("folder") or "")
+    if not folder or len(folder) <= limit:
+        return None
+    try:
+        short = str(short_dir(cfg) / Path(folder).name)
+    except (RuntimeError, OSError):
+        short = ""
+    return {"folder": folder, "length": len(folder), "limit": limit, "short": short if len(short) <= limit else ""}
+
+
+def _link_port(cfg, slug: str, folder: Path):
+    """Ricorda un port installato fuori dalla cartella Ports (installed() guarda solo dentro Ports)."""
+    links = dict(cfg.app.get("port_links") or {})
+    links[slug] = str(folder)
+    C.save_settings(cfg, app={"port_links": links})
 
 
 def _token(cfg) -> str:
@@ -451,10 +498,75 @@ def install(cfg, cache, slug: str, progress=None, say=print) -> dict:
     return deploy(cfg, launcher.get("folderName") or slug, man, rel, asset, progress, say)
 
 
+def _target(cfg, folder_name: str, slug: str, repository: str = "") -> Path:
+    """Cartella del port: quella gia' scelta (anche fuori da Ports) o una breve, se il percorso predefinito
+    supera il limite dei port che compilano dentro la propria cartella."""
+    linked = (cfg.app.get("port_links") or {}).get(slug)
+    if linked:
+        return Path(linked)
+    folder = _inside(ports_dir(cfg), folder_name)
+    limit = SHORT_PATH.get((repository or "").lower())
+    if not limit or sys.platform != "win32" or len(str(folder)) <= limit:
+        return folder
+    short = short_dir(cfg) / folder.name
+    if len(str(short)) > limit:
+        raise RuntimeError(f"Il percorso e' troppo lungo per questo port (al massimo {limit} caratteri): "
+                           f"scegli una cartella dei port piu' corta nelle impostazioni")
+    return short
+
+
+def _running(folder: Path) -> bool:
+    """Un processo sta usando la cartella del port (il launcher o il gioco)."""
+    try:
+        import psutil
+    except ImportError:
+        return False
+    root = os.path.normcase(str(folder.resolve())) + os.sep
+    for p in psutil.process_iter(["exe"]):
+        exe = p.info.get("exe") or ""
+        if exe and os.path.normcase(exe).startswith(root):
+            return True
+    return False
+
+
+def move_short(cfg, slug: str, say=print) -> dict:
+    """Sposta un port gia' installato in una cartella breve, con i file dell'utente (salvataggi, configurazione);
+    la cartella di prima resta in Ports\\.backup come copia di sicurezza."""
+    man = all_installed(cfg).get(slug)
+    if not man:
+        raise KeyError(slug)
+    folder = Path(man["folder"])
+    if folder.parent.resolve() != ports_dir(cfg).resolve():
+        raise RuntimeError("Il port e' gia' fuori dalla cartella dei port: spostalo a mano")
+    if _running(folder):
+        raise RuntimeError("Chiudi il gioco e il suo launcher prima di spostare il port")
+    dst = short_dir(cfg) / folder.name
+    if dst.exists():
+        raise RuntimeError(f"La cartella {dst} esiste gia': liberala o cambia la cartella breve nelle impostazioni dei port")
+    limit = SHORT_PATH.get((man.get("repository") or "").lower())
+    if limit and len(str(dst)) > limit:
+        raise RuntimeError(f"Il percorso {dst} e' ancora troppo lungo ({len(str(dst))} caratteri, il massimo per "
+                           f"questo port e' {limit}): scegli una cartella breve piu' corta nelle impostazioni")
+    say(f"Questo port non sta in un percorso cosi' lungo: lo sposto in {dst}")
+    shutil.copytree(folder, dst, symlinks=True)
+    bak = ports_dir(cfg) / ".backup" / (folder.name + "-percorso-lungo")
+    bak.parent.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(bak, ignore_errors=True)
+    try:
+        folder.rename(bak)
+    except OSError:
+        shutil.rmtree(dst, ignore_errors=True)
+        raise RuntimeError("la cartella del port e' in uso: chiudi il gioco e riprova")
+    _link_port(cfg, slug, dst)
+    write_manifest(dst, {**{k: v for k, v in man.items() if k != "folder"}, "short_path": True})
+    say(f"Port in {dst}; la cartella di prima e' in {bak}")
+    return {**man, "folder": str(dst)}
+
+
 def deploy(cfg, folder_name: str, man: dict, rel: dict, asset: dict, progress=None, say=print) -> dict:
     """Mette la release nella cartella del port. Se il port c'e' gia': copia di sicurezza della cartella
     (Ports\\.backup\\<cartella>, una sola) e i file dell'utente passano alla versione nuova."""
-    folder = _inside(ports_dir(cfg), folder_name)
+    folder = _target(cfg, folder_name, man.get("slug") or "", man.get("repository") or "")
     say(f"Scarico {asset['name']}…")
     staged, files = _stage(cfg, asset, folder.name, man.get("files_to_add"), progress)
     old = read_manifest(folder) if folder.exists() else None
@@ -487,8 +599,13 @@ def deploy(cfg, folder_name: str, man: dict, rel: dict, asset: dict, progress=No
     exe = (old or {}).get("exe")
     man = {**(old or {}), **man, "version": rel["tag"], "release_url": rel["url"], "asset": asset["name"],
            "files": files, "installed_at": time.time(), "sha256": (asset.get("sum") or "").lower(),
+           "short_path": folder.parent.resolve() != ports_dir(cfg).resolve() or bool((old or {}).get("short_path")),
            "exe": exe if exe in cands else (cands[0] if cands else ""), "skip": None}
     write_manifest(folder, man)
+    if folder.parent.resolve() != ports_dir(cfg).resolve():
+        # cartella breve per un port che compila sul posto: la libreria la trova da qui
+        _link_port(cfg, man["slug"], folder)
+        say(f"Cartella del port fuori da Ports, in un percorso breve: {folder}")
     say(f"Installato {man['name']} {rel['tag']}")
     return {**man, "folder": str(folder), "candidates": cands}
 
@@ -506,10 +623,7 @@ def add_folder(cfg, path: str, name: str = "", consoles: list[str] | None = None
            "games": [name or folder.name], "provider": "github", "repository": repo, "manual": True,
            "exe": cands[0], "installed_at": time.time()}
     if folder.parent.resolve() != ports_dir(cfg).resolve():
-        # fuori dalla cartella Ports: si ricorda dove sta (installed() guarda solo dentro Ports)
-        links = dict(cfg.app.get("port_links") or {})
-        links[slug] = str(folder)
-        C.save_settings(cfg, app={"port_links": links})
+        _link_port(cfg, slug, folder)  # fuori dalla cartella Ports: si ricorda dove sta
     write_manifest(folder, man)
     return {**man, "folder": str(folder), "candidates": cands}
 
@@ -554,6 +668,21 @@ def all_installed(cfg) -> dict[str, dict]:
     return out
 
 
+WINDOW_MODES = ("windowed", "borderless", "fullscreen")
+
+
+def window_mode(cfg, slug: str, body: dict) -> str | None:
+    """Modalita' della finestra per l'avvio: quella scelta adesso (salvata nel manifesto con «remember»),
+    altrimenti quella salvata; None = va chiesta all'utente."""
+    mode = body.get("window")
+    if mode in WINDOW_MODES:
+        if body.get("remember"):
+            set_manifest(cfg, slug, window=mode)
+        return mode
+    m = all_installed(cfg).get(slug) or {}
+    return m.get("window") if m.get("window") in WINDOW_MODES else None
+
+
 def set_manifest(cfg, slug: str, **values) -> dict:
     m = all_installed(cfg).get(slug)
     if not m:
@@ -571,12 +700,14 @@ def uninstall(cfg, slug: str):
         raise KeyError(slug)
     folder = Path(m["folder"])
     links = dict(cfg.app.get("port_links") or {})
-    if slug in links:  # aggiunto a mano da un'altra cartella: si toglie solo dalla libreria, il disco resta com'e'
+    if slug in links:  # fuori dalla cartella Ports
         links.pop(slug)
         C.save_settings(cfg, app={"port_links": links or None})
-        (folder / MANIFEST).unlink(missing_ok=True)
-        return
-    _inside(ports_dir(cfg), folder.name)
+        if not m.get("short_path"):  # aggiunto a mano da un'altra cartella: il disco resta com'e'
+            (folder / MANIFEST).unlink(missing_ok=True)
+            return
+    else:
+        _inside(ports_dir(cfg), folder.name)
     if sys.platform == "win32":
         r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command",
                             "Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::"

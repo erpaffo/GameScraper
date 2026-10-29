@@ -573,6 +573,11 @@ def _catalog_entries(cfg, cache, merged: dict) -> tuple[list[dict], dict]:
             # Solo per le schede di gioco (type_a/type_b/type_c): i file hanno gia' i loro metadati.
             if not is_file_list:
                 apply_store_meta(e, meta)
+            # dati offline (LaunchBox/TheGamesDB) cercati dal pulsante "Metadati store": riempiono solo i vuoti
+            off = cache.kv_get("storemeta:" + e["key"]) or {}
+            apply_store_meta(e, off)
+            if off.get("rating") and not e["ratings"]:
+                e["ratings"] = combine({"launchbox": off["rating"]})
             e["sources"] = [source]
             by_title[key] = e
             out.append(e)
@@ -615,15 +620,15 @@ def _attach_updates(updates: list[dict], entries: list[dict], owned_title_key: d
 
 def _dlc_by_size(entries: list[dict]) -> int:
     """«Gioco - Qualcosa» che pesa meno di un terzo del gioco omonimo: quasi sempre una DLC senza le
-    parole chiave nel nome (nei cataloghi console il tipo non esiste). Regola di conferma, mai da sola:
-    serve il gioco base nella stessa lista."""
+    parole chiave nel nome (nei cataloghi console il tipo non esiste). Solo su console con DLC/patch storiche;
+    regola di conferma, mai da sola: serve il gioco base nella stessa lista."""
     base: dict[tuple[str, str], int] = {}
     for e in entries:
-        if e["content"] == "game" and e.get("size"):
+        if e["pid"] in storekind.DLC_SIZE_PLATFORMS and e["content"] == "game" and e.get("size"):
             base.setdefault((e["pid"], normalize(e["title"])), e["size"])
     n = 0
     for e in entries:
-        if e["content"] != "game" or not e.get("size"):
+        if e["pid"] not in storekind.DLC_SIZE_PLATFORMS or e["content"] != "game" or not e.get("size"):
             continue
         for sep in (" - ", " – ", ":"):
             i = e["title"].find(sep)

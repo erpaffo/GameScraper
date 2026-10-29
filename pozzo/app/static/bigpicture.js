@@ -427,7 +427,7 @@ function lookScreen() {
 
 
 /* ---- Store: giochi da installare da tutti gli store; X = store, Y = ordine, LT/RT (Q/E) = dimensione/piattaforma */
-function shopScreen(f = store.get("bpShopF", { src: "", plat: "", size: "", sort: "title" }), i = 0) {
+function shopScreen(f = store.get("bpShopF", { src: "", plat: "", size: "", sort: "title", hideDlc: false }), i = 0) {
   const all = shopGames(BP.lib.games);
   const items = shopFilter(all, f);
   const srcs = [{ id: "", label: "Tutti gli store" }].concat(shopSources(all, BP.lib.stores, platName));
@@ -439,14 +439,16 @@ function shopScreen(f = store.get("bpShopF", { src: "", plat: "", size: "", sort
     + chip("x", (srcs.find((s) => s.id === f.src) || srcs[0]).label)
     + chip("y", (SHOP_SORTS.find((s) => s.id === f.sort) || SHOP_SORTS[0]).label)
     + chip("lt", (SHOP_SIZES.find((s) => s.id === (f.size || "")) || SHOP_SIZES[0]).label)
-    + chip("rt", f.plat ? platName(f.plat) : "Tutte le piattaforme") + `</div>`;
+    + chip("rt", f.plat ? platName(f.plat) : "Tutte le piattaforme")
+    + chip("start", f.hideDlc ? "DLC escluse" : "DLC incluse") + `</div>`;
   const scr = gridScreen("Store", items, "shop", { head });
   scr.i = Math.min(i, Math.max(0, items.length - 1));
   scr.fav = () => redo({ ...f, src: cycle(srcs, f.src, (s) => s.id).id });
   scr.alt = () => redo({ ...f, sort: cycle(SHOP_SORTS, f.sort || "title", (s) => s.id).id });
   scr.lt = () => redo({ ...f, size: cycle(SHOP_SIZES, f.size || "", (s) => s.id).id });
   scr.rt = () => redo({ ...f, plat: cycle(plats, f.plat || "") });
-  scr.hints = [["a", "Apri"], ["b", "Indietro"], ["x", "Store"], ["y", "Ordine"], ["lt", "Peso"], ["rt", "Piattaforma"]];
+  scr.start = () => redo({ ...f, hideDlc: !f.hideDlc });
+  scr.hints = [["a", "Apri"], ["b", "Indietro"], ["x", "Store"], ["y", "Ordine"], ["lt", "Peso"], ["rt", "Piattaforma"], ["start", "DLC"]];
   return scr;
 }
 
@@ -751,8 +753,16 @@ async function installGame(d) {
   toast(`Apro ${d.store_name} per installare «${d.title}»`);
 }
 
-async function playGame(d) {
-  try { await api(`/api/game/${d.id}/play`, { body: {} }); } catch (e) { beep("err"); return toast(e.message, true); }
+async function playGame(d, body = {}) {
+  let r;
+  try { r = await api(`/api/game/${d.id}/play`, { body }); } catch (e) { beep("err"); return toast(e.message, true); }
+  if (r.ask) { // port senza modalità salvata: si sceglie qui, «ricorda» la salva nel port
+    const modes = { windowed: "Finestra", borderless: "Senza bordi", fullscreen: "Schermo intero" };
+    const items = [false, true].flatMap((remember) => Object.entries(modes).map(([k, l]) => ({
+      label: l, sub: remember ? "e ricorda la scelta" : "solo questa volta", key: k + remember,
+      ok: () => { pop(); playGame(d, { window: k, remember }); } })));
+    return push(gridScreen("Come aprire il gioco?", items, cur().tab, { text: true, unit: "opzioni" }));
+  }
   beep("ok");
   BP.running = { id: d.id, title: d.title };
   showRunning("Avvio…");
@@ -832,6 +842,7 @@ function input(action) {
     case "y": if (s.alt) s.alt(); else { push(searchScreen()); beep("ok"); } break;
     case "lt": if (s.lt) s.lt(); else s.jump?.(-1); break;
     case "rt": if (s.rt) s.rt(); else s.jump?.(1); break;
+    case "start": s.start?.(); break;
     case "lb": stepTab(-1); break;
     case "rb": stepTab(1); break;
     default: break;
@@ -840,7 +851,7 @@ function input(action) {
 
 document.addEventListener("keydown", (e) => {
   const map = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down", Enter: "a", Escape: "b",
-    PageUp: "lt", PageDown: "rt", "/": "y", q: "lb", Q: "lb", e: "rb", E: "rb", " ": "a" };
+    PageUp: "lt", PageDown: "rt", "/": "y", q: "lb", Q: "lb", e: "rb", E: "rb", s: "start", S: "start", " ": "a" };
   const s = cur();
   if (s.typed && (e.key.length === 1 && /[\p{L}\p{N} ]/u.test(e.key) || e.key === "Backspace")) { e.preventDefault(); s.typed(e.key); return; }
   if (e.key === "Backspace") { e.preventDefault(); input("b"); return; }
@@ -905,7 +916,7 @@ function pollPads(ts) {
     const b = (i) => !!p.buttons[i]?.pressed;
     const ax = p.axes[0] || 0, ay = p.axes[1] || 0;
     const dirs = { left: b(14) || ax < -0.55, right: b(15) || ax > 0.55, up: b(12) || ay < -0.55, down: b(13) || ay > 0.55,
-      a: b(0), b: b(1), x: b(2), y: b(3), lb: b(4), rb: b(5), lt: b(6), rt: b(7) };
+      a: b(0), b: b(1), x: b(2), y: b(3), lb: b(4), rb: b(5), lt: b(6), rt: b(7), start: b(9) };
     for (const [k, on] of Object.entries(dirs)) {
       const rep = ["left", "right", "up", "down", "lt", "rt"].includes(k);
       if (on && !padState.held[k]) { padState.held[k] = true; padState.next[k] = ts + 380; input(k); }

@@ -6,6 +6,8 @@ Esegui: python tests/test_launcher.py
 import os
 import sys
 import tempfile
+from types import SimpleNamespace
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -67,6 +69,31 @@ class FakeUser:
 
     def mark_started(self, key):
         pass
+
+
+def test_window_process_tree():
+    class Process:
+        children_by_pid = {10: [11, 12, 14], 11: [13], 12: [], 13: [], 14: [15], 15: [],
+                           20: [21], 21: []}
+        names_by_pid = {10: "game.exe", 11: "launcher.exe", 12: "helper.exe", 13: "game-renderer.exe",
+                        14: "explorer.exe", 15: "explorer-child.exe", 20: "custom-launcher.exe",
+                        21: "game.exe"}
+
+        def __init__(self, pid):
+            self.pid = pid
+
+        def children(self):
+            return [Process(pid) for pid in self.children_by_pid[self.pid]]
+
+        def name(self):
+            return self.names_by_pid[self.pid]
+
+    fake_psutil = SimpleNamespace(Error=RuntimeError, Process=Process)
+    with patch.dict(sys.modules, {"psutil": fake_psutil}):
+        assert L._process_tree(10) == {10: 0, 11: 1, 12: 1, 13: 2}
+        assert L._process_tree(14) == {}
+        assert L._process_tree(20) == {21: 1}
+    print("ok  modalità finestra limitata al processo avviato e ai suoi figli")
 
 
 def test_scripts_and_close_launcher(tmp: Path):
@@ -243,6 +270,7 @@ def test_battlenet_launch_non_aspetta_il_launcher(tmp_path: Path):
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_eden_plan_and_command(Path(t))
+    test_window_process_tree()
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_scripts_and_close_launcher(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
@@ -254,4 +282,3 @@ if __name__ == "__main__":
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_shortcut(Path(t))
     print("TUTTI I TEST OK")
-

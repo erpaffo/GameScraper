@@ -46,6 +46,10 @@ Nella stessa finestra:
 - **Stesso gioco da più fonti**: se due siti offrono lo stesso gioco, anche con nomi leggermente diversi, la libreria
   mostra **una sola scheda** con la pagina di ogni fonte («🌐 nxbrew.net ↗», «🌐 ziperto.com ↗») e il pulsante Torrent
   quando c'è un link magnet **per il singolo file**.
+- **DLC e aggiornamenti**: il tipo dichiarato dallo store, le indicazioni nel titolo o nel nome del file e, per
+  Switch, il Title ID distinguono DLC, aggiornamenti e giochi base. Il peso può confermare una DLC solo se il catalogo
+  contiene anche il gioco base e la console supporta contenuti scaricabili; gli aggiornamenti vengono associati al
+  gioco base. Nella pagina **🛒 Store**, **Escludi DLC** nasconde o mostra le DLC riconosciute.
 - **⬇ Scarica** apre direttamente i file elencati nella pagina del gioco, non la pagina dello store. La scheda
   mostra tutti i link disponibili, uno per provider, divisi per tipo: **gioco** (anche a parti: «Part 2», «Part 3»),
   **aggiornamento**, **DLC/espansioni** e le eventuali **versioni in altre lingue**. Il pulsante grande apre un link
@@ -77,6 +81,13 @@ le schede, con due barre di avanzamento (copertine e descrizioni) e un pulsante 
 
 Il lavoro già fatto resta in cache (60 giorni): ogni esecuzione riprende da dove era rimasta. Gli elenchi di file
 (formato `filelist`) sono esclusi: i loro dati arrivano dallo scraping normale.
+
+### Metadati offline degli store
+
+**Metadati store** (LaunchBox e TheGamesDB, solo copie locali: nessuna API, nessun token) cerca descrizione, sviluppatore,
+editore, generi, giocatori, data e voto non solo per i giochi degli store PC ma anche per i giochi degli store online
+delle console. La ricerca resta nella piattaforma dello store (una voce Switch non si confonde con quella PC), salta
+DLC e aggiornamenti e riempie solo i campi ancora vuoti: i dati gi? presi dalle pagine dei siti non vengono sovrascritti.
 
 ## Formati di pagina riconosciuti
 

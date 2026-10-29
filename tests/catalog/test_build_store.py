@@ -201,6 +201,19 @@ def test_content_kind():
     print("ok  tipo del contenuto: gioco, DLC/add-on, extra, aggiornamento (anche dal Title ID di Switch)")
 
 
+def test_dlc_size_platforms():
+    gb = 1024 ** 3
+    entries = [
+        {"pid": "switch", "title": "Gioco", "size": 8 * gb, "content": "game"},
+        {"pid": "switch", "title": "Gioco - Pack", "size": gb, "content": "game"},
+        {"pid": "gba", "title": "Altro", "size": 8 * gb, "content": "game"},
+        {"pid": "gba", "title": "Altro - Pack", "size": gb, "content": "game"},
+    ]
+    assert B._dlc_by_size(entries) == 1
+    assert [e["content"] for e in entries] == ["game", "dlc", "game", "game"], entries
+    print("ok  confronto dei pesi limitato alle console con DLC/patch storiche")
+
+
 def test_updates_and_dlc(tmp_path):
     """Gli aggiornamenti non diventano riquadri: sono un download «⬆» del gioco base. Le DLC restano voci
     con il loro tipo (colonna content), riconosciute dal nome o, solo in conferma, dal peso."""
@@ -297,11 +310,40 @@ def test_steam_kinds():
     print("ok  Steam: tipo dichiarato dallo store (gioco/DLC/software), richieste a blocchi di 250")
 
 
+def test_console_store_offline_meta(tmp_path, monkeypatch=None):
+    """?Metadati store? include gli store delle console: ricerca per la loro piattaforma, senza sovrascrivere."""
+    from pozzo.stores import meta as M
+    (tmp_path / "roms").mkdir()
+    (tmp_path / "config.toml").write_text('[paths]\nroms = "roms"\ncache = "cache"\n[scrape]\nsources = []\n',
+                                          encoding="utf-8")
+    cfg = config.load(tmp_path / "config.toml")
+    cfg.catalogs = {"switch": [URL]}
+    cfg.catalog_options = {"switch": {"type": "type_b"}}
+    cache = Cache(cfg.cache)
+    cache.kv_set(f"catalog:type_b:{URL}",
+                 {"url": URL, "index_url": URL, "pid": "switch", "time": time.time(),
+                  "entries": [{"name": "Gioco Uno Switch NSP", "size": None, "url": "https://example-b.test/uno/",
+                               "magnet": None, "group": "G"},
+                              {"name": "Gioco Due Switch NSP", "size": None, "url": "https://example-b.test/due/",
+                               "magnet": None, "group": "G"}]})
+    items = M._console_items(cfg, cache)
+    assert [(p, t) for _k, p, t in items] == [("switch", "Gioco Uno"), ("switch", "Gioco Due")], items
+    uno = items[0][0]
+    cache.kv_set("storemeta:" + uno, {"found": True, "description": "Offline", "developer": "Dev Offline",
+                                      "rating": {"rating": 0.8, "rating_count": 10}})
+    storemeta.put(cache, "https://example-b.test/uno/", {"description": "Dalla pagina"}, "page")
+    e = {e["title"]: e for e in B._catalog_entries(cfg, cache, {})[0]}["Gioco Uno"]
+    assert e["description"] == "Dalla pagina" and e["developer"] == "Dev Offline", e  # nessuna sovrascrittura
+    assert e["ratings"], e
+    cache.close()
+
+
 if __name__ == "__main__":
     import tempfile
     from pathlib import Path
     test_store_title()
     test_content_kind()
+    test_dlc_size_platforms()
     test_steam_kinds()
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_updates_and_dlc(Path(t))
@@ -317,4 +359,6 @@ if __name__ == "__main__":
         test_owned_game_keeps_store_page(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_library_has_store_pages(Path(t))
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_console_store_offline_meta(Path(t))
     print("TUTTI I TEST OK")

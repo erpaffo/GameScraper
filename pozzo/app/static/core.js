@@ -79,7 +79,8 @@ function shopSources(items, stores, platName) {
 
 function shopFilter(items, f) {
   const size = SHOP_SIZES.find((s) => s.id === (f.size || "")) || SHOP_SIZES[0];
-  let it = items.filter((g) => (!f.src || shopSource(g) === f.src) && (!f.plat || g.platform === f.plat) && size.ok(g));
+  let it = items.filter((g) => g.content !== "update" && (!f.hideDlc || g.content !== "dlc")
+    && (!f.src || shopSource(g) === f.src) && (!f.plat || g.platform === f.plat) && size.ok(g));
   // una sola copia per gioco (la principale se rispetta i filtri)
   const one = new Map();
   for (const g of it) if (!one.has(g.gi) || g.id === g.grp.primary) one.set(g.gi, g);

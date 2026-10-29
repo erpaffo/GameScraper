@@ -17,7 +17,7 @@ const S = {
   instFilter: store.get("instFilter", "all"), stores: [],
   allLocal: store.get("allLocal", false), // Tutti i giochi: solo quelli presenti sul PC, divisi per console
   disc: store.get("disc", { preset: "", genre: "", decade: "" }),
-  shopF: store.get("shopF", { src: "", plat: "", size: "" }), shop: [], shopIds: new Set(),
+  shopF: store.get("shopF", { src: "", plat: "", size: "", hideDlc: false }), shop: [], shopIds: new Set(),
 };
 
 // prima i giochi posseduti (pochi, subito), poi in sottofondo il catalogo degli store online
@@ -619,7 +619,9 @@ function updateHeader() {
     : S.view.type === "store"
       ? `<button class="icon-btn" id="plat-scan" title="Rilegge ${S.view.id === "all" ? "gli store PC" : "questo store"} e i giochi aggiunti a mano: i giochi nuovi compaiono subito">⟳ Cerca nuovi giochi</button>`
     : S.view.type === "shop"
-      ? `<button class="btn smeta-btn" id="smeta-open" title="Cerca descrizioni, generi, giocatori e valutazioni dei giochi degli store SOLO nei database offline (LaunchBox, TheGamesDB): nessuna richiesta online">📚 Scraping metadati store <span class="pill">offline</span></button>`
+      ? `<button class="icon-btn${S.shopF.hideDlc ? " on" : ""}" id="shop-hide-dlc" title="Esclude le voci classificate come DLC">`
+        + `${S.shopF.hideDlc ? "✓ DLC escluse" : "⊘ Escludi DLC"}</button>`
+        + `<button class="btn smeta-btn" id="smeta-open" title="Cerca descrizioni, generi, giocatori e valutazioni dei giochi degli store SOLO nei database offline (LaunchBox, TheGamesDB): nessuna richiesta online">📚 Scraping metadati store <span class="pill">offline</span></button>`
     : S.view.type === "platform" && S.view.id !== "windows"
       ? `<label class="icon-btn" title="Nascondi DLC, temi e avatar di questa console: le DLC restano comunque tra i download del gioco base">`
         + `<input type="checkbox" id="hide-dlc"${S.hideDlc?.has(S.view.id) ? " checked" : ""}> Nascondi DLC</label>`
@@ -1236,9 +1238,20 @@ function pickCollection(anchor, gameId, current) {
 }
 
 /* ------------------------------------------------------------------ avvio giochi */
-async function play(id) {
-  try { await api(`/api/game/${id}/play`, { body: {} }); } catch (e) { return toast(e.message, true); }
+async function play(id, body = {}) {
+  let r;
+  try { r = await api(`/api/game/${id}/play`, { body }); } catch (e) { return toast(e.message, true); }
+  if (r.ask) { const w = await askWindow(); return w && play(id, w); }
   pollRunning();
+}
+
+/** Port senza modalità salvata: {window, remember} scelti dall'utente, null se chiude. */
+function askWindow() {
+  const dlg = $("#win-dlg");
+  $("#win-remember").checked = false;
+  dlg.returnValue = "";
+  dlg.showModal();
+  return new Promise((ok) => dlg.addEventListener("close", () => ok(dlg.returnValue ? { window: dlg.returnValue, remember: $("#win-remember").checked } : null), { once: true }));
 }
 
 /* ------------------------------------------------------------------ menu del tasto destro su un gioco */
@@ -1567,6 +1580,7 @@ const FREE_KIND = { "Free to keep": "Da tenere", "Free with Prime": "Con Prime",
 /* ---- pagina: port e app PC (port, giochi ed emulatori dal catalogo di Quiver Launcher) */
 const PORTS_F = { console: store.get("portsConsole", ""), type: store.get("portsType", ""), mine: "", q: "", open: null };
 // tipi del catalogo Quiver: quasi tutte sono ricompilazioni (port) ma ci sono anche giochi ed emulatori
+const WINDOW_MODES = { "": "Chiedi ogni volta", windowed: "🗗 Finestra", borderless: "▭ Senza bordi", fullscreen: "⛶ Schermo intero" };
 const PORT_KIND = { port: "🕹 Port", game: "🎮 Gioco", emulator: "🖥 Emulatore", tool: "🔧 Strumento" };
 /** Il catalogo si apre subito dalla copia salvata e si aggiorna in background: a fine aggiornamento la pagina si ridisegna. */
 async function followPortsRefresh(pv) {
@@ -1669,6 +1683,9 @@ async function renderPorts(pv, force = false) {
         <input class="field" id="pt-dir" value="${esc(d.dir)}" style="width:100%">
         <p class="small">Token GitHub (facoltativo: senza, GitHub permette 60 richieste all'ora) ${d.token ? "· <b>impostato</b>" : ""}</p>
         <input class="field" id="pt-tok" type="password" placeholder="${d.token ? "lascia vuoto per non cambiarlo" : "ghp_…"}" style="width:100%">
+        <p class="small">Cartella breve per i port che compilano sul posto (vuota = una scrivibile fra <code>C:\\PozzoPorts</code>,
+          le altre unità e <code>Public</code>):</p>
+        <input class="field" id="pt-short-dir" value="${esc(d.short_dir || "")}" placeholder="automatica" style="width:100%">
         <label class="small" style="display:flex;gap:6px;align-items:center;margin-top:8px">
           <input type="checkbox" id="pt-auto"${d.auto ? " checked" : ""}> Aggiorna da solo le app installate: la patch la mette il launcher,
           senza aprire quello del gioco</label>
@@ -1676,7 +1693,8 @@ async function renderPorts(pv, force = false) {
       return;
     }
     if (e.target.id === "pt-set-save") {
-      const body = { dir: $("#pt-dir", pv).value, auto: $("#pt-auto", pv).checked };
+      const body = { dir: $("#pt-dir", pv).value, auto: $("#pt-auto", pv).checked, short_dir: $("#pt-short-dir", pv).value };
+
       if ($("#pt-tok", pv).value) body.token = $("#pt-tok", pv).value;
       try { await api("/api/ports-settings", { body }); } catch (err) { return toast(err.message, true); }
       toast("Impostazioni dei port salvate");
@@ -1740,9 +1758,18 @@ async function renderPort(pv, slug) {
            ${inst.repository ? `<button class="btn" data-open="https://github.com/${esc(inst.repository)}">Progetto ↗</button>` : ""}
            <button class="btn" id="pt-remove">🗑 Disinstalla</button>`}
     </div>
+    ${m && m.path ? `<div class="d-note"><p class="warn small">⚠ Percorso troppo lungo per questo port: ${m.path.length} caratteri,
+      il massimo è ${m.path.limit}. Il launcher di questo port compila il gioco dentro la sua cartella, e oltre quel limite Windows
+      non riesce ad aprire i file: il gioco non parte.</p>
+      <p class="small">${m.path.short ? `Posso spostarlo in <code>${esc(m.path.short)}</code> (percorso più corto) copiando anche salvataggi
+        e impostazioni; la cartella di adesso resta come copia di sicurezza.` : `Scegli una cartella dei port più corta (⚙ qui sopra):
+        nemmeno la cartella breve automatica basta.`}</p>
+      ${m.path.short ? `<p><button class="btn primary" id="pt-short">📦 Sposta in una cartella breve</button></p>` : ""}</div>` : ""}
     <div id="pt-job"></div>
     ${m && m.candidates.length > 1 ? `<div class="d-h">Eseguibile da avviare</div>
       <select class="field" id="pt-exe">${m.candidates.map((x) => `<option${x === m.exe ? " selected" : ""}>${esc(x)}</option>`).join("")}</select>` : ""}
+    ${m ? `<div class="d-h">Finestra all'avvio</div>
+      <select class="field" id="pt-window">${Object.entries(WINDOW_MODES).map(([k, l]) => `<option value="${k}"${k === (m.window || "") ? " selected" : ""}>${l}</option>`).join("")}</select>` : ""}
     ${i.type === "port" || i.roms.length || i.in_store?.length ? `<div class="d-h">ROM originale</div>
     ${i.roms.length ? i.roms.map((r) => `<div class="sv-row"><span>🎮 ${esc(r.title)}</span><span class="muted small" title="${esc(r.file)}">${esc(romFile(r))}</span>
         <button class="btn" data-game="${r.id}">Apri</button></div>`).join("")
@@ -1769,12 +1796,13 @@ async function renderPort(pv, slug) {
       return followPortJob(pv);
     }
     if (t.id === "pt-play") {
+      if (inst.game_id) { await play(inst.game_id); return renderPort(pv, slug); }
       try {
-        if (inst.game_id) await api(`/api/game/${inst.game_id}/play`, { body: {} });
-        else await api(`/api/ports/${enc}/play`, { body: {} });
+        let r = await api(`/api/ports/${enc}/play`, { body: {} });
+        if (r.ask) { const w = await askWindow(); if (!w) return; r = await api(`/api/ports/${enc}/play`, { body: w }); }
         pollRunning();
       } catch (err) { toast(err.message, true); }
-      return;
+      return renderPort(pv, slug); // «ricorda» cambia il menu della modalità
     }
     if (t.id === "pt-lib") return openDetail(inst.game_id);
     if (t.id === "pt-folder") return api(`/api/game/${inst.game_id}/open-folder`, { body: {} }).catch((err) => toast(err.message, true));
@@ -1782,6 +1810,15 @@ async function renderPort(pv, slug) {
       await api(`/api/ports/${enc}/skip`, { body: { version: inst.latest } }).catch((err) => toast(err.message, true));
       S.ports = null;
       return renderPort(pv, slug);
+    }
+    if (t.id === "pt-short") {
+      const p = m.path;
+      if (!confirm(`Sposto «${i.name}» in:\n${p.short}\n\nPerché: questo port compila il gioco dentro la sua cartella, e Windows si ferma `
+        + `oltre ${p.limit} caratteri di percorso (adesso sono ${p.length}), quindi il gioco non partirebbe. `
+        + `Salvataggi e impostazioni vengono copiati; la cartella di adesso resta come copia di sicurezza.\n\nProcedo?`)) return;
+      t.disabled = true;
+      try { await api(`/api/ports/${enc}/short-path`, { body: {} }); } catch (err) { t.disabled = false; return toast(err.message, true); }
+      return followPortJob(pv, "Port spostato nella cartella breve: ora il gioco si avvia");
     }
     if (t.id === "pt-remove") {
       if (!confirm(`Disinstallare «${i.name}»? La cartella va nel Cestino (salvataggi compresi: copiali prima se ti servono).`)) return;
@@ -1802,6 +1839,10 @@ async function renderPort(pv, slug) {
     if (t.id === "pt-mods-load" || t.dataset.mod || t.dataset.modDel) return portMods(pv, slug, t);
   };
   pv.onchange = async (e) => {
+    if (e.target.id === "pt-window") {
+      try { await api(`/api/ports/${encodeURIComponent(slug)}/window`, { body: { window: e.target.value } }); } catch (err) { return toast(err.message, true); }
+      return toast("Modalità di avvio salvata");
+    }
     if (e.target.id !== "pt-exe") return;
     try { await api(`/api/ports/${encodeURIComponent(slug)}/exe`, { body: { exe: e.target.value } }); } catch (err) { return toast(err.message, true); }
     toast("Eseguibile salvato");
@@ -1828,7 +1869,7 @@ async function portMods(pv, slug, t) {
 }
 
 /** Avanzamento di installazione/aggiornamento; alla fine la libreria si aggiorna con il port. */
-async function followPortJob(pv) {
+async function followPortJob(pv, done = "Port installato: lo aggiungo alla libreria") {
   let j;
   do {
     try { j = await api("/api/ports/job"); } catch { return; }
@@ -1841,7 +1882,8 @@ async function followPortJob(pv) {
     if (j.status === "running") await new Promise((r) => setTimeout(r, 1000));
   } while (j.status === "running");
   if (j.status === "error") return toast(j.log[j.log.length - 1] || "Installazione non riuscita", true);
-  toast("Port installato: lo aggiungo alla libreria");
+  toast(done);
+
   pollStores(true);
   S.ports = null;
   if (PORTS_F.open && S.view.type === "ports") renderPort(pv, PORTS_F.open);
@@ -1852,7 +1894,8 @@ async function followPortJob(pv) {
 function keyPrice(w, money, full) {
   const cut = full ? Math.round((1 - w.key_price / full) * 100) : 0;
   return `<span class="wl-key" title="Negozi di key${w.key_low != null ? ` · minimo storico ${money(w.key_low, w.currency)}` : ""}">🔑 `
-    + `${cut > 0 ? `<span class="cut">-${cut}%</span>` : ""}<b>${money(w.key_price, w.currency)}</b></span>`;
+    + `${cut > 0 ? `<span class="cut">-${cut}%</span>` : ""}<b>${money(w.key_price, w.currency)}</b>`
+    + `${w.key_low != null ? `<span class="muted small"> · min. key ${money(w.key_low, w.currency)}</span>` : ""}</span>`;
 }
 
 /** Grafichino dello storico (un punto al giorno: il prezzo piu' basso tra store e negozi di key). */
@@ -2851,7 +2894,7 @@ async function loadAccounts() {
     const st = x.detected ? `<span class="status-ok">✓ rilevato</span>` : `<span class="muted">non trovato</span>`;
     return `<tr><td><label class="chk"><input type="checkbox" data-acc-enable="${x.id}" ${x.enabled ? "checked" : ""}> <b>${esc(x.name)}</b></label>
       ${x.note ? `<div class="muted small">${esc(x.note)}</div>` : ""}</td><td>${st}</td>
-      <td class="num">${x.installed} / ${x.games}</td><td>${ctrl}</td></tr>`;
+      <td class="num">${x.installed} / ${x.games}</td><td>${ctrl}${x.id === "ports" ? "" : ` <button class="icon-btn" data-acc-refresh="${x.id}" title="Aggiorna solo questo store">⟳</button>`}</td></tr>`;
   }).join("");
   renderJobInto($("#acc-progress"), d.job);
   if (d.job.status === "running") pollStores();
@@ -3604,6 +3647,9 @@ async function reload(keepScroll) {
 
 /* ------------------------------------------------------------------ eventi */
 function bind() {
+  $("#feedback-btn").onclick = () => api("/api/open", {
+    body: { url: "https://github.com/erpaffo/Pozzo-Launcher/issues/new/choose" },
+  }).catch((e) => toast(e.message, true));
   $("#nav").addEventListener("click", (e) => {
     const a = e.target.closest(".nav-item");
     if (!a) return;
@@ -3788,6 +3834,13 @@ function bind() {
   };
   $("#view-actions").addEventListener("click", async (e) => {
     if (e.target.id === "cat-open") { openCatalog(S.view.id); return; }
+    if (e.target.closest("#shop-hide-dlc")) {
+      S.shopF.hideDlc = !S.shopF.hideDlc;
+      store.set("shopF", S.shopF);
+      updateHeader();
+      refreshGrid();
+      return;
+    }
     if (e.target.id === "plat-scan") {
       try {
         if (S.view.type === "store") {
@@ -4200,10 +4253,12 @@ function bind() {
     pollStores(true);
   };
   $("#acc-table").addEventListener("click", (e) => {
-    const t = e.target.closest("[data-acc-login],[data-acc-logout],[data-acc-code],[data-acc-save],[data-open]");
+    const t = e.target.closest("[data-acc-login],[data-acc-logout],[data-acc-code],[data-acc-save],[data-acc-refresh],[data-open]");
     if (!t) return;
     e.preventDefault();
-    if (t.dataset.open) api("/api/open", { body: { url: t.dataset.open } }).catch((err) => toast(err.message, true));
+    if (t.dataset.accRefresh) {
+      api("/api/stores/refresh", { body: { only: [t.dataset.accRefresh] } }).then(() => pollStores(true)).catch((err) => toast(err.message, true));
+    } else if (t.dataset.open) api("/api/open", { body: { url: t.dataset.open } }).catch((err) => toast(err.message, true));
     else accountAction(t);
   });
   $("#acc-table").addEventListener("change", async (e) => {

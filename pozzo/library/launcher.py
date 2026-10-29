@@ -430,6 +430,138 @@ def hide_launcher_windows(name: str, seconds: float = 40):
         time.sleep(0.5)
 
 
+def _process_tree(root_pid: int) -> dict[int, int]:
+    """PID e profondita' dei processi avviati dall'app; root_pid ha profondita' zero."""
+    try:
+        import psutil
+    except ImportError:
+        return {root_pid: 0}
+    out = {root_pid: 0}
+    try:
+        root = psutil.Process(root_pid)
+        root_name = root.name().lower()
+        if root_name == "explorer.exe":
+            return {}
+        if any(name in root_name for name in ("launcher", "bootstrap", "selector", "setup")):
+            out.clear()
+    except psutil.Error:
+        return {}
+    stack = [(root, 0)]
+    while stack:
+        parent, depth = stack.pop()
+        try:
+            children = parent.children()
+        except psutil.Error:
+            continue
+        for child in children:
+            if child.pid in out:
+                continue
+            try:
+                if child.name().lower() == "explorer.exe":
+                    continue
+            except psutil.Error:
+                continue
+            out[child.pid] = depth + 1
+            stack.append((child, depth + 1))
+    return out
+
+
+def set_window_mode(folder: str, mode: str, seconds: float = 30, root_pid: int | None = None):
+    """Porta la finestra del gioco (processi avviati o, senza PID, nella sua cartella) nella modalita' scelta:
+    «windowed» con i bordi,
+    «borderless» senza bordi grande quanto lo schermo, «fullscreen» con Alt+Invio (lo schermo intero esclusivo
+    lo puo' attivare solo il gioco; se lo ignora si ripiega sul senza bordi). Non modifica Explorer o finestre
+    standard di scelta file. Solo Windows, solo estetica."""
+    if sys.platform != "win32":
+        return
+    import ctypes
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    frame = 0x00C00000 | 0x00040000 | 0x00080000 | 0x00020000 | 0x00010000  # caption, bordo, menu, riduci, ingrandisci
+    known_pids = {}
+
+    def game_window():
+        if root_pid is None:
+            pids = {p.pid for p in Launcher._game_procs(folder)}
+            known_pids.update({pid: 0 for pid in pids})
+        else:
+            known_pids.update(_process_tree(root_pid))
+        found = []
+        cls = ctypes.create_unicode_buffer(64)
+
+        def visit(hwnd, _):
+            pid, r = wintypes.DWORD(), wintypes.RECT()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            user32.GetClassNameW(hwnd, cls, 64)
+            if pid.value in known_pids and user32.IsWindowVisible(hwnd) and not user32.GetWindow(hwnd, 4) \
+                    and cls.value not in ("ConsoleWindowClass", "#32770") and user32.GetWindowRect(hwnd, ctypes.byref(r)):
+                found.append((known_pids[pid.value], (r.right - r.left) * (r.bottom - r.top), hwnd))
+            return True
+
+        if known_pids:
+            user32.EnumWindows(proc(visit), 0)
+        if not found:
+            return None
+        selected = max(found)
+        return selected[0], selected[2]
+
+    def monitor(hwnd):
+        class MI(ctypes.Structure):
+            _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT), ("rcWork", wintypes.RECT),
+                        ("dwFlags", wintypes.DWORD)]
+        mi = MI(cbSize=ctypes.sizeof(MI))
+        user32.GetMonitorInfoW(user32.MonitorFromWindow(hwnd, 2), ctypes.byref(mi))
+        return mi.rcMonitor
+
+    def covers(hwnd):
+        r, m = wintypes.RECT(), monitor(hwnd)
+        user32.GetWindowRect(hwnd, ctypes.byref(r))
+        return r.left <= m.left and r.top <= m.top and r.right >= m.right and r.bottom >= m.bottom
+
+    def style(hwnd):
+        return user32.GetWindowLongW(hwnd, -16) & 0xFFFFFFFF  # GWL_STYLE
+
+    def restyle(hwnd, st, x, y, w, h):
+        user32.SetWindowLongW(hwnd, -16, ctypes.c_long(st).value)
+        user32.SetWindowPos(hwnd, 0, x, y, w, h, 0x0020 | 0x0004 | 0x0040)  # FRAMECHANGED, NOZORDER, SHOWWINDOW
+
+    def alt_enter(hwnd):
+        user32.SetForegroundWindow(hwnd)
+        for vk, up in ((0x12, 0), (0x0D, 0), (0x0D, 2), (0x12, 2)):
+            user32.keybd_event(vk, 0, up, 0)
+        time.sleep(1.5)
+
+    try:
+        end, hwnd, last = time.time() + seconds, None, None
+        started = time.monotonic()
+        while time.time() < end:  # finestra principale: la piu' grande, rimasta la stessa per 2 s (splash esclusi)
+            candidate = game_window()
+            if candidate and candidate[0] == 0 and time.monotonic() - started < 5:
+                candidate = None
+            hwnd = candidate[1] if candidate else None
+            if hwnd and hwnd == last:
+                break
+            last = hwnd
+            time.sleep(2)
+        if not hwnd:
+            return
+        m = monitor(hwnd)
+        mw, mh = m.right - m.left, m.bottom - m.top
+        if mode == "fullscreen" and not covers(hwnd):
+            alt_enter(hwnd)
+        if mode in ("fullscreen", "borderless") and (not covers(hwnd) or style(hwnd) & frame):
+            restyle(hwnd, style(hwnd) & ~frame, m.left, m.top, mw, mh)
+        elif mode == "windowed":
+            if covers(hwnd):
+                alt_enter(hwnd)
+            if covers(hwnd) or not style(hwnd) & 0x00C00000:
+                w, h = mw * 3 // 4, mh * 3 // 4
+                restyle(hwnd, (style(hwnd) | frame) & ~0x80000000, m.left + (mw - w) // 2, m.top + (mh - h) // 2, w, h)
+    except Exception:  # funzione solo estetica: un errore non deve mai disturbare il gioco
+        pass
+
+
 class Launcher:
     def __init__(self, cfg, userdata, on_event=None, shots=None, profile_of=None, prelaunch=None):
         self.cfg = cfg
@@ -671,6 +803,9 @@ class Launcher:
                 return subprocess.Popen([target, *args], cwd=launch.get("cwd") or str(Path(target).parent))
 
             proc = start()
+            if launch.get("window") and proc:
+                threading.Thread(target=set_window_mode, args=(install_dir or str(Path(target).parent), launch["window"]),
+                                 kwargs={"root_pid": proc.pid}, daemon=True).start()
             if quiet:
                 threading.Thread(target=hide_launcher_windows, args=(lname,), daemon=True).start()
             self._set(status="running", message=target)

@@ -337,7 +337,7 @@ tr.src-off td:not(:first-child) { opacity: .5; }
 #sort:disabled { opacity: .5; }
 
 /* ---- vista "Per te" (stile Netflix) */
-body.foryou-mode .tools > :not(#scan-btn):not(#bp-btn):not(#settings-btn) { display: none !important; }
+body.foryou-mode .tools > :not(#scan-btn):not(#bp-btn):not(#feedback-btn):not(#settings-btn) { display: none !important; }
 body.foryou-mode #plugin-view { padding: 0; }
 .nf { padding-bottom: 40px; }
 .nf-hero { position: relative; min-height: 340px; background: #111 center/cover no-repeat; display: flex; align-items: flex-end;

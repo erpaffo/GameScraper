@@ -179,6 +179,7 @@ def register(app, cfg, lib, launcher, start_store_job):
                     for i in items for cid in i["consoles"]}
         return {"items": items, "time": cat.get("time"), "error": cat.get("error"), "stale": cat.get("stale", False),
                 "consoles": consoles, "dir": str(PT.ports_dir(cfg)), "token": bool(PT._token(cfg)),
+                "short_dir": cfg.app.get("ports_short_dir") or "",
                 "auto": bool(cfg.app.get("ports_auto_update")), "refreshing": refresh["running"]}
 
     @app.get("/api/ports/refreshing")
@@ -224,6 +225,7 @@ def register(app, cfg, lib, launcher, start_store_job):
         m = _port_or_404(slug)
         e = next((x for x in _port_links().get("catalog", {}).get("items") or [] if x["slug"] == slug), {})
         return {**m, "candidates": PT.exe_candidates(Path(m["folder"]), m.get("preferred")),
+                "path": PT.path_problem(cfg, m),
                 "setup": [{"id": sf.get("id"), "label": sf.get("label") or sf.get("id"),
                            "destination": sf.get("destination"),
                            "present": (Path(m["folder"]) / sf.get("destination", "")).is_file(),
@@ -244,16 +246,19 @@ def register(app, cfg, lib, launcher, start_store_job):
         return api_ports_install({"slug": slug})
 
     @app.post("/api/ports/{slug}/play")
-    def api_port_play(slug: str):
+    def api_port_play(slug: str, body: dict = Body(default={})):
         """Avvia il port direttamente dal catalogo, anche prima del refresh della libreria."""
         m = _port_or_404(slug)
         folder = Path(m["folder"]).resolve()
         exe = (folder / (m.get("exe") or "")).resolve()
         if not m.get("exe") or folder not in exe.parents or not exe.is_file():
             raise HTTPException(409, "Questo port non ha un eseguibile avviabile")
+        mode = PT.window_mode(cfg, slug, body)
+        if not mode:
+            return {"ask": "window"}
         try:
             launcher.launch_pc(f"windows/ports:{slug}", m.get("name") or slug,
-                               {"type": "exe", "target": str(exe), "args": [], "cwd": str(folder)},
+                               {"type": "exe", "target": str(exe), "args": [], "cwd": str(folder), "window": mode},
                                str(folder), "Port e app", slug)
         except LaunchError as e:
             raise HTTPException(409, str(e)) from e
@@ -268,11 +273,28 @@ def register(app, cfg, lib, launcher, start_store_job):
         _refresh_ports_store()
         return {"ok": True}
 
+    @app.post("/api/ports/{slug}/window")
+    def api_port_window(slug: str, body: dict = Body(...)):
+        """Modalita' della finestra salvata per l'avvio («» = chiedere ogni volta)."""
+        _port_or_404(slug)
+        if body.get("window") not in ("", *PT.WINDOW_MODES):
+            raise HTTPException(400, "Modalita' non valida")
+        PT.set_manifest(cfg, slug, window=body["window"] or None)
+        return {"ok": True}
+
     @app.post("/api/ports/{slug}/skip")
     def api_port_skip(slug: str, body: dict = Body(...)):
         _port_or_404(slug)
         PT.set_manifest(cfg, slug, skip=body.get("version") or None)
         return {"ok": True}
+
+    @app.post("/api/ports/{slug}/short-path")
+    def api_port_short_path(slug: str):
+        """Sposta il port in una cartella breve (dati compresi) quando il percorso supera il limite del port."""
+        m = _port_or_404(slug)
+        if not PT.path_problem(cfg, m):
+            raise HTTPException(400, "Il percorso di questo port va gia' bene")
+        return _start_port_job(slug, lambda progress, say: PT.move_short(cfg, slug, say))
 
     @app.post("/api/ports/{slug}/uninstall")
     def api_port_uninstall(slug: str):
@@ -353,9 +375,15 @@ def register(app, cfg, lib, launcher, start_store_job):
             vals["github_token"] = (body.get("token") or "").strip() or None
         if "auto" in body:
             vals["ports_auto_update"] = bool(body.get("auto"))
+        if "short_dir" in body:
+            d = (body.get("short_dir") or "").strip().strip('"')
+            if d and not Path(d).is_absolute():
+                raise HTTPException(400, "Indica un percorso completo (es. C:\\PortsBreve)")
+            vals["ports_short_dir"] = d or None
         C.save_settings(cfg, app=vals)
         if "ports_dir" in vals:
             _refresh_ports_store()
-        return {"dir": str(PT.ports_dir(cfg)), "token": bool(PT._token(cfg)), "auto": bool(cfg.app.get("ports_auto_update"))}
+        return {"dir": str(PT.ports_dir(cfg)), "token": bool(PT._token(cfg)), "auto": bool(cfg.app.get("ports_auto_update")),
+                "short_dir": cfg.app.get("ports_short_dir") or ""}
 
     return _port_links

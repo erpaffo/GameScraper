@@ -121,6 +121,17 @@ def test_install_update_rom(tmp: Path):
         assert g["store"] == "ports" and g["installed"] and g["platform"] == "windows", g
         print("ok  installazione: release Windows estratta in Ports\\SnowRecomp, eseguibile scelto, gioco PC in libreria")
 
+        assert cl.post(f"/api/game/{gid}/play", json={}).json() == {"ask": "window"}, "senza scelta salvata si chiede"
+        assert cl.post("/api/ports/snow-recomp/play", json={}).json() == {"ask": "window"}
+        assert PT.window_mode(cfg, "snow-recomp", {"window": "borderless"}) == "borderless"
+        assert PT.window_mode(cfg, "snow-recomp", {}) is None, "senza «ricorda» non si salva"
+        assert PT.window_mode(cfg, "snow-recomp", {"window": "windowed", "remember": True}) == "windowed"
+        assert PT.window_mode(cfg, "snow-recomp", {}) == "windowed"
+        assert cl.post("/api/ports/snow-recomp/window", json={"window": "boh"}).status_code == 400
+        assert cl.post("/api/ports/snow-recomp/window", json={"window": ""}).status_code == 200
+        assert cl.get("/api/ports/snow-recomp").json().get("window") is None
+        print("ok  finestra all'avvio: si chiede, «ricorda» la salva nel manifesto, il menu la cambia")
+
         r = cl.post("/api/ports/snow-recomp/rom", json={"id": "rom"})
         assert r.status_code == 200 and (folder / "rom.z64").read_bytes() == ROM, r.text
         print("ok  prima configurazione: ROM della libreria copiata dopo il controllo dell'hash")
@@ -248,7 +259,62 @@ def test_estrazione_7z(tmp: Path):
     print("ok  estrazione: zip diretto, .7z con 7-Zip (senza, errore chiaro)")
 
 
+def test_percorso_breve(tmp: Path):
+    """Un port che compila dentro la propria cartella (SMS Launcher) non sta in un percorso lungo: si installa
+    in una cartella breve, e quello gia' installato si sposta conservando salvataggi e impostazioni."""
+    (tmp / "roms").mkdir()
+    (tmp / "config.toml").write_text('[paths]\nroms = "roms"\ncache = "cache"\n[scrape]\nsources = []\n', encoding="utf-8")
+    cfg = config.load(tmp / "config.toml")
+    long_dir = tmp / ("cartella-dei-port-molto-lunga-" + "x" * 40)
+    breve = tmp / "breve"
+    saved = (PT.ports_dir, PT.short_dir)
+    PT.ports_dir = lambda cfg_: (long_dir.mkdir(parents=True, exist_ok=True) or long_dir)
+    PT.short_dir = lambda cfg_: (breve.mkdir(parents=True, exist_ok=True) or breve)
+    try:
+        man = {"slug": "sms", "repository": "chasem-dev/sms-launcher", "folder": str(long_dir / "SMSLauncher")}
+        assert PT.path_problem(cfg, {**man, "folder": str(breve / "SMSLauncher")}) is None, "percorso corto: nessun problema"
+        p = PT.path_problem(cfg, man)
+        assert p and p["folder"] == man["folder"] and p["limit"] == 70 and p["short"] == str(breve / "SMSLauncher"), p
+        assert PT.path_problem(cfg, {**man, "repository": "altro/progetto"}) is None, "solo i port con un limite noto"
+        assert PT._target(cfg, "SMSLauncher", "sms", "chasem-dev/sms-launcher") == breve / "SMSLauncher", "installazione diretta nella cartella breve"
+        assert PT._target(cfg, "Altro", "altro", "altro/progetto") == long_dir / "Altro", "gli altri port restano nella cartella dei port"
+        assert "port_links" not in cfg.app or "sms" not in (cfg.app.get("port_links") or {})
+        # quello gia' installato si sposta dall'API (in background, come le installazioni), con i file dell'utente
+        (long_dir / "SMSLauncher").mkdir(parents=True)
+        (long_dir / "SMSLauncher" / "sms.exe").write_text("exe")
+        (long_dir / "SMSLauncher" / ".pozzo-port.json").write_text(
+            '{"slug": "sms", "name": "SMS", "repository": "chasem-dev/sms-launcher", "files": ["sms.exe"]}',
+            encoding="utf-8")
+        (long_dir / "SMSLauncher" / "SMS-Launcher-Portable").mkdir()
+        (long_dir / "SMSLauncher" / "SMS-Launcher-Portable" / "preferences.json").write_text("{}")
+        app = create_app(cfg)
+        with TestClient(app) as cl:
+            assert cl.get("/api/ports/sms").json()["path"]["limit"] == 70, "la scheda del port mostra il problema"
+            assert cl.post("/api/ports/sms/short-path").status_code == 200
+            for _ in range(200):
+                j = cl.get("/api/ports/job").json()
+                if j["status"] != "running":
+                    break
+                time.sleep(0.05)
+            assert j["status"] == "done", j
+            assert not cl.get("/api/ports/sms").json()["path"], "dopo lo spostamento il percorso va bene"
+        assert (breve / "SMSLauncher" / "sms.exe").is_file(), "eseguibile copiato"
+        assert (breve / "SMSLauncher" / "SMS-Launcher-Portable" / "preferences.json").is_file(), "impostazioni del launcher copiate"
+        assert not (long_dir / "SMSLauncher").exists(), "la cartella lunga non resta in giro"
+        assert any((long_dir / ".backup").glob("SMSLauncher-percorso-lungo/sms.exe")), "copia di sicurezza dell'originale"
+        assert PT.all_installed(cfg)["sms"]["folder"] == str(breve / "SMSLauncher"), "la libreria usa la cartella nuova"
+        assert PT._target(cfg, "SMSLauncher", "sms", "chasem-dev/sms-launcher") == breve / "SMSLauncher", "gli aggiornamenti restano nella cartella breve"
+        assert PT.path_problem(cfg, PT.all_installed(cfg)["sms"]) is None
+        PT.uninstall(cfg, "sms")
+        assert not (breve / "SMSLauncher").exists(), "disinstallando un port spostato si libera anche il disco"
+        assert "sms" not in (cfg.app.get("port_links") or {})
+    finally:
+        PT.ports_dir, PT.short_dir = saved
+    print("ok  percorso lungo: rilevato, spostato in una cartella breve con i dati, libreria aggiornata")
+
+
 if __name__ == "__main__":
+
     test_assets()
     test_rom_negli_store()
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
@@ -259,4 +325,6 @@ if __name__ == "__main__":
         test_aggiorna_da_solo(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_install_update_rom(Path(t))
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_percorso_breve(Path(t))
     print("TUTTI I TEST OK")

@@ -26,7 +26,9 @@ from pozzo.library.build import SCHEMA  # noqa: E402
 
 def make_library(cache: Path, rom: Path):
     db = sqlite3.connect(cache / "library.db")
-    db.executescript(SCHEMA)
+    legacy_schema = SCHEMA.replace(", content TEXT", "")
+    assert legacy_schema != SCHEMA
+    db.executescript(legacy_schema)  # cache legacy, prima della colonna content
     games = [  # (key, platform, title, grp, primary)
         ("gba/AAA", "gba", "Pokemon - Versione Rubino", "gba/s:AXV", 1),
         ("gba/BBB", "gba", "Pocket Monsters - Ruby", "gba/s:AXV", 0),
@@ -83,7 +85,7 @@ def main():
                 assert colls["pokemon"]["count"] == 1, colls["pokemon"]
                 assert colls[slug]["count"] == 1 and colls[slug]["custom"]
                 d = c2.get(f"/api/game/{kh[0]}").json()
-                assert [x["slug"] for x in d["collections"]] == [slug]
+                assert d["content"] == "game" and [x["slug"] for x in d["collections"]] == [slug], d
                 print("ok  modifiche alle collezioni persistenti (automatiche e personali)")
 
                 # versione principale scelta dall'utente
@@ -918,8 +920,29 @@ def test_library_parts():
     print("ok  libreria in due parti: posseduti subito, catalogo online dopo; dettagli letti solo per la scheda")
 
 
+def test_single_store_refresh_button():
+    """Impostazioni › Account: accanto a «Aggiorna store» (tutti) c'è un ⟳ per riga che manda only=[id]."""
+    js = (Path(__file__).resolve().parent.parent / "pozzo" / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    assert 'data-acc-refresh="${x.id}"' in js and "only: [t.dataset.accRefresh]" in js
+    assert 'id="acc-refresh"' in (Path(__file__).resolve().parent.parent / "pozzo" / "app" / "static" / "index.html").read_text(encoding="utf-8")
+    print("ok  pulsante per aggiornare un solo store, oltre a quello per tutti")
+
+
+def test_feedback_button():
+    root = Path(__file__).resolve().parent.parent / "pozzo" / "app" / "static"
+    html = (root / "index.html").read_text(encoding="utf-8")
+    js = (root / "app.js").read_text(encoding="utf-8")
+    css = (root / "app.css").read_text(encoding="utf-8")
+    assert 'id="feedback-btn"' in html and "Idee / bug" in html
+    assert 'https://github.com/erpaffo/Pozzo-Launcher/issues/new/choose' in js
+    assert "not(#feedback-btn)" in css
+    print("ok  pulsante idee/bug sempre visibile, anche nella vista Per te")
+
+
 if __name__ == "__main__":
     main()
+    test_feedback_button()
+    test_single_store_refresh_button()
     test_library_parts()
     test_names_settings_emulators()
     test_single_data_dir()

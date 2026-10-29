@@ -594,7 +594,8 @@ def create_app(cfg) -> FastAPI:
                  for c in v["colls"].values() if g["grp"] in c["groups"]]
         return {**{k: g[k] for k in ("id", "key", "title", "platform", "year", "release_date", "developer", "publisher",
                                      "genres", "players", "rating", "description", "region", "files", "video_url",
-                                     "canonical", "crc", "found", "content")},
+                                     "canonical", "crc", "found")},
+                "content": g.get("content") or "game",
                 "platform_name": p.name if p else g["platform"],
                 "media": {k: f"/img/{gid}/{k}" for k in _media(g)},
                 "sources": json.loads(g["origin"] or "{}"),
@@ -778,13 +779,20 @@ def create_app(cfg) -> FastAPI:
         return {"ok": True, "opened": opened, "failed": failed}
 
     @app.post("/api/game/{gid}/play")
-    def api_play(gid: int):
+    def api_play(gid: int, body: dict = Body(default={})):
         g = lib.game(gid)
         if g.get("store"):
             if not g.get("installed"):
                 raise HTTPException(409, "Il gioco non e' installato: usa «Installa»")
+            launch = g["launch"]
+            if g["store"] == "ports":  # i port chiedono come aprire la finestra, se non c'e' una scelta salvata
+                from .. import ports as PT
+                mode = PT.window_mode(cfg, g["key"].split("ports:", 1)[-1], body)
+                if not mode:
+                    return {"ask": "window"}
+                launch = {**launch, "window": mode}
             try:
-                launcher.launch_pc(g["key"], g["title"], g["launch"], g.get("install_dir") or "",
+                launcher.launch_pc(g["key"], g["title"], launch, g.get("install_dir") or "",
                                    STORE_NAMES.get(g["store"], g["store"]), g["store"])
             except L.LaunchError as e:
                 raise HTTPException(409, str(e))
@@ -2634,7 +2642,7 @@ def create_app(cfg) -> FastAPI:
                     "SELECT source, COUNT(*), SUM(length(value)+length(field)+length(key)) FROM resources GROUP BY source ORDER BY 3 DESC"):
                 sources.append({"source": src, "rows": nrow, "bytes": nb or 0})
             labels = {"catalog": "Elenchi degli store online", "netmeta": "Copertine e descrizioni degli store",
-                      "storemeta": "Dati degli store PC", "store": "Store PC", "ports": "Port e app", "art": "Immagini",
+                      "storemeta": "Metadati offline degli store", "store": "Store PC", "ports": "Port e app", "art": "Immagini",
                       "hltb": "Durata (HowLongToBeat)", "collart": "Immagini delle collezioni", "size": "Dimensioni"}
             for k, nrow, nb in c.db.execute(
                     "SELECT substr(k,1,instr(k||':',':')-1), COUNT(*), SUM(length(v)) FROM kv GROUP BY 1 ORDER BY 3 DESC"):

@@ -113,6 +113,7 @@
         <button class="btn" id="scan-btn" title="Cerca nuovi giochi e console">⟳ Nuovi giochi</button>
         <button class="btn" id="random-btn" title="Un gioco a caso tra quelli mostrati (filtri e ricerca compresi)">🎲</button>
         <button class="btn" id="bp-btn" title="Modalità a schermo intero per il controller">🎮 Big Picture</button>
+        <button class="btn" id="feedback-btn" title="Suggerisci un'idea o segnala un bug">💡 Idee / bug</button>
         <button class="icon-btn big" id="settings-btn" title="Impostazioni">⚙</button>
       </div>
     </header>
@@ -187,6 +188,15 @@
         <button class="btn" id="md-paste" type="button" title="Incolla dagli appunti e salva">📋 Incolla e usa</button>
         <button class="btn primary" id="md-use" type="button">Usa</button></span></label>
     </div>
+  </dialog>
+  <dialog id="win-dlg" class="small-dlg">
+    <form method="dialog" class="dlg-head"><h2>Come aprire il gioco?</h2><button class="icon-btn" value="">✕</button></form>
+    <form method="dialog" class="dlg-body">
+      <div class="row wrap"><button class="btn primary" value="windowed">🗗 Finestra</button>
+        <button class="btn primary" value="borderless">▭ Senza bordi</button>
+        <button class="btn primary" value="fullscreen">⛶ Schermo intero</button></div>
+      <label class="muted small"><input type="checkbox" id="win-remember"> Ricorda la scelta (si cambia nella pagina del port)</label>
+    </form>
   </dialog>
   <dialog id="wl-dlg"><div class="dlg-body" id="wl-dlg-body"></div></dialog>
   <div id="toast" hidden></div>

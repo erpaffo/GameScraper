@@ -1,6 +1,6 @@
 # Changelog
 
-## Non rilasciato
+## 0.10.0 (2026-10-29)
 
 ### Aggiunto
 
@@ -10,16 +10,25 @@
 - «Aggiorna tutto» e opzione «Aggiorna da solo»: le patch le installa il launcher, senza aprire quello del gioco
 - Port aggiunti a mano anche da GitLab o Codeberg (gitlab:utente/progetto o indirizzo completo)
 - Store online: tutti i link di download nella scheda (gioco, aggiornamento, DLC, parti, provider) aperti insieme saltando la pubblicità
+- Store: filtro «Escludi DLC» disponibile nella pagina Store e in Big Picture
+- Wishlist: minimo storico del prezzo delle key GG.deals mostrato accanto al prezzo attuale
+- Pulsante «Idee / bug» nella barra principale, con collegamento ai moduli GitHub per proposte e segnalazioni
 
 ### Migliorato
 
+- Metadati store offline: la ricerca in LaunchBox e TheGamesDB include anche i giochi degli store online delle console (stessa piattaforma, nessuna API), senza sovrascrivere i dati gi? presenti
 - Port PC: l'aggiunta manuale da repository supporta anche GitLab e Codeberg (`gitlab:utente/progetto`, `codeberg:utente/progetto` o indirizzi web completi), oltre a GitHub
 - Avvio diretto dei port e copia automatica delle ROM compatibili
+- Port e app: modalità finestra (finestra, senza bordi o schermo intero) con scelta ricordata; il fullscreen segue i processi avviati, privilegia il gioco rispetto al launcher e non coinvolge Esplora file o le finestre standard di selezione ROM
+- Store: classificazione più precisa di giochi, DLC, aggiornamenti ed extra; il peso viene usato come indizio solo sulle piattaforme con supporto storico a DLC e aggiornamenti
 - Attività: titoli separati dallo stato e pulizia dei lavori terminati
+- Impostazioni: aggiorna un singolo store senza aggiornare tutti gli altri
 
 ### Corretto
 
+- Vista «Per te»: i dettagli funzionano anche con cache dei giochi prive del campo `content`
 - Archivi .7z/.rar estratti con 7-Zip quando il tar di Windows non ha il codec; scartati sorgenti, SDK, asset e build per console
+- Port: i port che compilano sul posto (SMS Launcher) si installano in una cartella breve invece di fermarsi sul percorso troppo lungo di Windows; dalla scheda del port si sposta un'installazione esistente con salvataggi e impostazioni, lasciando la cartella di prima in Ports\.backup
 
 ## 0.9.7 (2026-10-29)
 

@@ -13,6 +13,11 @@ import re
 KINDS = ("game", "dlc", "extra", "update", "app")
 SIZE_RATIO = 0.35  # meno di un terzo del gioco omonimo: quasi sempre una DLC
 
+# Sistemi con cataloghi storici di DLC/patch scaricabili: solo qui il peso puo' confermare una DLC.
+DLC_SIZE_PLATFORMS = frozenset({
+    "3ds", "psp", "ps3", "psvita", "ps4", "ps5", "wii", "wiiu", "switch", "xbox", "xbox360",
+})
+
 # parole intere, per non colpire giochi veri ("Pack-Man", "Bundle of Joy")
 DLC = re.compile(r"\b(dlc|add-?ons?|add-?on content|aoc|season pass|expansion pass|expansion|espansione|"
                  r"story pack|mission pack|level pack|character pack|content pack|texture pack|starter pack|"
