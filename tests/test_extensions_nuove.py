@@ -300,15 +300,21 @@ def test_obiettivi(t):
     assert mod.giorni_di_gioco([(mid, 7200)]) == {d(2026, 3, 10), d(2026, 3, 11)}      # a cavallo della mezzanotte
 
     cfg, u = make_env(t)
-    now = time.time()
-    u.record_play("zelda", 3600)
-    u.record_play("hk", 7200)
-    for k in ("zelda", "hk", "mario"):                     # tre giochi finiti: due versioni dello stesso non esistono qui, ma mario ha 0 partite
-        u.set_flag(k, "status", "done")
-    gs = FakeGS(cfg, "obiettivi")
-    mod.register(gs)
-    r = gs.routes["salva"]({"obiettivi": [{"tipo": "finiti", "n": 3, "periodo": "anno"}, {"tipo": "ore", "n": 2, "periodo": "settimana"},
-                                          {"tipo": "giorni", "n": 5, "periodo": "mese"}]})
+    # ora fissa (mercoledi' pomeriggio): con l'ora vera, poco dopo mezzanotte la partita di 2 ore cominciava ieri e
+    # contava due giorni, e a inizio settimana/mese/anno le ore finivano nel periodo prima
+    real_time = time.time
+    time.time = lambda: datetime(2026, 3, 11, 15, 0).timestamp()
+    try:
+        u.record_play("zelda", 3600)
+        u.record_play("hk", 7200)
+        for k in ("zelda", "hk", "mario"):                 # tre giochi finiti: due versioni dello stesso non esistono qui, ma mario ha 0 partite
+            u.set_flag(k, "status", "done")
+        gs = FakeGS(cfg, "obiettivi")
+        mod.register(gs)
+        r = gs.routes["salva"]({"obiettivi": [{"tipo": "finiti", "n": 3, "periodo": "anno"}, {"tipo": "ore", "n": 2, "periodo": "settimana"},
+                                              {"tipo": "giorni", "n": 5, "periodo": "mese"}]})
+    finally:
+        time.time = real_time
     by = {o["tipo"]: o for o in r["obiettivi"]}
     assert by["finiti"]["valore"] == 3 and by["finiti"]["fatto"], by
     assert by["ore"]["valore"] == 3.0 and by["ore"]["fatto"], by
