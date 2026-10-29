@@ -251,6 +251,9 @@ class StoreMetaJob(StoreJob):
             self.finished = time.time()
 
 
+_TDB_LOCK = threading.Lock()
+
+
 @dataclass
 class NetMetaJob(StoreJob):
     """Copertine e descrizioni delle voci degli store online (GameTDB offline + pagine dei siti)."""
@@ -259,7 +262,8 @@ class NetMetaJob(StoreJob):
     stop: bool = False
     only: list[str] | None = None  # console scelte: None = tutte
 
-    def run(self, cfg, after_build):
+    def run(self, cfg, after_build, on_found=None):
+        """on_found({url: dati}): dati appena trovati, a blocchi (il server li mostra subito)."""
         from ..library.build import build
         from .. import gametdb, storemeta
         self.status, self.started = "running", time.time()
@@ -269,13 +273,16 @@ class NetMetaJob(StoreJob):
             cache = Cache(cfg.cache)
             self.phase = "Database GameTDB"
             tdb = gametdb.GameTDB(cfg.cache, log=self.say)
-            if not tdb.ensure():
+            with _TDB_LOCK:  # piu' console in parallelo: un solo download/indice (stesso file .part)
+                ready = tdb.ensure()
+            if not ready:
                 self.say("GameTDB non disponibile: uso solo le pagine dei siti")
                 tdb = None
             self.phase = "Copertine e descrizioni"
             asyncio.run(storemeta.fill(
                 cfg, cache, tdb, log=self.say, limit=self.limit, stats=self.summary,
-                cancelled=lambda: self.stop, search_site="ziperto.com" if self.search_ziperto else None, only=self.only))
+                cancelled=lambda: self.stop, search_site="ziperto.com" if self.search_ziperto else None, only=self.only,
+                on_found=on_found))
             cache.close()
             cache = None
             self.phase = "Aggiornamento libreria"

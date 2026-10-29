@@ -164,6 +164,40 @@ def test_fill_reads_archives(tmp_path):
     print("ok  fill: anche gli elenchi type_c vengono completati (1 gioco, copertina e descrizione)")
 
 
+def test_fill_pc_store_progressive(tmp_path):
+    """Store PC non ufficiali (pc_stores) nel giro come console «windows»; i dati arrivano a blocchi a on_found."""
+    import asyncio
+    import time as _time
+    from types import SimpleNamespace
+    from pozzo.cache import Cache
+    cache = Cache(tmp_path)
+    page = "https://fitgirl-repacks.site/all-my-repacks-a-z/"
+    cache.kv_set(f"catalog:type_a:{page}",
+                 {"url": page, "index_url": page, "pid": "windows", "time": _time.time(),
+                  "entries": [{"name": "Gioco PC", "size": None, "url": URL_SPX, "magnet": None}]})
+    cache.commit()
+    cfg = SimpleNamespace(catalogs={}, pc_stores=[{"url": page, "kind": "repack"}], limits={})
+    batches = []
+
+    async def fake_detail(cfg, cache, client, url, log=print, limiter=None):
+        return storemeta.put(cache, url, storemeta.parse_detail(HTML_SUPERPSX, url), "page")
+
+    real = storemeta.fetch_detail
+    storemeta.fetch_detail = fake_detail
+    try:
+        stats = asyncio.run(storemeta.fill(cfg, cache, None, log=lambda m: None, search_site=None,
+                                           only=["windows"], on_found=batches.append))
+        other = asyncio.run(storemeta.fill(cfg, cache, None, log=lambda m: None, search_site=None, only=["ps4"]))
+    finally:
+        storemeta.fetch_detail = real
+    assert stats["games"] == 1 and stats["complete"] == 1, stats
+    assert len(batches) == 1 and batches[0][URL_SPX]["cover"], batches
+    assert other["games"] == 0, other  # un'altra console non tocca lo store PC
+    assert storemeta.coverage(cache, "windows")["complete"] == 1 and storemeta.coverage(cache, "ps4") == {}
+    cache.close()
+    print("ok  fill: store PC come «windows», dati consegnati a blocchi, barre per console")
+
+
 def test_cache_roundtrip(tmp_path):
     from pozzo.cache import Cache
     cache = Cache(tmp_path)
@@ -194,4 +228,6 @@ if __name__ == "__main__":
         test_cache_roundtrip(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_fill_reads_archives(Path(t))
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_fill_pc_store_progressive(Path(t))
     print("TUTTI I TEST OK")

@@ -187,6 +187,119 @@ def test_attivita(tmp_path):
     print("ok  /api/activity: elenco, stop e pagina")
 
 
+def test_copertine_console_in_parallelo(tmp_path):
+    """Copertine degli store online: PS4 e PS5 girano insieme e si fermano ognuna per conto suo."""
+    import time as _time
+
+    from pozzo.app import jobs as J
+
+    def fake_run(self, cfg, after_build, on_found=None):  # niente rete: resta "in corso" finche' non lo si ferma
+        while not self.stop:
+            _time.sleep(0.02)
+        self.status = "done"
+
+    old, J.NetMetaJob.run = J.NetMetaJob.run, fake_run
+    try:
+        api = client(make_cfg(tmp_path))
+        assert api.get("/api/catalogs/ps5").json()["meta"]["status"] == "idle"
+        assert api.post("/api/catalogs/ps4/netmeta", json={}).json()["status"] == "running"
+        assert api.post("/api/catalogs/ps5/netmeta", json={}).json()["status"] == "running"
+        ids = {j["id"] for j in api.get("/api/activity").json()["jobs"] if j["status"] == "running"}
+        assert {"netmeta:ps4", "netmeta:ps5"} <= ids, ids
+        api.post("/api/catalogs/ps4/netmeta/stop", json={})
+        _time.sleep(0.2)
+        assert api.get("/api/catalogs/ps4").json()["meta"]["status"] == "done"
+        assert api.get("/api/catalogs/ps5").json()["meta"]["status"] == "running"
+        api.post("/api/activity/netmeta:ps5/stop")  # anche dal pannello Attivita'
+        _time.sleep(0.2)
+        assert api.get("/api/catalogs/ps5").json()["meta"]["status"] == "done"
+    finally:
+        J.NetMetaJob.run = old
+    print("ok  copertine degli store: una console per lavoro, in parallelo")
+
+
+def test_copertine_progressive(tmp_path):
+    """I dati trovati dal lavoro arrivano subito alla libreria (memoria e library.db), prima della fine del lavoro."""
+    import asyncio
+    import sqlite3
+    import threading
+    import time as _time
+
+    from pozzo import gametdb, storemeta
+    from pozzo.cache import Cache
+    from pozzo.library.build import build
+
+    url, page = "https://example-b.test/uno/", "https://example-b.test/all"
+    cfg = make_cfg(tmp_path)
+    cfg.catalogs = {"switch": [page]}
+    c = Cache(cfg.cache)
+    c.kv_set(f"catalog:type_b:{page}", {"url": page, "index_url": page, "pid": "switch", "time": _time.time(),
+                                         "entries": [{"name": "Gioco Uno Switch NSP", "size": None, "url": url,
+                                                      "magnet": None, "group": "G"}]})
+    c.commit()
+    c.close()
+    build(cfg, log=lambda m: None)
+    gate = threading.Event()
+
+    async def fake_fill(cfg, cache, tdb=None, on_found=None, **kw):
+        on_found({url: {"cover": "https://art.gametdb.com/x.jpg", "description": "Descrizione trovata adesso.",
+                        "genres": ["Action"]}})
+        await asyncio.to_thread(gate.wait, 10)  # il lavoro resta in corso mentre si controlla
+        return {}
+
+    real_fill, real_ensure = storemeta.fill, gametdb.GameTDB.ensure
+    storemeta.fill, gametdb.GameTDB.ensure = fake_fill, lambda self, force=False: False
+    try:
+        api = client(cfg)
+        lib = api.get("/api/library").json()
+        row = next(r for r in lib["games"]["rows"] if r[12] == "online")
+        assert row[5] == 0, row  # ancora senza copertina
+        api.post("/api/catalogs/switch/netmeta", json={})
+        for _ in range(100):
+            p = api.get(f"/api/library/patches?since={lib['meta_rev']}").json()
+            if p.get("games"):
+                break
+            _time.sleep(0.05)
+        assert p["games"] == [[row[0], 1, None, "", "Action"]], p
+        assert api.get("/api/status").json()["meta_rev"] == p["rev"] > lib["meta_rev"]
+        assert api.get(f"/api/library/patches?since={p['rev']}").json()["games"] == []
+        db = sqlite3.connect(Path(cfg.cache) / "library.db")
+        desc, media = db.execute("SELECT description, media FROM games WHERE id=?", (row[0],)).fetchone()
+        db.close()
+        assert desc == "Descrizione trovata adesso." and "art.gametdb.com" in media, (desc, media)
+        assert api.get("/api/activity").json()["jobs"][0]["status"] == "running"  # non e' ancora finito
+
+        # griglia: la copertina remota risponde subito 202, si scarica in sottofondo e il riquadro viene segnalato
+        import httpx
+        png = b"\x89PNG\r\n\x1a\n" + b"\0" * 64
+        slow = threading.Event()
+
+        def fake_get(u, **kw):
+            slow.wait(5)  # host lento: prima la richiesta della griglia sarebbe rimasta appesa qui
+            return httpx.Response(200, content=png)
+
+        real_get, httpx.get = httpx.get, fake_get
+        try:
+            t0 = _time.time()
+            assert api.get(f"/img/{row[0]}/cover?q=1").status_code == 202
+            assert _time.time() - t0 < 1
+            before = api.get("/api/status").json()["meta_rev"]
+            slow.set()
+            for _ in range(100):
+                if api.get("/api/status").json()["meta_rev"] > before:
+                    break
+                _time.sleep(0.05)
+            assert [g[0] for g in api.get(f"/api/library/patches?since={before}").json()["games"]] == [row[0]]
+            assert api.get(f"/img/{row[0]}/cover?q=1").status_code == 200
+        finally:
+            httpx.get = real_get
+    finally:
+        gate.set()
+        wait_idle(api)
+        storemeta.fill, gametdb.GameTDB.ensure = real_fill, real_ensure
+    print("ok  copertine e descrizioni: compaiono mentre il lavoro e' ancora in corso")
+
+
 if __name__ == "__main__":
     for fn in (test_stato_compaito, test_comando_sconosciuto, test_aggiorna_store_senza_store,
                test_aggiorna_store_accoda, test_chiudi_gioco_senza_gioco, test_cancello_del_telefono, test_attivita):

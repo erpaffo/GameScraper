@@ -413,6 +413,35 @@ def _catalog_to_store_game(item: CatalogItem, console_pid: str) -> dict:
     }
 
 
+def apply_store_meta(e: dict, meta: dict) -> None:
+    """Copertina e descrizione lette dalla pagina dello store (o da GameTDB): riempie solo i vuoti.
+    La usa anche il server per mostrare i dati appena trovati, senza ricostruire la libreria."""
+    if not meta:
+        return
+    if not e["description"]:
+        e["description"] = meta.get("description")
+    if not e["developer"]:
+        e["developer"] = meta.get("developer")
+    if not e["publisher"]:
+        e["publisher"] = meta.get("publisher")
+    if not e["genres"]:
+        e["genres"] = list(meta.get("genres") or [])
+    if not e["players"] and meta.get("players"):
+        e["players"] = str(meta["players"])
+    if not e["release_date"] and meta.get("release_date"):
+        e["release_date"] = meta["release_date"]
+        e["year"] = int(meta["release_date"][:4]) if meta["release_date"][:4].isdigit() else e["year"]
+    if not e["size"] and meta.get("size"):
+        e["size"] = meta["size"]
+    covers = meta.get("covers") or ([meta["cover"]] if meta.get("cover") else [])
+    if covers and "cover" not in e["media"]:
+        # piu' indirizzi separati da "|": il server prova il primo che risponde
+        e["media"]["cover"] = "url:" + "|".join(covers[:3])
+    shots = meta.get("screenshots") or []
+    if shots and "screenshot" not in e["media"]:
+        e["media"]["screenshot"] = "url:" + shots[0]
+
+
 def _catalog_entries(cfg, cache, merged: dict) -> tuple[list[dict], dict]:
     """Voci lette dalle pagine degli store online (esclusi i giochi gia' posseduti) e, per i giochi
     posseduti che compaiono negli elenchi, i link alla pagina dello store: (voci, {chiave: fonti}).
@@ -471,33 +500,6 @@ def _catalog_entries(cfg, cache, merged: dict) -> tuple[list[dict], dict]:
             return
         if source["url"] not in {s["url"] for s in owned_pages[key]}:
             owned_pages[key].append(source)
-
-    def apply_store_meta(e: dict, meta: dict) -> None:
-        """Copertina e descrizione lette dalla pagina dello store (o da GameTDB): riempie solo i vuoti."""
-        if not meta:
-            return
-        if not e["description"]:
-            e["description"] = meta.get("description")
-        if not e["developer"]:
-            e["developer"] = meta.get("developer")
-        if not e["publisher"]:
-            e["publisher"] = meta.get("publisher")
-        if not e["genres"]:
-            e["genres"] = list(meta.get("genres") or [])
-        if not e["players"] and meta.get("players"):
-            e["players"] = str(meta["players"])
-        if not e["release_date"] and meta.get("release_date"):
-            e["release_date"] = meta["release_date"]
-            e["year"] = int(meta["release_date"][:4]) if meta["release_date"][:4].isdigit() else e["year"]
-        if not e["size"] and meta.get("size"):
-            e["size"] = meta["size"]
-        covers = meta.get("covers") or ([meta["cover"]] if meta.get("cover") else [])
-        if covers and "cover" not in e["media"]:
-            # piu' indirizzi separati da "|": il server prova il primo che risponde
-            e["media"]["cover"] = "url:" + "|".join(covers[:3])
-        shots = meta.get("screenshots") or []
-        if shots and "screenshot" not in e["media"]:
-            e["media"]["screenshot"] = "url:" + shots[0]
 
     sources_list: list[tuple[str, str, str | None]] = [
         (pid, url, None) for pid, urls in (getattr(cfg, "catalogs", {}) or {}).items()

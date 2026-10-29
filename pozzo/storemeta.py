@@ -357,34 +357,48 @@ async def fetch_search(cfg, cache, client, title: str, site: str = "ziperto.com"
     return await fetch_detail(cfg, cache, client, hit, log=log, limiter=limiter)
 
 
-def coverage(cache) -> dict:
-    """Copertine/descrizioni contate durante l'ultimo giro (visibili anche dopo un riavvio)."""
-    return cache.kv_get("netmeta:coverage") or {}
+def _coverage_key(only: list[str] | None) -> str:
+    return "netmeta:coverage" + (f":{only[0]}" if only and len(only) == 1 else "")
+
+
+def coverage(cache, pid: str | None = None) -> dict:
+    """Copertine/descrizioni contate durante l'ultimo giro di quella console (visibili anche dopo un riavvio)."""
+    return cache.kv_get(_coverage_key([pid] if pid else None)) or {}
 
 
 async def fill(cfg, cache, tdb=None, log=print, limit: int = 0, cancelled=None,
-               search_site: str | None = "ziperto.com", stats: dict | None = None, only: list[str] | None = None) -> dict:
-    """Completa copertine e descrizioni delle voci degli store online.
+               search_site: str | None = "ziperto.com", stats: dict | None = None, only: list[str] | None = None,
+               on_found=None) -> dict:
+    """Completa copertine e descrizioni delle voci degli store online (console e store PC non ufficiali).
 
     1. GameTDB (offline): per ogni voce senza dati, copertina/descrizione/giocatori/editore;
     2. pagina del gioco: fino a `limit` richieste (0 = tutte), per le voci ancora senza copertina o descrizione;
     3. ricerca su ziperto per le voci rimaste senza copertina.
 
     `stats` e' un dizionario aggiornato in corso d'opera: l'interfaccia lo legge per mostrare
-    l'avanzamento senza aspettare la fine.
+    l'avanzamento senza aspettare la fine. `on_found({url: dati})` riceve i dati appena trovati, a blocchi:
+    il server li mostra subito senza ricostruire la libreria.
     """
     from . import platforms as P
 
+    def found(batch: dict):
+        if on_found and batch:
+            try:
+                on_found(batch)
+            except Exception as e:  # la libreria in memoria non deve fermare la lettura delle pagine
+                log(f"Aggiornamento della libreria non riuscito: {type(e).__name__}: {e}")
+
+    sources = [(pid, url) for pid, urls in (getattr(cfg, "catalogs", {}) or {}).items() for url in urls or []]
+    sources += [("windows", x["url"]) for x in (getattr(cfg, "pc_stores", None) or []) if x.get("url")]
     entries: dict[str, tuple[str, CatalogItem]] = {}
-    for pid, urls in (getattr(cfg, "catalogs", {}) or {}).items():
+    for pid, url in sources:
         if pid not in P.PLATFORMS or (only and pid not in only):  # only: solo le console scelte
             continue
-        for url in urls or []:
-            info = cached_info(cache, pid, url)
-            if info["type"] == "filelist":
-                continue  # indici di file (Minerva e simili): i metadati arrivano dallo scraper normale
-            for it in info["entries"]:
-                entries.setdefault(it["url"], (pid, it))
+        info = cached_info(cache, pid, url)
+        if info["type"] == "filelist":
+            continue  # indici di file (Minerva e simili): i metadati arrivano dallo scraper normale
+        for it in info["entries"]:
+            entries.setdefault(it["url"], (pid, it))
     total = len(entries)
     stats = stats if stats is not None else {}
     stats.update({"games": total, "gametdb": 0, "pages": 0, "searches": 0, "complete": 0, "requests": 0,
@@ -421,6 +435,7 @@ async def fill(cfg, cache, tdb=None, log=print, limit: int = 0, cancelled=None,
 
     # 1) GameTDB offline: nessuna richiesta, riempie subito la maggior parte dei giochi Switch
     if tdb is not None:
+        fresh: dict = {}
         for url, (pid, it) in entries.items():
             if cancelled and cancelled():
                 stats["stopped"] = True
@@ -437,14 +452,17 @@ async def fill(cfg, cache, tdb=None, log=print, limit: int = 0, cancelled=None,
                                    "players": rec.get("players"), "publisher": rec.get("publisher"),
                                    "developer": rec.get("developer"), "release_date": rec.get("release_date"),
                                    "genres": rec.get("genres") or []}, "gametdb", commit=False)
-            data_by_url[url] = got
+            data_by_url[url] = fresh[url] = got
             stats["gametdb"] += 1
             if stats["gametdb"] % 250 == 0:  # salvataggio a blocchi: l'interfaccia resta reattiva
                 cache.commit()
                 recount()
+                found(fresh)
+                fresh = {}
                 log(f"GameTDB: {stats['gametdb']:,} giochi")
         cache.commit()
         recount()
+        found(fresh)
         log(f"GameTDB: dati per {stats['gametdb']:,} giochi su {total:,}")
 
     # 2) pagina del gioco, a richieste contate (piu' richieste in parallelo, stesso ritmo)
@@ -466,13 +484,15 @@ async def fill(cfg, cache, tdb=None, log=print, limit: int = 0, cancelled=None,
                     results = await asyncio.gather(
                         *(fetch_detail(cfg, cache, client, url, log=log, limiter=limiter) for url in chunk),
                         return_exceptions=True)
+                    fresh = {}
                     for url, got in zip(chunk, results):
                         stats["requests"] += 1
                         stats["pages"] += 1
                         if isinstance(got, Exception):
                             log(f"{url}: {type(got).__name__}: {got}")
                         elif got:
-                            data_by_url[url] = got
+                            data_by_url[url] = fresh[url] = got
+                    found(fresh)  # copertine visibili subito, un blocco alla volta
                     if stats["pages"] % 50 < batch:
                         log(f"Pagine lette: {stats['pages']:,}")
                     recount()  # le due barre (copertine / descrizioni) avanzano a ogni blocco
@@ -493,20 +513,22 @@ async def fill(cfg, cache, tdb=None, log=print, limit: int = 0, cancelled=None,
                             *(fetch_search(cfg, cache, client, entries[u][1]["name"], search_site,
                                            log=log, limiter=limiter) for u in chunk),
                             return_exceptions=True)
+                        fresh = {}
                         for url, got in zip(chunk, results):
                             stats["requests"] += 1
                             stats["searches"] += 1
                             if isinstance(got, Exception):
                                 log(f"{search_site}: {type(got).__name__}: {got}")
                             elif got:
-                                data_by_url[url] = put(cache, url, got, "search")
+                                data_by_url[url] = fresh[url] = put(cache, url, got, "search")
+                        found(fresh)
         finally:
             ledger.close()
 
     stats["complete"] = sum(1 for u in entries if is_complete(u))
     covers, descs = recount()
     # numeri salvati: restano visibili anche dopo un riavvio dell'app, prima di rilanciare il lavoro
-    cache.kv_set("netmeta:coverage", {"time": time.time(), "total": total, "covers": covers,
+    cache.kv_set(_coverage_key(only), {"time": time.time(), "total": total, "covers": covers,
                                       "descriptions": descs, "complete": stats["complete"]})
     log(f"Copertine e descrizioni: {stats['complete']:,} giochi completi su {total:,} "
         f"({covers:,} copertine, {descs:,} descrizioni)")

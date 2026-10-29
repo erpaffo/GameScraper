@@ -31,6 +31,7 @@ async function loadLibrary() {
   addOnline(prev);
   S.skipDup = lib.skip_duplicates !== false;
   S.userRev = lib.user_rev;
+  S.metaRev = lib.meta_rev;
   S.catalogs = lib.catalogs || {};
   S.iconsCredit = lib.icons_credit || "";
   RECO.setPlatName(platName);
@@ -262,7 +263,8 @@ function tileEl(g) {
   if (g.cover) {
     const img = el.querySelector("img");
     img.onload = () => img.classList.add("ok");
-    const src = `/img/${g.id}/cover?w=${Math.round(S.tw * (window.devicePixelRatio || 1))}`;
+    // q=1: una copertina remota non ancora scaricata non tiene occupato il collegamento (arriva con applyPatches)
+    const src = `/img/${g.id}/cover?w=${Math.round(S.tw * (window.devicePixelRatio || 1))}&q=1`;
     let tries = 0;
     // un errore puo' essere passeggero (app che riparte, disco occupato) o dovuto a numeri di gioco vecchi dopo una
     // ricostruzione della libreria: si ricontrolla la libreria e si riprova prima di rinunciare
@@ -286,8 +288,26 @@ async function syncLibrary() {
     const st = await api("/api/status");
     // libreria ricostruita altrove, oppure dati utente cambiati da un altro dispositivo (partita avviata dal telefono...)
     if (!st.building && ((st.built_at && st.built_at !== S.builtAt) || (st.user_rev != null && st.user_rev !== S.userRev))) await reload(true);
+    else if (st.meta_rev != null && st.meta_rev !== S.metaRev) await applyPatches();
     if (["starting", "extracting", "running"].includes(st.running) && $("#running").hidden) pollRunning();
   } catch { /* server non raggiungibile: si riprova al prossimo controllo */ } finally { syncBusy = false; }
+}
+
+/* Copertine e dati trovati mentre un lavoro e' in corso (o copertine appena scaricate): solo i giochi cambiati,
+   senza ricaricare la libreria. I riquadri visibili si ricreano e compaiono un po' alla volta. */
+async function applyPatches() {
+  const d = await api(`/api/library/patches?since=${S.metaRev || 0}`);
+  if (d.reset) return reload(true);
+  S.metaRev = d.rev;
+  for (const [id, cover, year, dev, genres] of d.games) {
+    const g = S.byId.get(id);
+    if (!g) continue;
+    Object.assign(g, { cover, year, dev, genres });
+    g.q = fold(`${g.title} ${g.dev} ${platName(g.platform)} ${g.platform} ${g.store || ""}`);
+    const el = S.nodes.get(id);
+    if (el) { el.remove(); S.nodes.delete(id); }
+  }
+  if (d.games.length) render();
 }
 
 function refreshGrid(keepScroll = false) {
@@ -3487,6 +3507,10 @@ function bind() {
     try { await api("/api/pc-stores/refresh", { body: {} }); } catch (e) { return toast(e.message, true); }
     pollStoreRefresh(); // la coda unica mostra l'avanzamento nel blocco «Aggiornamento degli store»
     pollPcStores();
+  };
+  $("#pcst-meta").onclick = async () => {
+    try { await api("/api/catalogs/windows/netmeta", { body: {} }); } catch (e) { return toast(e.message, true); }
+    toast("Copertine degli store PC in corso: compaiono un po' alla volta (avanzamento in Attività)");
   };
   $("#pcst-filter").addEventListener("click", (e) => {
     const b = e.target.closest("[data-pcst-filter]");

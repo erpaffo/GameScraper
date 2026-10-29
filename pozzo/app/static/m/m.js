@@ -1019,7 +1019,7 @@ const ACT_ICON = { scan: "🔍", stores: "🛒", catalogs: "🌐", netmeta: "�
 
 function actJob(j) {
   const pct = j.progress != null ? Math.round(j.progress * 100) : null;
-  return `<div class="act-row"><span class="act-ic">${ACT_ICON[j.id] || "•"}</span>
+  return `<div class="act-row"><span class="act-ic">${ACT_ICON[j.id.split(":")[0]] || "•"}</span>
     <div class="act-txt"><b>${esc(j.name)}</b><span class="muted small">${esc(j.phase || j.status)}</span>
       ${pct != null ? `<div class="act-bar"><i style="width:${pct}%"></i></div>` : ""}</div>
     <span class="act-st">${ACT_STATUS[j.status] || "·"}</span></div>`;

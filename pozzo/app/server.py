@@ -49,6 +49,7 @@ STORE_NAMES = {p.id: p.name for p in STORES.PROVIDERS}
 STORE_NAMES["online"] = "Store online"
 _REMOTE_SEM = threading.Semaphore(4)  # immagini remote scaricate al massimo 4 alla volta
 _REMOTE_DOWN: dict[str, float] = {}  # host che non risponde -> fino a quando non si riprova (secondi)
+_REMOTE_MISS: dict[str, float] = {}  # copertina della griglia non scaricabile -> fino a quando non si riprova
 from ..library.build import build
 from ..library.userdata import UserData
 from ..matching import normalize
@@ -96,6 +97,12 @@ class Library:
         self.built_at = 0.0
         self.lock = threading.RLock()
         self.full = threading.Event()  # impostato quando ci sono anche i giochi del catalogo online
+        # giochi cambiati senza ricostruire la libreria (copertine appena trovate o scaricate): le pagine aperte
+        # chiedono solo quelli (/api/library/patches) invece di ricaricare 150.000 giochi
+        self.meta_rev = 0
+        self.patches: list[tuple[int, list[int]]] = []
+        self.patch_base = 0  # chi e' rimasto indietro di qui ricarica tutto
+        self._url_keys: dict | None = None  # pagina dello store -> chiave del gioco (anche le fonti in piu')
 
     def load(self, online: bool = True):
         """online=False: solo i giochi posseduti (avvio rapido); il catalogo online si carica dopo."""
@@ -131,8 +138,60 @@ class Library:
                 self.groups[g["grp"]].append(g)
             self.auto = auto
             self.built_at = float(built[0]) if built else 0.0
+            self.patches, self.patch_base, self._url_keys = [], self.meta_rev, None
         if online:
             self.full.set()
+
+    def touch(self, ids: list[int]):
+        """Segna dei giochi come cambiati: le pagine aperte li ridisegnano al prossimo controllo (ogni 3 s)."""
+        if not ids:
+            return
+        with self.lock:
+            self.meta_rev += 1
+            self.patches.append((self.meta_rev, list(ids)))
+            if len(self.patches) > 2000:
+                del self.patches[:-2000]
+                self.patch_base = self.patches[0][0] - 1
+
+    def patch_store_meta(self, found: dict) -> int:
+        """Copertine e descrizioni appena lette dagli store online, subito in libreria (memoria e library.db) senza
+        ricostruirla: riempiono solo i vuoti, con la stessa regola della ricostruzione. Ritorna i giochi cambiati."""
+        from ..library.build import apply_store_meta
+        if not found or not self.path.exists():
+            return 0
+        cols = ("description", "developer", "publisher", "genres", "players", "release_date", "year", "size", "media")
+        changed: list[int] = []
+        db = sqlite3.connect(self.path, timeout=10)
+        try:
+            if self._url_keys is None:
+                keys: dict[str, str] = {}
+                for key, launch in db.execute("SELECT key, launch FROM games WHERE store='online'"):
+                    for s in (json.loads(launch or "{}").get("sources") or []):
+                        keys.setdefault(s.get("url"), key)
+                self._url_keys = keys
+            for url, meta in found.items():
+                g = self.by_key.get(self._url_keys.get(url))
+                row = g and db.execute(f"SELECT {', '.join(cols)} FROM games WHERE id=?", (g["id"],)).fetchone()
+                if not row:
+                    continue
+                e = dict(zip(cols, row))
+                e["genres"], e["media"] = json.loads(e["genres"] or "[]"), json.loads(e["media"] or "{}")
+                before = json.dumps(e, sort_keys=True)
+                apply_store_meta(e, meta)
+                if json.dumps(e, sort_keys=True) == before:
+                    continue
+                db.execute(f"UPDATE games SET {', '.join(c + '=?' for c in cols)} WHERE id=?",
+                           (*(json.dumps(e[c], ensure_ascii=False) if c in ("genres", "media") else e[c] for c in cols),
+                            g["id"]))
+                with self.lock:
+                    g.update({c: e[c] for c in cols if c != "description"})
+                    g["description"] = e["description"][:1] if e["description"] else e["description"]  # come DETAIL_SQL
+                changed.append(g["id"])
+            db.commit()
+        finally:
+            db.close()
+        self.touch(changed)
+        return len(changed)
 
     def get(self, gid: int) -> dict:
         g = self.by_id.get(gid)
@@ -343,7 +402,7 @@ def create_app(cfg) -> FastAPI:
     thumbs_dir = Path(cfg.cache) / "thumbs"
     state = {"building": False, "build_log": [], "build_stats": None, "thumbs_total": 0, "thumbs_done": 0, "thumbs_started": 0, "build_started": 0}
     job: dict = {"current": J.ScrapeJob(), "stores": J.StoreJob(), "storemeta": J.StoreMetaJob(),
-                 "hltb": J.HltbJob(), "collart": J.CollArtJob(), "netmeta": J.NetMetaJob(),
+                 "hltb": J.HltbJob(), "collart": J.CollArtJob(),  # copertine degli store online: "netmeta:<pid>", uno per console
                  "pcstores": J.PcStoreJob(), "top": J.TopGamesJob(), "store_refresh": J.StoreRefreshJob()}
     # ultime risposte di /api/library gia' pronte: telefono e PC la richiedono a ogni apertura (costruirla
     # costa 0,2-0,6 s e qualche MB con una libreria grande) e cambia solo quando cambia libreria o dati utente
@@ -354,7 +413,7 @@ def create_app(cfg) -> FastAPI:
         """Mette j al posto del job `name` se quello non gira; False se gira gia'. Controllo e cambio sono
         sotto lock e j risulta subito "running": due clic rapidi (o PC e telefono) non avviano due job."""
         with start_lock:
-            if job[name].status == "running":
+            if name in job and job[name].status == "running":
                 return False
             j.status = "running"
             job[name] = j
@@ -411,7 +470,7 @@ def create_app(cfg) -> FastAPI:
         if part != "owned":
             lib.full.wait()
         # la risposta dipende da libreria, dati utente e poche impostazioni: con le stesse, si restituisce quella gia' pronta
-        ck = (lib.built_at, user.rev, part, bool(cfg.app.get("skip_duplicates", True)),
+        ck = (lib.built_at, lib.meta_rev, user.rev, part, bool(cfg.app.get("skip_duplicates", True)),
               tuple(sorted((k, tuple(v or [])) for k, v in cfg.catalogs.items())),
               len(cfg.app.get("smart_collections") or []))
         hit = lib_payloads.get(ck)
@@ -448,7 +507,7 @@ def create_app(cfg) -> FastAPI:
                     plats[p] += 0  # console con uno store online ma senza giochi posseduti
             # JSONResponse diretto: jsonable_encoder di FastAPI su ~150.000 righe costa secondi
             r = JSONResponse({
-                "built_at": lib.built_at, "user_rev": user.rev,
+                "built_at": lib.built_at, "user_rev": user.rev, "meta_rev": lib.meta_rev,
                 "platforms": sorted(({"id": p, "name": P.PLATFORMS[p].name if p in P.PLATFORMS else p, "count": n}
                                      for p, n in plats.items()), key=lambda x: x["name"].lower()),
                 "collections": [{"slug": c["slug"], "name": c["name"], "auto": c["auto"], "custom": c["custom"],
@@ -467,6 +526,18 @@ def create_app(cfg) -> FastAPI:
                 lib_payloads.clear()
             lib_payloads[ck] = r.body
             return Response(content=r.body, media_type="application/json")
+
+    @app.get("/api/library/patches")
+    def api_library_patches(since: int = 0):
+        """Giochi cambiati dopo `since` senza ricostruire la libreria (copertine appena trovate o scaricate),
+        nelle stesse colonne di /api/library: id, copertina, anno, sviluppatore, generi."""
+        with lib.lock:
+            if since < lib.patch_base:
+                return {"rev": lib.meta_rev, "reset": True}
+            ids = {i for rev, xs in lib.patches if rev > since for i in xs}
+            rows = [[g["id"], int("cover" in g["media"]), g["year"], g["developer"] or "", ", ".join(g["genres"])]
+                    for g in (lib.by_id.get(i) for i in ids) if g]
+        return {"rev": lib.meta_rev, "games": rows}
 
     FIELD_LABELS = {"title": "dati del gioco", "description": "descrizione", "developer": "sviluppatore",
                     "publisher": "editore", "genres": "generi", "release_date": "data di uscita",
@@ -1524,29 +1595,36 @@ def create_app(cfg) -> FastAPI:
                 pages.append({"url": u, "games": len(d["entries"]), "time": d["time"],
                               "type": d["type"] or (cfg.catalog_options.get(pid) or {}).get("type", "filelist"),
                               "total_pages": d["total_pages"]})
-            cov = coverage(c)
+            cov = coverage(c, pid)
         finally:
             c.close()
-        return {"platform": pid, "pages": pages, "job": job["store_refresh"].state(), "meta": job["netmeta"].state(),
-                "meta_coverage": cov}
+        meta = job.get(f"netmeta:{pid}")
+        return {"platform": pid, "pages": pages, "job": job["store_refresh"].state(),
+                "meta": meta.state() if meta else J.NetMetaJob().state(), "meta_coverage": cov}
 
     @app.post("/api/catalogs/{pid}/netmeta")
     def api_catalog_netmeta(pid: str, body: dict = Body(default={})):
-        """Copertine e descrizioni: GameTDB offline (subito) + lettura delle pagine dei siti."""
+        """Copertine e descrizioni: GameTDB offline (subito) + lettura delle pagine dei siti.
+        Un lavoro per console: piu' console possono girare insieme."""
         if pid not in P.PLATFORMS:
             raise HTTPException(404, "Console sconosciuta")
+        name = f"netmeta:{pid}"
         limit = int(body.get("limit") or 0)  # 0 = tutte le voci (circa 2 richieste al secondo)
-        if not _claim("netmeta", J.NetMetaJob(limit=max(0, min(limit, 50000)), only=[pid],
-                                              search_ziperto=bool(body.get("ziperto", True)))):
-            return job["netmeta"].state()
-        threading.Thread(target=lambda: job["netmeta"].run(cfg, lambda stats: lib.load()),
+        if not _claim(name, J.NetMetaJob(limit=max(0, min(limit, 50000)), only=[pid],
+                                         search_ziperto=bool(body.get("ziperto", True)))):
+            return job[name].state()
+        j = job[name]
+        threading.Thread(target=lambda: j.run(cfg, lambda stats: lib.load(), on_found=lib.patch_store_meta),
                          daemon=True).start()
-        return job["netmeta"].state()
+        return j.state()
 
     @app.post("/api/catalogs/{pid}/netmeta/stop")
     def api_catalog_netmeta_stop(pid: str):
-        job["netmeta"].stop = True
-        return job["netmeta"].state()
+        j = job.get(f"netmeta:{pid}")
+        if not j:
+            return J.NetMetaJob().state()
+        j.stop = True
+        return j.state()
 
     @app.get("/api/pc-stores")
     def api_pc_stores():
@@ -2640,7 +2718,7 @@ def create_app(cfg) -> FastAPI:
     def api_status():
         return {k: state[k] for k in ("building", "build_stats", "thumbs_total", "thumbs_done")} | {
             "build_log": state["build_log"][-8:], "has_library": bool(lib.games) or lib.built_at > 0,
-            "built_at": lib.built_at, "user_rev": user.rev,
+            "built_at": lib.built_at, "user_rev": user.rev, "meta_rev": lib.meta_rev,
             "running": launcher.running().get("status") or ""}
 
     @app.post("/api/focus")
@@ -2708,13 +2786,24 @@ def create_app(cfg) -> FastAPI:
         return {"media": {k: f"/img/{gid}/{k}" for k in _media(g)}}
 
     @app.get("/img/{gid}/{kind}")
-    def api_img(gid: int, kind: str, request: Request, w: int = 0):
+    def api_img(gid: int, kind: str, request: Request, w: int = 0, q: int = 0):
+        """q=1 (griglia): un'immagine remota non ancora scaricata risponde subito 202 e va in coda; la pagina la
+        ridisegna quando e' pronta. Senza q si aspetta il download (scheda del gioco, telefono, API)."""
         g = lib.get(gid)
         rel = _media(g).get(kind)
         if not rel:
             raise HTTPException(404)
         if rel.startswith("url:"):  # immagine remota (giochi degli store online): scaricata solo quando serve
-            rel = _fetch_remote(rel[4:])
+            url_ = rel[4:]
+            if q:
+                rel = _remote_cached(url_)
+                if not rel:
+                    if _REMOTE_MISS.get(url_, 0) > time.time():
+                        raise HTTPException(404)
+                    _queue_cover(url_, gid)
+                    return Response(status_code=202, headers={"Cache-Control": "no-store"})
+            else:
+                rel = _fetch_remote(url_)
             if not rel:
                 raise HTTPException(404)
         src = Path(cfg.cache) / rel
@@ -2736,6 +2825,17 @@ def create_app(cfg) -> FastAPI:
                 pass  # immagine non decodificabile: si serve l'originale
         return FileResponse(src, headers=headers)
 
+    from ..net import MAGIC
+    remote_exts = list(dict.fromkeys([ext for _, ext in MAGIC] + ["mp4"]))
+
+    def _remote_cached(url_: str) -> str | None:
+        """Immagine remota gia' scaricata (percorso relativo alla cache) o None. Niente glob: la cartella ha
+        decine di migliaia di file e la griglia ne chiede decine al secondo."""
+        h = hashlib.sha1(url_.encode()).hexdigest()
+        folder = Path(cfg.cache) / "media" / "net"
+        hit = next((p for p in (folder / f"{h}.{e}" for e in remote_exts) if p.exists()), None)
+        return hit.relative_to(cfg.cache).as_posix() if hit else None
+
     def _fetch_remote(url_: str) -> str | None:
         import httpx
 
@@ -2743,9 +2843,9 @@ def create_app(cfg) -> FastAPI:
         from urllib.parse import urlparse
         h = hashlib.sha1(url_.encode()).hexdigest()
         folder = Path(cfg.cache) / "media" / "net"
-        hit = next(iter(folder.glob(h + ".*")), None) if folder.exists() else None
+        hit = _remote_cached(url_)
         if hit:
-            return hit.relative_to(cfg.cache).as_posix()
+            return hit
         # piu' indirizzi separati da "|": si prova il primo che risponde (es. copertine GameTDB
         # in regioni diverse, dove non tutte esistono)
         candidates = [u.strip() for u in url_.split("|") if u.strip()][:4]
@@ -2771,6 +2871,38 @@ def create_app(cfg) -> FastAPI:
             dest.write_bytes(r.content)
             return dest.relative_to(cfg.cache).as_posix()
         return None
+
+    # copertine remote della griglia, scaricate in sottofondo: prima le ultime chieste (quelle sullo schermo).
+    # Prima ogni richiesta restava appesa al download: con decine di copertine in coda si occupavano i thread del
+    # server e i 6 collegamenti del browser, e si fermava tutta l'app (anche le pagine che non c'entrano)
+    cover_q: dict[str, int] = {}  # url -> id del gioco, in ordine di richiesta
+    cover_cv = threading.Condition()
+
+    def _queue_cover(url_: str, gid: int):
+        with cover_cv:
+            cover_q.pop(url_, None)
+            cover_q[url_] = gid
+            while len(cover_q) > 300:  # le piu' vecchie sono gia' fuori dallo schermo: si richiedono se si torna li'
+                del cover_q[next(iter(cover_q))]
+            cover_cv.notify()
+
+    def _cover_worker():
+        while True:
+            with cover_cv:
+                while not cover_q:
+                    cover_cv.wait()
+                url_, gid = cover_q.popitem()
+            try:
+                ok = _fetch_remote(url_)
+            except Exception:
+                ok = None
+            if ok:
+                lib.touch([gid])
+            else:
+                _REMOTE_MISS[url_] = time.time() + 3600  # non esiste (o host giu'): non si riprova per un'ora
+
+    for _ in range(3):  # 3 dei 4 posti di _REMOTE_SEM: uno resta libero per port, giochi gratis e schede
+        threading.Thread(target=_cover_worker, daemon=True).start()
 
     def _pregen_thumbs():
         """Genera in background le miniature delle copertine, cosi' lo scorrimento e' fluido da subito."""
@@ -2851,7 +2983,7 @@ def create_app(cfg) -> FastAPI:
                     "phase": state.get("phase") or state.get("message") or "",
                     "progress": round(prog, 3) if prog is not None else None,
                     "started": state.get("started") or 0, "finished": state.get("finished") or 0,
-                    "stoppable": jid in job_stops and state.get("status") == "running"
+                    "stoppable": (jid in job_stops or jid.startswith("netmeta:")) and state.get("status") == "running"
                     and state.get("stoppable", True) and not state.get("stopping"),
                     "last": log[-1] if log else ""}
 
@@ -2861,7 +2993,8 @@ def create_app(cfg) -> FastAPI:
             row("storemeta", "Metadati degli store", job["storemeta"].state()),
             row("pcstores", "Store PC", job["pcstores"].state()),
             row("catalogs", "Store online", job["store_refresh"].state()),
-            row("netmeta", "Copertine e descrizioni", job["netmeta"].state()),
+            *(row(k, f"Copertine e descrizioni · {P.PLATFORMS[k[8:]].name if k[8:] in P.PLATFORMS else k[8:]}",
+                  j.state()) for k, j in list(job.items()) if k.startswith("netmeta:")),
             row("hltb", "Durate (HowLongToBeat)", job["hltb"].state()),
             row("top", "Migliori giochi", job["top"].state()),
             row("collart", "Immagini delle collezioni", job["collart"].state()),
@@ -2883,7 +3016,7 @@ def create_app(cfg) -> FastAPI:
 
     # id della riga -> come interromperla (gli altri lavori non hanno un punto di arresto sicuro)
     job_stops = {"scan": lambda: job["current"].cancel(), "catalogs": lambda: job["store_refresh"].stop_now(),
-                 **{k: _stop_flag(k) for k in ("storemeta", "netmeta", "hltb", "top", "collart")}}
+                 **{k: _stop_flag(k) for k in ("storemeta", "hltb", "top", "collart")}}
 
     @app.get("/api/activity")
     def api_activity():
@@ -2892,6 +3025,9 @@ def create_app(cfg) -> FastAPI:
 
     @app.post("/api/activity/{jid}/stop")
     def api_activity_stop(jid: str):
+        if jid.startswith("netmeta:") and jid in job:  # un lavoro per console, creato al primo avvio
+            _stop_flag(jid)()
+            return api_activity()
         if jid not in job_stops:
             raise HTTPException(400, "Questa operazione non si puo' interrompere")
         job_stops[jid]()
