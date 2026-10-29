@@ -147,6 +147,7 @@ const TABS = [
   { id: "home", label: "Home", open: () => { BP.stack = [homeScreen()]; show(); } },
   { id: "foryou", label: "Per te", open: () => push(forYouScreen()) },
   { id: "all", label: "Libreria", open: () => push(discoverScreen("Libreria", sortTitle(visibleGames()), "all")) },
+  { id: "local", label: "Sul PC", open: () => push(localScreen()) },
   { id: "pc", label: "PC", open: () => push(pcScreen()) },
   { id: "shop", label: "Store", open: () => push(shopScreen()) },
   { id: "plat", label: "Console", open: () => push(platformsScreen()) },
@@ -533,6 +534,19 @@ function collectionsScreen() {
     ok: () => push(gridScreen(s.name, sortTitle(items), "coll")) })).concat(colls.map((c) => ({ label: c.name, sub: `${counts.get(c.idx)} giochi`, key: c.slug, ...collArt(c.slug),
     ok: () => push(gridScreen(c.name, games.filter((g) => g.grp.colls.includes(c.idx)).sort((a, b) => (a.year || 9999) - (b.year || 9999)), "coll")) }))),
   "coll", { text: true, unit: "collezioni" });
+}
+
+/** Giochi scaricati sul PC (ROM e giochi PC installati): uno scaffale per console. */
+function localScreen() {
+  const by = new Map();
+  for (const g of sortTitle(visibleGames().filter((g) => !g.store || g.installed))) {
+    if (!by.has(g.platform)) by.set(g.platform, []);
+    by.get(g.platform).push(g);
+  }
+  const shelves = [...by.keys()].sort((a, b) => collator.compare(platName(a), platName(b)))
+    .map((p) => ({ title: platName(p), sub: `${by.get(p).length} giochi`, items: by.get(p) }));
+  if (!shelves.length) shelves.push({ title: "Nessun gioco scaricato sul PC", items: [] });
+  return shelvesScreen(shelves, "local");
 }
 
 function pcScreen() {

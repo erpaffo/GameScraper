@@ -15,6 +15,7 @@ const S = {
   items: [], rows: [], total: 0, cols: 1, tw: 170, th: 260, gap: 18, pad: 22,
   nodes: new Map(), selected: null, detail: null, running: null, openSeq: 0,
   instFilter: store.get("instFilter", "all"), stores: [],
+  allLocal: store.get("allLocal", false), // Tutti i giochi: solo quelli presenti sul PC, divisi per console
   disc: store.get("disc", { preset: "", genre: "", decade: "" }),
   shopF: store.get("shopF", { src: "", plat: "", size: "" }), shop: [], shopIds: new Set(),
 };
@@ -30,6 +31,7 @@ async function loadLibrary() {
   S.nOwned = [S.games.length, S.groups.length];
   addOnline(prev);
   S.skipDup = lib.skip_duplicates !== false;
+  S.hideDlc = new Set(lib.hide_dlc || []);
   S.userRev = lib.user_rev;
   S.metaRev = lib.meta_rev;
   S.catalogs = lib.catalogs || {};
@@ -109,6 +111,7 @@ function inView(g, v) {
     case "collection": { const c = S.collBySlug.get(v.id); return !!c && grp.colls.includes(c.idx); }
     case "missing": return !g.found;
     case "hidden": return !!grp.hidden;
+    case "all": if (S.allLocal && g.store && !g.installed) return false; break; // le ROM sono sempre sul disco
     default: break;
   }
   if ((g.platform === "windows" || S.hasOnline?.has(g.platform)) && S.instFilter !== "all" && (v.type === "store" || v.type === "platform")) {
@@ -134,6 +137,9 @@ const SORTS = {
 
 function computeItems() {
   let it = S.games.filter((g) => inView(g, S.view));
+  // DLC nascoste per console (check box nella vista della console) e aggiornamenti: mai come riquadri,
+  // stanno tra i download del gioco base (vedi build.py: _attach_updates)
+  it = it.filter((g) => g.content !== "update" && !(g.content === "dlc" && S.hideDlc?.has(g.platform)));
   if (S.view.type === "shop") it = shopFilter(it, S.shopF);
   const d = discover(it, S.disc);
   it = d.items;
@@ -149,12 +155,13 @@ function computeItems() {
 }
 
 function sections(items) {
-  if (!S.group) return [{ label: null, items }];
+  const group = S.view.type === "all" && S.allLocal ? "platform" : S.group;
+  if (!group) return [{ label: null, items }];
   const keyOf = {
     platform: (g) => platName(g.platform),
     year: (g) => (g.year ? String(g.year) : "Anno sconosciuto"),
     letter: (g) => { const c = (g.sort || "#")[0].toUpperCase(); return /[A-Z]/.test(c) ? c : "#"; },
-  }[S.group];
+  }[group];
   const m = new Map();
   for (const g of items) { const k = keyOf(g); if (!m.has(k)) m.set(k, []); m.get(k).push(g); }
   const keys = [...m.keys()].sort((a, b) => collator.compare(a, b));
@@ -253,6 +260,7 @@ function tileEl(g) {
     + (S.oneVersion && g.grp.versions > 1 ? `<span class="badge ver">${g.grp.versions} ${g.store ? "store" : "versioni"}</span>` : "")
     + (g.store ? `<span class="badge plat">${esc(STORE_SHORT[g.store] || g.store.toUpperCase())}</span>`
       : showPlat ? `<span class="badge plat">${esc(SHORT[g.platform] || g.platform.toUpperCase())}</span>` : "")
+    + (g.content === "dlc" ? `<span class="badge ext" title="Contenuto aggiuntivo (DLC/add-on): non è un gioco a sé">DLC</span>` : "")
     + (g.players >= 2 ? `<span class="badge ext" title="Multigiocatore locale">👥 ${g.players}</span>` : "")
     + (g.store === "online" ? `<span class="badge inst">🌐 Scarica${g.size ? " · " + fmtSize(g.size) : ""}</span>`
       : g.store && !g.installed ? `<span class="badge inst">⬇ Installa</span>` : "")
@@ -568,6 +576,7 @@ function updateHeader() {
   }
   $("#view-count").textContent = S.view.type === "plugin" ? "" : `${n.toLocaleString("it")} ${n === 1 ? "gioco" : "giochi"}${extra}`;
   renderShopTools();
+  $("#group").disabled = S.view.type === "all" && S.allLocal; // la vista «Sul PC» e' gia' divisa per console
   $("#inst-filter").hidden = !(S.view.type === "store" || (S.view.type === "platform" && (S.view.id === "windows" || S.hasOnline.has(S.view.id))));
   const c = S.view.type === "collection" ? S.collBySlug.get(S.view.id) : null;
   $("#view-actions").innerHTML = c
@@ -576,6 +585,9 @@ function updateHeader() {
     : S.view.type === "dups"
       ? `<button class="icon-btn" id="dup-toggle" title="Le versioni duplicate prendono i metadati dalla versione principale">`
         + `${S.skipDup ? "✓ Esclusi dallo scraping" : "✗ Inclusi nello scraping"} (clic per cambiare)</button>`
+    : S.view.type === "all"
+      ? `<button class="icon-btn${S.allLocal ? " on" : ""}" id="all-local" title="Solo i giochi scaricati sul PC (ROM e giochi PC installati), divisi per console">`
+        + `💾 Sul PC · per console${S.allLocal ? " ✓" : ""}</button>`
     : S.view.type === "smart"
       ? `<button class="icon-btn" id="smart-edit" title="Modifica le regole">✎ Regole</button>`
     : S.view.type === "store"
@@ -583,7 +595,9 @@ function updateHeader() {
     : S.view.type === "shop"
       ? `<button class="btn smeta-btn" id="smeta-open" title="Cerca descrizioni, generi, giocatori e valutazioni dei giochi degli store SOLO nei database offline (LaunchBox, TheGamesDB): nessuna richiesta online">📚 Scraping metadati store <span class="pill">offline</span></button>`
     : S.view.type === "platform" && S.view.id !== "windows"
-      ? `<button class="icon-btn" id="plat-scan" title="Cerca nuovi giochi nella cartella di questa console: compaiono subito, i dati arrivano dopo">⟳ Cerca nuovi giochi</button>`
+      ? `<label class="icon-btn" title="Nascondi le DLC di questa console: restano comunque tra i download del gioco base">`
+        + `<input type="checkbox" id="hide-dlc"${S.hideDlc?.has(S.view.id) ? " checked" : ""}> Nascondi DLC</label>`
+        + `<button class="icon-btn" id="plat-scan" title="Cerca nuovi giochi nella cartella di questa console: compaiono subito, i dati arrivano dopo">⟳ Cerca nuovi giochi</button>`
         + `<button class="icon-btn" id="top-open" title="I 100 migliori giochi di questa console, posseduti e scaricabili">🏆 Top 100</button>`
         + `<button class="icon-btn" id="cat-open" title="Collega pagine web con i giochi di questa console">`
         + ((S.catalogs[S.view.id] || []).map((u) => `<img class="sico" src="/icons/site?url=${encodeURIComponent(u)}" alt="">`).join("") || "🌐")
@@ -800,11 +814,15 @@ async function openDetail(id) {
   const online = d.store === "online";
   const dlSources = online ? (d.download_sources || []).filter((s) => s && s.url) : [];
   // giochi gia' scaricati che compaiono negli elenchi degli store online: link per riscaricarli
-  const storePages = !online ? (d.store_pages || []).filter((s) => s && s.url) : [];
+  const pages = !online ? (d.store_pages || []).filter((s) => s && s.url) : [];
+  // gli aggiornamenti non sono il gioco: pulsanti a parte (⬆), non nella riga dei download
+  const updates = (online ? dlSources : pages).filter((s) => s.update);
+  const dlBase = dlSources.filter((s) => !s.update);
+  const storePages = pages.filter((s) => !s.update);
   // una fonte sola: pulsante unico; due o piu' (es. NXBrew e Ziperto): un pulsante per sito
   const mainBtn = online
-    ? (dlSources.length > 1
-      ? dlSources.map((s, i) => `<button class="btn${i === 0 ? " primary" : ""}" data-open="${esc(s.url)}"
+    ? (dlBase.length > 1
+      ? dlBase.map((s, i) => `<button class="btn${i === 0 ? " primary" : ""}" data-open="${esc(s.url)}"
           title="Apri la pagina di download su ${esc(s.site || "questo sito")}">⬇ ${esc((s.site || "sito").replace(/^www\./, ""))}</button>`).join("")
       : `<button class="btn primary" id="d-install" title="Apre la pagina di download nel browser">⬇ Scarica (browser)</button>`)
       // solo i magnet per-file (con il nome del file dentro): gli altri scaricherebbero l'intero set
@@ -833,7 +851,7 @@ async function openDetail(id) {
       + `<button class="btn" id="d-scrape" title="Riprova tutte le fonti per questo gioco (tutte le sue versioni)">⟳ Cerca dati mancanti</button></div>` : ""}
     ${online && d.magnet && !/dn=[^&]*\./.test(d.magnet) ? `<div class="d-note">Il link magnet scarica l'intero set:
       nel client torrent seleziona solo il file «${esc(d.file_name || d.title)}».</div>` : ""}
-    <div class="d-emu muted">${online ? `${d.page_url ? `<img class="sico" src="/icons/site?url=${encodeURIComponent(d.page_url)}" alt="">` : "🌐"} Disponibile online${d.kind === "repack" ? " · 📦 Repack (gioco compresso: il download è corto, l'installazione lunga)" : d.kind === "direct" ? " · ⬇ Download diretto" : ""}${dlSources.length > 1 ? ` · ${dlSources.length} fonti (${dlSources.map((s) => esc(s.site)).join(", ")})` : ""} · ${esc(d.file_name || "")}`
+    <div class="d-emu muted">${online ? `${d.page_url ? `<img class="sico" src="/icons/site?url=${encodeURIComponent(d.page_url)}" alt="">` : "🌐"} Disponibile online${d.kind === "repack" ? " · 📦 Repack (gioco compresso: il download è corto, l'installazione lunga)" : d.kind === "direct" ? " · ⬇ Download diretto" : ""}${dlBase.length > 1 ? ` · ${dlBase.length} fonti (${dlBase.map((s) => esc(s.site)).join(", ")})` : ""} · ${esc(d.file_name || "")}`
       : pc ? `${esc(d.store_name)} · ${d.installed ? "installato" : "non installato"}`
       : d.emulator ? "Emulatore: " + esc(d.emulator) + (d.profile ? ` <span class="tag" title="Profilo di avvio di questo gioco">profilo</span>` : "")
       : `Nessun emulatore configurato per ${esc(d.platform_name)} — <a href="#" id="d-emu-cfg">impostazioni</a>`}
@@ -843,6 +861,11 @@ async function openDetail(id) {
       <span>🌐 Pagine dello store:</span>
       ${storePages.map((s) => `<button class="btn" data-open="${esc(s.url)}"
         title="Apri la pagina di download su ${esc(s.site || "questo sito")}">⬇ ${esc((s.site || "sito").replace(/^www\./, ""))}</button>`).join("")}
+      </div>` : ""}
+    ${updates.length ? `<div class="d-emu muted" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span>⬆ Aggiornamenti installabili (${updates.length}):</span>
+      ${updates.map((s) => `<button class="btn" data-open="${esc(s.url)}"
+        title="${esc(s.name || "Aggiornamento")}">⬆ ${s.version ? "v" + esc(s.version) : "Update"}${s.size ? " · " + fmtSize(s.size) : ""}</button>`).join("")}
       </div>` : ""}
     ${ratingBlock(d)}
     ${online ? "" : `<div class="d-status">${Object.entries(STATUS).map(([k, s]) =>
@@ -3618,6 +3641,7 @@ function bind() {
       return;
     }
     if (e.target.id === "top-open") { setView({ type: "top", id: S.view.id }); return; }
+    if (e.target.id === "all-local") { S.allLocal = !S.allLocal; store.set("allLocal", S.allLocal); setView(S.view); return; }
     if (e.target.closest("#smart-edit")) { openSmart(S.view.id); return; }
     if (e.target.closest("#smeta-open")) { $("#smeta").showModal(); pollStoreMeta(); return; }
     if (e.target.id === "dup-toggle") {
@@ -3638,6 +3662,16 @@ function bind() {
       await api(`/api/collections/${encodeURIComponent(c.slug)}`, { method: "DELETE" });
       S.view = { type: "all" }; await reload(false);
     }
+  });
+
+  $("#view-actions").addEventListener("change", async (e) => {
+    if (e.target.id !== "hide-dlc") return;
+    try {
+      const r = await api("/api/app/hide-dlc", { body: { platform: S.view.id, hide: e.target.checked } });
+      S.hideDlc = new Set(r.hide_dlc);
+    } catch (err) { e.target.checked = !e.target.checked; return toast(err.message, true); }
+    refreshGrid();
+    toast(e.target.checked ? `DLC di ${platName(S.view.id)} nascoste` : `DLC di ${platName(S.view.id)} di nuovo visibili`);
   });
 
   $("#detail-close").onclick = closeDetail;

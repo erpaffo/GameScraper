@@ -3,6 +3,7 @@
 Esegui: PYTHONUTF8=1 python tests/catalog/test_build_store.py
 """
 
+import json
 import os
 import sys
 import time
@@ -174,10 +175,127 @@ def test_library_has_store_pages(tmp_path):
     print("ok  libreria: la colonna store_pages esiste")
 
 
+def test_content_kind():
+    from pozzo.storekind import content_kind, switch_kind, update_base
+    assert content_kind("Hollow Knight") == "game"
+    assert content_kind("Cool Game DLC") == "dlc"
+    assert content_kind("Game X - Season Pass") == "dlc"
+    assert content_kind("Hades Soundtrack") == "extra"
+    assert content_kind("Gioco [Update v1.2.0]") == "update"
+    assert content_kind("Patch Quest") == "game"  # un gioco non è un aggiornamento
+    assert content_kind("Blood and Wine", "dlc") == "dlc"  # tipo dichiarato dallo store
+    assert update_base("Gioco [Update v1.2.0]") == "Gioco"
+    assert switch_kind("0100152000022000") == "game" and switch_kind("0100152000022800") == "update" \
+        and switch_kind("0100152000023001") == "dlc" and switch_kind("") == ""
+    print("ok  tipo del contenuto: gioco, DLC/add-on, extra, aggiornamento (anche dal Title ID di Switch)")
+
+
+def test_updates_and_dlc(tmp_path):
+    """Gli aggiornamenti non diventano riquadri: sono un download «⬆» del gioco base. Le DLC restano voci
+    con il loro tipo (colonna content), riconosciute dal nome o, solo in conferma, dal peso."""
+    import sqlite3
+    (tmp_path / "roms").mkdir()
+    (tmp_path / "config.toml").write_text('[paths]\nroms = "roms"\ncache = "cache"\n[scrape]\nsources = []\n',
+                                          encoding="utf-8")
+    cfg = config.load(tmp_path / "config.toml")
+    cfg.catalogs = {"switch": [URL]}
+    cache = Cache(cfg.cache)
+    gb = 1024 ** 3
+    cache.kv_set(f"catalog:type_b:{URL}",
+                 {"url": URL, "index_url": URL, "pid": "switch", "time": time.time(), "entries": [
+                     {"name": "Zelda Testo Switch NSP", "size": 8 * gb, "url": "https://z.test/base/", "magnet": None, "group": "Z"},
+                     {"name": "Zelda Testo Update v1.2.0 Switch NSP", "size": gb, "url": "https://z.test/upd/", "magnet": None, "group": "Z"},
+                     {"name": "Zelda Testo - Pack Aggiuntivo Switch NSP", "size": gb, "url": "https://z.test/pack/", "magnet": None, "group": "Z"},
+                     {"name": "Zelda Testo DLC Switch NSP", "size": 2 * gb, "url": "https://z.test/dlc/", "magnet": None, "group": "Z"},
+                 ]})
+    entries, _pages = B._catalog_entries(cfg, cache, {})
+    cache.close()
+    by = {e["title"]: e for e in entries}
+    assert set(by) == {"Zelda Testo", "Zelda Testo - Pack Aggiuntivo", "Zelda Testo DLC"}, list(by)
+    assert by["Zelda Testo"]["content"] == "game"
+    upd = [s for s in by["Zelda Testo"]["sources"] if s.get("update")]
+    assert len(upd) == 1 and upd[0]["url"] == "https://z.test/upd/" and upd[0]["version"] == "1.2.0", upd
+    assert by["Zelda Testo DLC"]["content"] == "dlc"
+    assert by["Zelda Testo - Pack Aggiuntivo"]["content"] == "dlc", "DLC riconosciuta dal peso (meno di un terzo)"
+    print("ok  aggiornamento aggregato al gioco base, DLC riconosciute da nome e (in conferma) dal peso")
+
+    B.build(cfg, log=lambda m: None)
+    db = sqlite3.connect(cfg.cache / "library.db")
+    rows = dict(db.execute("SELECT title, content FROM games WHERE platform='switch' AND store='online'"))
+    launch = json.loads(db.execute("SELECT launch FROM games WHERE title='Zelda Testo'").fetchone()[0])
+    db.close()
+    assert rows == {"Zelda Testo": "game", "Zelda Testo - Pack Aggiuntivo": "dlc", "Zelda Testo DLC": "dlc"}, rows
+    assert [s["url"] for s in launch["sources"] if s.get("update")] == ["https://z.test/upd/"], launch
+    print("ok  libreria: colonna content salvata, aggiornamento tra le fonti del gioco base")
+
+
+def test_update_of_owned_game(tmp_path):
+    """Un aggiornamento di un gioco già sul disco non crea una voce: finisce tra i link della sua scheda."""
+    from types import SimpleNamespace
+    (tmp_path / "roms").mkdir()
+    (tmp_path / "config.toml").write_text('[paths]\nroms = "roms"\ncache = "cache"\n[scrape]\nsources = []\n',
+                                          encoding="utf-8")
+    cfg = config.load(tmp_path / "config.toml")
+    cfg.catalogs = {"switch": [URL]}
+    cache = Cache(cfg.cache)
+    cache.kv_set(f"catalog:type_c:{URL}",
+                 {"url": URL, "index_url": URL, "pid": "switch", "time": time.time(),
+                  "entries": [{"name": "Zelda Test Update v2.0 Switch NSP", "size": None,
+                               "url": "https://z.test/upd2/", "magnet": None}]})
+    owned = SimpleNamespace(key="switch/abc", platform=SimpleNamespace(id="switch"), stem="Zelda Test",
+                            inner_name="", data={}, search_name="Zelda Test")
+    entries, pages = B._catalog_entries(cfg, cache, {"switch/abc": owned})
+    cache.close()
+    assert entries == [], entries
+    assert [s["url"] for s in pages["switch/abc"]] == ["https://z.test/upd2/"], pages
+    assert pages["switch/abc"][0]["update"] is True and pages["switch/abc"][0]["version"] == "2.0"
+    print("ok  aggiornamento di un gioco posseduto: link «⬆» nella scheda, nessun riquadro")
+
+
+def test_steam_kinds():
+    """Steam dichiara il tipo (0 gioco, 4 DLC, 6 software): niente euristiche sul nome, 250 appid per richiesta."""
+    import asyncio
+    from pozzo.stores import steam
+    calls = []
+    types = {1: 0, 2: 4, 3: 6}
+
+    class Resp:
+        status_code = 200
+
+        def __init__(self, items):
+            self._items = items
+
+        def json(self):
+            return {"response": {"store_items": self._items}}
+
+    async def fake(client, method, url, **kw):
+        ids = [i["appid"] for i in json.loads(kw["params"]["input_json"])["ids"]]
+        calls.append(len(ids))
+        return Resp([{"appid": i, "type": types.get(i, 0)} for i in ids])
+
+    orig, steam.request = steam.request, fake
+    try:
+        p = steam.Steam.__new__(steam.Steam)
+        p.client, p.log = None, (lambda *a: None)
+        kinds = asyncio.run(p._kinds({"1", "2", "3"}))
+        many = asyncio.run(p._kinds({str(i) for i in range(501)}))
+    finally:
+        steam.request = orig
+    assert kinds == {"1": "game", "2": "dlc", "3": "app"}, kinds
+    assert len(many) == 501 and calls == [3, 250, 250, 1], (len(many), calls)
+    print("ok  Steam: tipo dichiarato dallo store (gioco/DLC/software), richieste a blocchi di 250")
+
+
 if __name__ == "__main__":
     import tempfile
     from pathlib import Path
     test_store_title()
+    test_content_kind()
+    test_steam_kinds()
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_updates_and_dlc(Path(t))
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_update_of_owned_game(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_catalog_entries_merge(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:

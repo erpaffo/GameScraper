@@ -39,6 +39,8 @@ def make_env(tmp: Path):
     c.kv_set("store:steam", [snap("steam", "1", "Hollow Knight", True, {"type": "uri", "target": "steam://rungameid/1"})])
     c.kv_set("store:epic", [snap("epic", "abc", "Hollow Knight", False, {"type": "uri", "target": "x"}),
                             snap("epic", "def", "Celeste", False, {"type": "uri", "target": "y"})])
+    # DLC: resta in libreria con il suo tipo (colonna content), non più scartata
+    c.kv_set("store:gog", [snap("gog", "9", "Celeste - Farewell DLC", False, {"type": "uri", "target": "z"})])
     # gioco "manuale": python che dorme, per misurare il tempo di gioco e provare la chiusura
     c.kv_set("store:manual", [snap("manual", "1", "Finto gioco", True,
                                    {"type": "exe", "target": sys.executable, "args": ["-c", "import time; time.sleep(30)"], "cwd": ""})])
@@ -49,7 +51,7 @@ def make_env(tmp: Path):
 def test_library_and_api(tmp: Path):
     cfg = make_env(tmp)
     stats = build(cfg, log=lambda *a: None)
-    assert stats["pc"] == 4, stats
+    assert stats["pc"] == 5, stats
     db = sqlite3.connect(Path(cfg.cache) / "library.db")
     rows = db.execute("SELECT store, installed, is_primary, grp FROM games WHERE platform='windows' AND title='Hollow Knight'").fetchall()
     db.close()
@@ -92,9 +94,19 @@ def test_library_and_api(tmp: Path):
         rows = [dict(zip(cols, r)) for r in lib["games"]["rows"]]
         fake = next(r for r in rows if r["title"] == "Finto gioco")
         celeste = next(r for r in rows if r["title"] == "Celeste")
+        dlc = next(r for r in rows if r["title"] == "Celeste - Farewell DLC")
+        assert dlc["content"] == "dlc" and celeste["content"] == "game", (dlc["content"], celeste["content"])
         assert c.post(f"/api/game/{celeste['id']}/play").status_code == 409  # non installato
         d = c.get(f"/api/game/{celeste['id']}").json()
         assert d["store"] == "epic" and not d["installed"] and d["can_install"]
+
+        # DLC nascoste per console: impostazione per console, subito nella risposta della libreria
+        assert c.get("/api/library").json()["hide_dlc"] == []
+        assert c.post("/api/app/hide-dlc", json={"platform": "switch", "hide": True}).json()["hide_dlc"] == ["switch"]
+        assert c.get("/api/library").json()["hide_dlc"] == ["switch"]
+        assert c.post("/api/app/hide-dlc", json={"platform": "switch", "hide": False}).json()["hide_dlc"] == []
+        assert c.post("/api/app/hide-dlc", json={"hide": True}).status_code == 400
+        print("ok  «Nascondi DLC»: per console, salvata in settings.json e restituita con la libreria")
 
         # avvio del gioco manuale, poi chiusura come con Select+Start
         assert c.post(f"/api/game/{fake['id']}/play").status_code == 200

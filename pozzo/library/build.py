@@ -31,7 +31,7 @@ from urllib.parse import urlparse
 from ..cache import Cache
 from ..catalog import CatalogItem, cached_info, entry_stem
 from ..matching import normalize
-from .. import storemeta
+from .. import storemeta, storekind
 from ..net import make_client
 from ..pipeline import load_cached
 from ..scanner import Game, clean_title, find_platform_dirs, scan
@@ -45,7 +45,7 @@ CREATE TABLE games(id INTEGER PRIMARY KEY, key TEXT UNIQUE, platform TEXT, title
                    video_url TEXT, canonical TEXT, crc TEXT, origin TEXT, grp TEXT, is_primary INT,
                    store TEXT, installed INT, launch TEXT, install_uri TEXT, page TEXT, store_playtime REAL,
                    install_dir TEXT, rating_count INT, rating_critics REAL, ratings TEXT, size INT, hltb TEXT,
-                   store_pages TEXT);
+                   store_pages TEXT, content TEXT);
 CREATE TABLE collections(slug TEXT PRIMARY KEY, name TEXT);
 CREATE INDEX games_grp ON games(grp);
 CREATE TABLE collection_games(slug TEXT, key TEXT, PRIMARY KEY(slug, key));
@@ -288,10 +288,8 @@ def serial_core(serial: str) -> str:
 # ---------------------------------------------------------------- giochi PC dagli store
 
 APP_GENRE = "Applicazione"
-# titoli di contenuti extra degli store; parole intere, per non colpire giochi veri
-NOT_A_GAME = re.compile(
-    r"\b(dlc|soundtrack|original score|season pass|expansion pass|art ?book|bonus content|upgrade pack|"
-    r"(texture|content|starter|booster|cosmetic|skin|weapon|costume) pack|bundle|supporter pack)\b", re.I)
+# DLC/add-on, colonne sonore e aggiornamenti non si scartano più: il tipo (vedi storekind.content_kind)
+# finisce nella colonna `content`, cosi' si possono mostrare, filtrare e nascondere.
 
 
 def _store_entries(cfg, cache) -> list[dict]:
@@ -306,8 +304,8 @@ def _store_entries(cfg, cache) -> list[dict]:
         title = s.get("title") or s["id"]
         if not s.get("installed") and re.fullmatch(r"[0-9a-fA-F]{16,}", title):
             continue  # DLC senza scheda (titolo = codice interno dello store)
-        if s["store"] not in ("manual", "minecraft") and NOT_A_GAME.search(title):
-            continue  # DLC, colonne sonore, season pass, bundle: non sono giochi
+        # giochi aggiunti a mano e Minecraft non si classificano: sono giochi per definizione
+        content = "game" if s["store"] in ("manual", "minecraft") else storekind.content_kind(title, s.get("kind") or "")
         rd = str(s.get("release_date") or "")
         entries.append({
             "key": f"windows/{s['store']}:{s['id']}", "title": title, "sort": sort_title(title),
@@ -320,7 +318,7 @@ def _store_entries(cfg, cache) -> list[dict]:
             "store": s["store"], "installed": int(bool(s.get("installed"))), "launch": s.get("launch") or {},
             "install_uri": s.get("install_uri") or None, "page": s.get("page") or None,
             "store_playtime": s.get("playtime") or 0, "install_dir": s.get("install_dir") or None,
-            "size": s.get("size") or None, "kind": s.get("kind") or "game",
+            "size": s.get("size") or None, "kind": s.get("kind") or "game", "content": content,
             "grp": "windows/t:" + normalize(title),
         })
     # metadati SOLO dalle fonti offline (LaunchBox/TheGamesDB), cercati col pulsante "Metadati store":
@@ -380,22 +378,28 @@ def _store_title(stem: str) -> str:
     return clean_title(base) or base or stem
 
 
-def _catalog_to_store_game(item: CatalogItem, console_pid: str) -> dict:
+def _catalog_to_store_game(item: CatalogItem, console_pid: str, meta: dict | None = None) -> dict:
     """Converte una voce di catalogo (catalog.py) nel gioco "da scaricare" della libreria.
 
     `console_pid` e' la console a cui appartiene lo store (es. "nds"): serve per la chiave,
-    il gruppo delle versioni e il filtro per piattaforma.
+    il gruppo delle versioni e il filtro per piattaforma. `meta` sono i dati della pagina (storemeta):
+    per Switch il Title ID dice se la voce e' il gioco, un aggiornamento o una DLC.
     """
     from ..scanner import clean_title, regions_of
 
     name = item["name"]
     stem = entry_stem(item, _platform_exts(console_pid))
     title = _store_title(stem)
+    content = ""
+    if console_pid == "switch" and meta:
+        content = storekind.switch_kind(meta.get("title_id") or "")
+    content = content or storekind.content_kind(title)
     return {
         "key": f"{console_pid}/net:{hashlib.sha1(item['url'].encode()).hexdigest()[:16]}",
         "pid": console_pid,
         "name": name,
         "title": title,
+        "content": content,
         "url": item["url"],
         "magnet": item.get("magnet"),
         "size": item.get("size"),
@@ -493,6 +497,7 @@ def _catalog_entries(cfg, cache, merged: dict) -> tuple[list[dict], dict]:
     out, seen = [], set()
     by_title: dict[tuple[str, str], dict] = {}  # (console, titolo normalizzato) -> gioco gia' creato
     owned_pages: dict[str, list[dict]] = defaultdict(list)  # chiave gioco -> pagine dello store
+    updates: list[dict] = []  # aggiornamenti: diventano un download del gioco base, non una voce a parte
 
     def remember_owned(key: str | None, source: dict) -> None:
         """Il gioco e' gia' in libreria: si tiene il link allo store per la sua scheda."""
@@ -523,6 +528,15 @@ def _catalog_entries(cfg, cache, merged: dict) -> tuple[list[dict], dict]:
             seen.add((pid, it["url"]))
             title = _store_title(stem)
             tk = tkey(title, pid)
+            meta = {} if is_file_list else storemeta.cached(cache, it["url"])
+            content = (storekind.switch_kind(meta.get("title_id")) if pid == "switch" else "") \
+                or storekind.content_kind(title)
+            if content == "update":
+                base = storekind.update_base(title)
+                updates.append({"pid": pid, "base": normalize(base), "tk": tkey(base, pid),
+                                "source": {**source, "update": True,
+                                           "version": storekind.update_version(it["name"] or stem)}})
+                continue
             if tk in owned_titles[pid]:
                 remember_owned(owned_title_key.get((pid, tk)), source)
                 continue
@@ -535,9 +549,9 @@ def _catalog_entries(cfg, cache, merged: dict) -> tuple[list[dict], dict]:
                 if not existing["magnet"] and it.get("magnet"):
                     existing["magnet"] = it["magnet"]
                 if not is_file_list:
-                    apply_store_meta(existing, storemeta.cached(cache, it["url"]))
+                    apply_store_meta(existing, meta)
                 continue
-            e = _catalog_to_store_game(it, pid)
+            e = _catalog_to_store_game(it, pid, meta)
             if kind:
                 e["kind"] = kind
             if lb_ready:
@@ -558,11 +572,13 @@ def _catalog_entries(cfg, cache, merged: dict) -> tuple[list[dict], dict]:
             # copertina e descrizione lette dalla pagina dello store (o da GameTDB): riempiono i vuoti.
             # Solo per le schede di gioco (type_a/type_b/type_c): i file hanno gia' i loro metadati.
             if not is_file_list:
-                apply_store_meta(e, storemeta.cached(cache, it["url"]))
+                apply_store_meta(e, meta)
             e["sources"] = [source]
             by_title[key] = e
             out.append(e)
     lb.close()
+    _attach_updates(updates, out, owned_title_key, owned_pages)
+    _dlc_by_size(out)
     _apply_online(cache, out)
     # una voce principale per gioco (le altre regioni restano tra le "versioni")
     groups: dict[str, list[dict]] = defaultdict(list)
@@ -576,6 +592,49 @@ def _catalog_entries(cfg, cache, merged: dict) -> tuple[list[dict], dict]:
         for e in members:
             e["primary"] = int(e is best)
     return out, owned_pages
+
+
+def _attach_updates(updates: list[dict], entries: list[dict], owned_title_key: dict,
+                    owned_pages: dict) -> int:
+    """Gli aggiornamenti non sono giochi: diventano un download in piu' («⬆ Update») del gioco base,
+    se questo e' nello stesso elenco o gia' posseduto. Senza gioco base il link non serve e si scarta."""
+    by = {(e["pid"], normalize(e["title"])): e for e in entries}
+    n = 0
+    for u in updates:
+        base = by.get((u["pid"], u["base"]))
+        if base is not None:
+            base["sources"].append(u["source"])
+            n += 1
+            continue
+        key = owned_title_key.get((u["pid"], u["tk"]))
+        if key and u["source"]["url"] not in {s["url"] for s in owned_pages[key]}:
+            owned_pages[key].append(u["source"])
+            n += 1
+    return n
+
+
+def _dlc_by_size(entries: list[dict]) -> int:
+    """«Gioco - Qualcosa» che pesa meno di un terzo del gioco omonimo: quasi sempre una DLC senza le
+    parole chiave nel nome (nei cataloghi console il tipo non esiste). Regola di conferma, mai da sola:
+    serve il gioco base nella stessa lista."""
+    base: dict[tuple[str, str], int] = {}
+    for e in entries:
+        if e["content"] == "game" and e.get("size"):
+            base.setdefault((e["pid"], normalize(e["title"])), e["size"])
+    n = 0
+    for e in entries:
+        if e["content"] != "game" or not e.get("size"):
+            continue
+        for sep in (" - ", " – ", ":"):
+            i = e["title"].find(sep)
+            if i <= 0:
+                continue
+            b = base.get((e["pid"], normalize(e["title"][:i])))
+            if b and e["size"] < b * storekind.SIZE_RATIO:
+                e["content"] = "dlc"
+                n += 1
+                break
+    return n
 
 
 def _apply_online(cache, entries: list[dict]) -> None:
@@ -665,8 +724,8 @@ def _share_metadata(merged: dict, groups: dict, primary: set, res: dict) -> dict
 INSERT_GAME = ("INSERT INTO games(key, platform, title, sort_title, year, release_date, developer, publisher,"
                " genres, players, rating, description, region, found, files, media, video_url, canonical,"
                " crc, origin, grp, is_primary, store, installed, launch, install_uri, page, store_playtime,"
-               " install_dir, rating_count, rating_critics, ratings, size, store_pages) VALUES("
-               + ",".join("?" * 34) + ")")
+               " install_dir, rating_count, rating_critics, ratings, size, store_pages, content) VALUES("
+               + ",".join("?" * 35) + ")")
 
 
 def _pc_row(e: dict) -> tuple:
@@ -677,7 +736,7 @@ def _pc_row(e: dict) -> tuple:
             json.dumps({"title": e["store"]}), e["grp"], e["primary"],
             e["store"], e["installed"], json.dumps(e["launch"]), e["install_uri"], e["page"],
             e["store_playtime"], e["install_dir"], rc.get("rating_count"), rc.get("rating_critics"),
-            json.dumps(rc.get("ratings", [])), e["size"], "[]")
+            json.dumps(rc.get("ratings", [])), e["size"], "[]", e["content"])
 
 
 def update_manual(cfg) -> bool:
@@ -772,7 +831,8 @@ def build(cfg, log=print, progress=None) -> dict:
                          None, None, None, None, None, None, None,
                          comb.get("rating_count"), comb.get("rating_critics"), json.dumps(comb.get("ratings", [])),
                          game_size(g.path, g.is_dir, cache) or None,
-                         json.dumps(owned_pages.get(key, []), ensure_ascii=False) if owned_pages else "[]"))
+                         json.dumps(owned_pages.get(key, []), ensure_ascii=False) if owned_pages else "[]",
+                         "game"))
         rows.extend(_pc_row(e) for e in pc)
         for e in net:  # disponibili online (non posseduti)
             rc = e["ratings"]
@@ -784,7 +844,7 @@ def build(cfg, log=print, progress=None) -> dict:
                                      "sources": e.get("sources") or []}),
                          e["url"], e["url"], 0, None, rc.get("rating_count"), rc.get("rating_critics"),
                          json.dumps(rc.get("ratings", [])), e["size"],
-                         json.dumps(e.get("sources") or [], ensure_ascii=False)))
+                         json.dumps(e.get("sources") or [], ensure_ascii=False), e["content"]))
         db.executemany(INSERT_GAME, rows)
         _attach_hltb(db, cache)
         db.executemany("INSERT INTO collections VALUES(?,?)", [(s, n) for s, (n, _) in colls.items()])

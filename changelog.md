@@ -1,7 +1,6 @@
 # Changelog
 
-## Non rilasciato
-
+## 0.9.6 (2026-10-29)
 ### Migliorato
 
 - Port PC: il catalogo si apre subito dalla copia salvata (anche in memoria) e si aggiorna in background; a fine aggiornamento la pagina si ridisegna da sola
@@ -22,10 +21,13 @@
 - PlayStation 5: cartelle «ps5» riconosciute e giochi avviati con SharpEmu (eboot.bin)
 - Store online PS5: superpsx preimpostato dal plugin Minerva, schede lette con copertina, generi, data e peso
 - Icona di Pozzo Launcher nell'area di notifica di Windows (vicino a volume e rete): un clic riapre la finestra, tasto destro per «Apri» ed «Esci»
+- DLC e add-on degli store distinti dai giochi: badge «DLC» sui riquadri e casella «Nascondi DLC» in ogni console
+- Aggiornamenti dei giochi degli store: non più riquadri a sé, compaiono come «Aggiornamenti installabili» nella scheda del gioco
 
 ### Cambiato
 
 - Estensione Store Minerva 1.4: «Importa store» compila solo la sezione «Store online» di ogni console, senza leggerla; un pulsante «Leggi» per console (o per tutti quelli mai letti) scarica gli elenchi
+- Tipo dei contenuti degli store (gioco, DLC, applicazione) preso da Steam, Epic e GOG quando lo dichiarano, non solo dal nome
 
 ## 0.9.2 (2026-10-28)
 ### Corretto

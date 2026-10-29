@@ -471,6 +471,7 @@ def create_app(cfg) -> FastAPI:
             lib.full.wait()
         # la risposta dipende da libreria, dati utente e poche impostazioni: con le stesse, si restituisce quella gia' pronta
         ck = (lib.built_at, lib.meta_rev, user.rev, part, bool(cfg.app.get("skip_duplicates", True)),
+              tuple(cfg.app.get("hide_dlc") or []),
               tuple(sorted((k, tuple(v or [])) for k, v in cfg.catalogs.items())),
               len(cfg.app.get("smart_collections") or []))
         hit = lib_payloads.get(ck)
@@ -496,7 +497,7 @@ def create_app(cfg) -> FastAPI:
                      grp_idx[g["grp"]], g["rating"], g["developer"] or "", ", ".join(g["genres"]), g["found"],
                      g["region"] or "", g.get("store") or "", 1 if g.get("store") is None else g.get("installed") or 0,
                      g.get("size") or 0, g.get("rating_count") or 0, g.get("rating_critics"), _players(g.get("players"), g["platform"]),
-                     round((g.get("store_playtime") or 0) / 60), _hltb_main(g.get("hltb"))]
+                     round((g.get("store_playtime") or 0) / 60), _hltb_main(g.get("hltb")), g.get("content") or "game"]
                     for g in sel]
             plats = defaultdict(int)
             for grp, members in lib.groups.items():
@@ -513,9 +514,10 @@ def create_app(cfg) -> FastAPI:
                 "collections": [{"slug": c["slug"], "name": c["name"], "auto": c["auto"], "custom": c["custom"],
                                  "hidden": c.get("hidden", False), "count": len(c["groups"])} for c in coll_list],
                 "skip_duplicates": cfg.app.get("skip_duplicates", True),
+                "hide_dlc": cfg.app.get("hide_dlc") or [],
                 "catalogs": {k: v for k, v in cfg.catalogs.items() if v}, "icons_credit": CREDIT,
                 "games": {"cols": ["id", "title", "sort", "platform", "year", "cover", "group", "rating", "developer",
-                                   "genres", "found", "region", "store", "installed", "size", "votes", "critics", "players", "store_minutes", "hltb"],
+                                   "genres", "found", "region", "store", "installed", "size", "votes", "critics", "players", "store_minutes", "hltb", "content"],
                           "rows": rows},
                 "stores": [{"id": p.id, "name": p.name} for p in STORES.PROVIDERS],
                 "groups": {"cols": ["primary", "favorite", "hidden", "last_played", "playtime", "play_count",
@@ -574,7 +576,7 @@ def create_app(cfg) -> FastAPI:
                  for c in v["colls"].values() if g["grp"] in c["groups"]]
         return {**{k: g[k] for k in ("id", "key", "title", "platform", "year", "release_date", "developer", "publisher",
                                      "genres", "players", "rating", "description", "region", "files", "video_url",
-                                     "canonical", "crc", "found")},
+                                     "canonical", "crc", "found", "content")},
                 "platform_name": p.name if p else g["platform"],
                 "media": {k: f"/img/{gid}/{k}" for k in _media(g)},
                 "sources": json.loads(g["origin"] or "{}"),
@@ -3135,6 +3137,18 @@ def create_app(cfg) -> FastAPI:
     def api_duplicates(body: dict = Body(...)):
         C.save_settings(cfg, app={"skip_duplicates": bool(body.get("skip"))})
         return {"skip_duplicates": cfg.app.get("skip_duplicates", True)}
+
+    @app.post("/api/app/hide-dlc")
+    def api_hide_dlc(body: dict = Body(...)):
+        """Nasconde le DLC di una console (una per console: le console non hanno tutte lo stesso catalogo)."""
+        pid = str(body.get("platform") or "")
+        if not pid:
+            raise HTTPException(400, "Piattaforma mancante")
+        cur = [p for p in (cfg.app.get("hide_dlc") or []) if p != pid]
+        if body.get("hide"):
+            cur.append(pid)
+        C.save_settings(cfg, app={"hide_dlc": cur})
+        return {"hide_dlc": cfg.app.get("hide_dlc") or []}
 
     @app.post("/api/app/quit")
     def api_quit():

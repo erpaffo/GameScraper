@@ -12,16 +12,17 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pozzo.catalog import parse_listing  # noqa: E402
-from pozzo.library.build import NOT_A_GAME  # noqa: E402
+from pozzo.storekind import content_kind  # noqa: E402
 from pozzo.library.userdata import UserData  # noqa: E402
 
 
 def test_not_a_game():
+    # DLC, colonne sonore e season pass: non sono giochi (prima si scartavano, ora si etichettano)
     for t in ("Hades Soundtrack", "Game X - Season Pass", "Cool Game DLC", "Skin Pack Deluxe", "Texture Pack"):
-        assert NOT_A_GAME.search(t), t
-    for t in ("Hades", "Pack-Man", "Bundle of Joy Simulator" if False else "Hollow Knight", "Dead Cells"):
-        assert not NOT_A_GAME.search(t), t
-    print("ok  filtro DLC/colonne sonore/season pass")
+        assert content_kind(t) in ("dlc", "extra"), t
+    for t in ("Hades", "Pack-Man", "Hollow Knight", "Dead Cells"):
+        assert content_kind(t) == "game", t
+    print("ok  classificazione DLC/colonne sonore/season pass (etichettate, non più scartate)")
 
 
 def test_magnet_per_file():

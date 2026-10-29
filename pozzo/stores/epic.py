@@ -143,18 +143,15 @@ class Epic(StoreProvider):
                 if not it and cid not in inst:
                     continue  # senza scheda nel catalogo: DLC/contenuti aggiuntivi (il "titolo" sarebbe un codice)
                 cats = {c.get("path") for c in it.get("categories", [])}
-                if it and ("addons" in cats or it.get("mainGameItem")) and cid not in inst:
-                    continue  # DLC
-                if it and "games" not in cats and "applications" not in cats and cid not in inst:
-                    continue
-                if it.get("mainGameItem") or it.get("mainGameItemList"):
-                    if cid not in inst:
-                        continue  # DLC di un altro gioco
+                dlc = bool(it) and ("addons" in cats or it.get("mainGameItem") or it.get("mainGameItemList"))
+                if not dlc and it and "games" not in cats and "applications" not in cats and cid not in inst:
+                    continue  # voce senza tipo (video, beta): il titolo non sarebbe affidabile
                 imgs = {i.get("type"): i.get("url") for i in it.get("keyImages", [])}
                 g = games.get(cid) or StoreGame(
                     store=self.id, id=cid, title=it.get("title") or app,
                     launch={"type": "uri", "target": uri(ns, cid, app, "launch")},
                     install_uri=uri(ns, cid, app, "install"), page="https://store.epicgames.com/")
+                g.kind = "dlc" if dlc else "app" if "applications" in cats else "game"
                 g.title = it.get("title") or g.title
                 g.description = it.get("description", "") or g.description
                 g.developer = it.get("developer", "") or g.developer

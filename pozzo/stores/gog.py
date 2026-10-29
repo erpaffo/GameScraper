@@ -130,6 +130,8 @@ class Gog(StoreProvider):
                                             install_uri=self._install_uri(gid, p.get("slug", "")),
                                             launch={"type": "uri", "target": f"goggalaxy://openGameView/{gid}"} if self.galaxy() else {})
             g.title = p.get("title") or g.title
+            # 1 = gioco, 3 = pack (DLC, artbook, contenuti extra): lo dice GOG
+            g.kind = "game" if p.get("type") in (None, 1) else "dlc"
             g.page = "https://www.gog.com" + p.get("url", "") if p.get("url") else g.page
             img = {k: v for k, v in art.items() if v}
             if not img.get("cover") and p.get("image"):

@@ -6,12 +6,17 @@ rilevato dall'account usato piu' di recente (config/loginusers.vdf), oppure impo
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from ..net import request
 from .base import StoreGame, StoreProvider, parse_vdf, reg_get
 
 CDN = "https://cdn.akamai.steamstatic.com/steam/apps/{id}/"
+# tipo dichiarato da Steam: 0 gioco, 4 DLC, 6 software/applicazione (verificato su IStoreBrowseService)
+ITEMS = "https://api.steampowered.com/IStoreBrowseService/GetItems/v1/"
+KINDS = {0: "game", 4: "dlc", 6: "app"}
+ITEMS_CHUNK = 250  # appid per richiesta (oltre ~300 il servizio risponde 400)
 # strumenti e redistribuibili che Steam considera "app" ma non sono giochi
 SKIP_APPS = {"228980", "1007", "1070560", "1391110", "1628350", "1826330", "2180100", "961940", "1493710",
              "1580130", "1887720", "2348590", "2805730", "250820", "1113280"}
@@ -87,6 +92,26 @@ class Steam(StoreProvider):
                 out[appid].size = int(st.get("SizeOnDisk") or 0)
         return out
 
+    async def _kinds(self, appids: set[str]) -> dict[str, str]:
+        """Tipo di ogni gioco secondo Steam (niente euristiche sul nome). Una richiesta ogni 250 appid."""
+        out: dict[str, str] = {}
+        ids = sorted(a for a in appids if a.isdigit())
+        for i in range(0, len(ids), ITEMS_CHUNK):
+            body = {"ids": [{"appid": int(a)} for a in ids[i:i + ITEMS_CHUNK]],
+                    "context": {"language": "italian", "country_code": "IT"},
+                    "data_request": {"include_basic_info": False}}
+            try:
+                r = await request(self.client, "GET", ITEMS, params={"input_json": json.dumps(body)})
+                items = (r.json().get("response") or {}).get("store_items") or [] if r is not None and r.status_code == 200 else []
+            except Exception as e:
+                self.log(f"Steam: tipo dei giochi non disponibile ({type(e).__name__}: {e})")
+                return out
+            for it in items:
+                kind = KINDS.get(it.get("type"))
+                if kind and str(it.get("appid")) in appids:
+                    out[str(it["appid"])] = kind
+        return out
+
     def _game(self, appid, name, installed=False, install_dir="", playtime=0.0, last_played=0.0) -> StoreGame:
         return StoreGame(
             store=self.id, id=str(appid), title=name, installed=installed, install_dir=install_dir,
@@ -117,6 +142,8 @@ class Steam(StoreProvider):
                 self.log(f"Steam: {len(owned):,} giochi posseduti, {sum(g.installed for g in games.values())} installati")
         else:
             self.log(f"Steam: {len(games)} giochi installati (per vedere anche quelli non installati collega la chiave API)")
+        for appid, kind in (await self._kinds(set(games))).items():  # DLC e applicazioni: lo dice Steam, non il nome
+            games[appid].kind = kind
         # niente recensioni online: i metadati degli store vengono solo dalle fonti offline
         return list(games.values())
 

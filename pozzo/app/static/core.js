@@ -222,7 +222,8 @@ function decodeLibrary(lib) {
   const games = lib.games.rows.map((r) => {
     const g = { id: r[0], title: r[1], sort: r[2], platform: r[3], year: r[4], cover: r[5], gi: r[6], rating: r[7],
       dev: r[8], genres: r[9], found: r[10], region: r[11], store: r[12] || null, installed: r[13], size: r[14] || 0,
-      votes: r[15] || 0, critics: r[16] ?? null, players: r[17] || 0, splay: r[18] || 0, hltb: r[19] ?? null };
+      votes: r[15] || 0, critics: r[16] ?? null, players: r[17] || 0, splay: r[18] || 0, hltb: r[19] ?? null,
+      content: r[20] || "game" };
     g.grp = groups[g.gi];
     g.q = fold(`${g.title} ${g.dev} ${plats.get(g.platform)?.name || ""} ${g.platform} ${g.store || ""}`);
     return g;
