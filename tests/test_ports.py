@@ -49,6 +49,17 @@ def _zip(files: dict) -> bytes:
     return b.getvalue()
 
 
+def test_rom_negli_store():
+    """ROM non posseduta ma presente in uno store online della stessa console: la si propone da scaricare."""
+    entry = {"name": "Ship of Harkinian", "consoles": ["n64"], "games": [{"title": "The Legend of Zelda: Ocarina of Time"}]}
+    oot = {"id": 7, "title": "The Legend of Zelda: Ocarina of Time", "platform": PT.platform_of("n64"), "store": "online"}
+    other = {**oot, "id": 8, "platform": "psx"}
+    games = [oot, other, {"id": 9, "title": "Mario", "platform": oot["platform"], "store": "online"}]
+    assert PT.roms_for(entry, PT.rom_index(games)) == []                       # non e' una ROM posseduta
+    assert PT.roms_for(entry, PT.rom_index(games, online=True)) == [oot]       # solo stessa console e titolo
+    print("ok  ROM dei port cercata anche negli store online")
+
+
 def test_install_update_rom(tmp: Path):
     (tmp / "roms" / "n64").mkdir(parents=True)
     (tmp / "roms" / "n64" / "Snow Game (USA).z64").write_bytes(ROM)
@@ -149,6 +160,7 @@ def test_install_update_rom(tmp: Path):
 
 if __name__ == "__main__":
     test_assets()
+    test_rom_negli_store()
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_install_update_rom(Path(t))
     print("TUTTI I TEST OK")

@@ -36,9 +36,10 @@ STORE_SITES = {
     "steam": ["https://store.steampowered.com"], "epic": ["https://store.epicgames.com", "https://www.epicgames.com"],
     "gog": ["https://www.gog.com"], "amazon": ["https://gaming.amazon.com"],
     "battlenet": ["https://shop.battle.net", "https://battle.net"], "xbox": ["https://www.xbox.com"],
+    "riot": ["https://www.riotgames.com"],
 }
 STORE_BADGE = {"steam": ("S", "#1b2838"), "epic": ("E", "#2a2a2a"), "gog": ("G", "#6e2a9b"), "amazon": ("A", "#ff9900"),
-               "battlenet": ("B", "#148eff"), "xbox": ("X", "#107c10"), "minecraft": ("M", "#5b8731"),
+               "battlenet": ("B", "#148eff"), "xbox": ("X", "#107c10"), "riot": ("R", "#d13639"), "minecraft": ("M", "#5b8731"),
                "manual": ("PC", "#3b4a63"), "ports": ("P", "#c0562b"), "online": ("🌐", "#2d5a8c")}
 
 PC_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">

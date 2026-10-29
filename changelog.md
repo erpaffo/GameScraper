@@ -1,5 +1,11 @@
 # Changelog
 
+## Non rilasciato
+
+### Corretto
+
+- Battle.net (Hearthstone e gli altri giochi): il gioco parte appena il client e' pronto, senza l'attesa fissa di 40+8 secondi dopo l'apertura del launcher
+
 ## 0.9.6 (2026-10-29)
 ### Migliorato
 

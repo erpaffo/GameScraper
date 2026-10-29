@@ -495,11 +495,12 @@ def update_info(cache, man: dict, token: str = "", force: bool = False, offline:
 
 # ---------------------------------------------------------------- ROM della libreria (8.4, 8.6)
 
-def rom_index(games: list[dict]) -> dict[tuple[str, str], list[dict]]:
-    """(console, titolo normalizzato) -> giochi ROM della libreria (stessa corrispondenza di «Giochi gratis»)."""
+def rom_index(games: list[dict], online: bool = False) -> dict[tuple[str, str], list[dict]]:
+    """(console, titolo normalizzato) -> giochi ROM della libreria (stessa corrispondenza di «Giochi gratis»).
+    online=True: i giochi degli store online di quella console, da cui la ROM si puo' scaricare."""
     idx: dict = {}
     for g in games:
-        if not g.get("store") and g.get("files"):
+        if (g.get("store") == "online") if online else (not g.get("store") and g.get("files")):
             idx.setdefault((g["platform"], normalize(g["title"])), []).append(g)
     return idx
 

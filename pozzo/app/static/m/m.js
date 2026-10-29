@@ -12,7 +12,7 @@ const store = {
 const GUEST = { on: false };  // ospite a distanza: solo il controller
 const SHORT = { megadrive: "MD", mastersystem: "SMS", gamegear: "GG", psx: "PS1", ps2: "PS2", ps3: "PS3", psp: "PSP", psvita: "VITA",
   gc: "GC", wiiu: "WII U", switch: "SWITCH", xbox360: "X360", dreamcast: "DC", saturn: "SAT", nds: "DS", "3ds": "3DS", n64: "N64", windows: "PC" };
-const STORE_SHORT = { steam: "STEAM", epic: "EPIC", gog: "GOG", amazon: "AMAZON", battlenet: "B.NET", xbox: "XBOX", minecraft: "MINECRAFT", manual: "PC" };
+const STORE_SHORT = { steam: "STEAM", epic: "EPIC", gog: "GOG", amazon: "AMAZON", battlenet: "B.NET", riot: "RIOT", xbox: "XBOX", minecraft: "MINECRAFT", manual: "PC" };
 
 async function api(path, opts = {}) {
   const init = { method: opts.method || "GET", headers: { "Content-Type": "application/json" }, credentials: "same-origin" };

@@ -27,6 +27,32 @@ def test_vdf():
     print("ok  lettura file VDF di Steam")
 
 
+def test_riot():
+    """Registro finto: installato il live, ignorati il server di prova (pbe) e il Riot Client stesso."""
+    import asyncio
+
+    from pozzo.stores import riot
+    keys = {
+        "Riot Game league_of_legends.live": {"InstallLocation": "C:/Riot Games/League of Legends", "UninstallString":
+            'RiotClientServices.exe --uninstall-product=league_of_legends --uninstall-patchline=live'},
+        "Riot Game league_of_legends.pbe": {"UninstallString": "x --uninstall-product=league_of_legends --uninstall-patchline=pbe"},
+        "Riot Game Riot_Client.": {"UninstallString": "x --uninstall-product=Riot_Client --uninstall-patchline="},
+        "Steam App 1": {"UninstallString": "--uninstall-product=valorant --uninstall-patchline=live"},
+    }
+    old = riot.reg_subkeys, riot.reg_get, riot.Riot.client_exe
+    riot.reg_subkeys = lambda root, path: list(keys)
+    riot.reg_get = lambda root, path: keys[path.rsplit("\\", 1)[1]]
+    riot.Riot.client_exe = lambda self: "C:/RC/RiotClientServices.exe"
+    try:
+        games = {g.id: g for g in asyncio.run(riot.Riot(None, None, None, lambda *a: None).fetch())}
+    finally:
+        riot.reg_subkeys, riot.reg_get, riot.Riot.client_exe = old
+    assert games["league_of_legends"].installed and games["league_of_legends"].install_dir.endswith("League of Legends")
+    assert not games["valorant"].installed and set(games) == set(riot.PRODUCTS), games
+    assert games["league_of_legends"].launch["args"] == ["--launch-product=league_of_legends", "--launch-patchline=live"]
+    print("ok  Riot Games: installati dal registro, gli altri giochi Riot come disponibili")
+
+
 def make_env(tmp: Path):
     (tmp / "roms").mkdir()
     (tmp / "config.toml").write_text('[paths]\nroms = "roms"\ncache = "cache"\n[scrape]\nsources = []\n', encoding="utf-8")
@@ -130,6 +156,7 @@ def test_library_and_api(tmp: Path):
 
 if __name__ == "__main__":
     test_vdf()
+    test_riot()
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_library_and_api(Path(t))
     print("TUTTI I TEST OK")

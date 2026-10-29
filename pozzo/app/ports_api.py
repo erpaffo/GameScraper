@@ -23,7 +23,7 @@ def register(app, cfg, lib, launcher, start_store_job):
     port_job = PORT_JOB  # fuori dalla chiusura: server.py deve sapere se un port si sta scaricando
     start_lock = threading.Lock()
     refresh = {"running": False, "rel": 0.0}  # rel: ultimo controllo delle versioni dei port installati
-    port_links: dict = {"key": None, "by_slug": {}, "by_grp": {}}
+    port_links: dict = {"key": None, "by_slug": {}, "by_grp": {}, "in_store": {}}
 
     def _port_links() -> dict:
         """Port <-> ROM della libreria, ricalcolato solo quando cambiano la libreria o il catalogo."""
@@ -35,15 +35,17 @@ def register(app, cfg, lib, launcher, start_store_job):
             c.close()
         key = (lib.built_at, cat.get("time"), len(lib.games))
         if port_links["key"] != key:
-            idx = PT.rom_index(lib.games)
-            by_slug, by_grp = {}, defaultdict(list)
+            idx, online = PT.rom_index(lib.games), PT.rom_index(lib.games, online=True)
+            by_slug, by_grp, in_store = {}, defaultdict(list), {}
             for e in cat.get("items") or []:
                 roms = PT.roms_for(e, idx)
+                if not roms:  # ROM non posseduta: la si cerca tra gli store online
+                    in_store[e["slug"]] = PT.roms_for(e, online)
                 if roms:
                     by_slug[e["slug"]] = roms
                     for g in {r["grp"]: r for r in roms}.values():
                         by_grp[g["grp"]].append({"slug": e["slug"], "name": e["name"]})
-            port_links.update(key=key, by_slug=by_slug, by_grp=dict(by_grp), catalog=cat)
+            port_links.update(key=key, by_slug=by_slug, by_grp=dict(by_grp), in_store=in_store, catalog=cat)
         return port_links
 
     def _port_or_404(slug: str) -> dict:
@@ -138,6 +140,8 @@ def register(app, cfg, lib, launcher, start_store_job):
                     "issues": e.get("reportIssues") or 0, "setup": sf, "mods": bool((e.get("launcher") or {}).get("mods")),
                     "roms": [{"id": g["id"], "title": g["title"], "platform": g["platform"], "file": (g.get("files") or [""])[0]}
                              for g in links["by_slug"].get(e["slug"], [])],
+                    "in_store": [{"id": g["id"], "title": g["title"], "platform": g["platform"]}
+                                 for g in links["in_store"].get(e["slug"], [])],
                     "installed": {"version": m.get("version") or "", "exe": m.get("exe") or "", "folder": m["folder"],
                                   "manual": bool(m.get("manual")), "skip": m.get("skip"), "game_id": _port_game_id(e["slug"]),
                                   "repository": m.get("repository") or "", **upd.get(e["slug"], {})} if m else None}

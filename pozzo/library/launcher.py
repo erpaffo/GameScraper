@@ -367,8 +367,8 @@ SCRIPT_KEYS = ("before", "after")  # script prima/dopo il gioco: in cfg.app["lau
 STORE_LAUNCHERS = {"steam": "steam.exe", "epic": "epicgameslauncher.exe", "gog": "galaxyclient.exe",
                    "battlenet": "battle.net.exe", "amazon": "amazon games.exe"}
 BEFORE_WAIT = 15  # secondi massimi di attesa di uno script «prima» del gioco, poi il gioco parte comunque
-LAUNCHER_START_WAIT = 40  # secondi massimi per veder comparire il processo del launcher (Battle.net) prima di lanciare il gioco
-LAUNCHER_SETTLE = 8       # secondi di pausa dopo la sua comparsa: il launcher deve essere attivo per accettare il comando
+LAUNCH_RESEND = 8         # secondi tra una ripetizione e l'altra del comando di avvio (Battle.net in caricamento)
+LAUNCH_RESENDS = 5        # ripetizioni massime: il client appena avviato ignora il comando finché non ha finito
 LAUNCH_TRIES = 3          # tentativi di avvio di un gioco passato dal launcher
 LAUNCH_CHECK = 75         # secondi di attesa del processo del gioco prima di riprovare
 LAUNCHER_GRACE = 10 # secondi dopo la partita prima di chiudere il launcher: finisce la sincronizzazione dei salvataggi
@@ -580,7 +580,7 @@ class Launcher:
         threading.Thread(target=self._run, args=(key, platform, path, pl), daemon=True).start()
 
     # ------------------------------------------------------------ giochi PC (store e manuali)
-    LAUNCHER_EXES = {"explorer.exe", "battle.net launcher.exe", "battle.net.exe"}
+    LAUNCHER_EXES = {"explorer.exe", "battle.net launcher.exe", "battle.net.exe", "riotclientservices.exe"}
 
     def launch_pc(self, key: str, title: str, launch: dict, install_dir: str, store: str, store_id: str = ""):
         with self.lock:
@@ -664,18 +664,7 @@ class Launcher:
             if not is_uri and not Path(target).exists() and Path(target).name.lower() not in self.LAUNCHER_EXES:
                 raise LaunchError(f"Eseguibile non trovato: {target}")
 
-            def ensure_launcher():
-                """Battle.net: prima si apre da solo e si aspetta che sia attivo, poi riceve il comando del gioco."""
-                if store_id != "battlenet" or is_uri or not lname or _procs_named(lname):
-                    return
-                subprocess.Popen([target], cwd=launch.get("cwd") or str(Path(target).parent))
-                end = time.time() + LAUNCHER_START_WAIT
-                while time.time() < end and not _procs_named(lname) and not self._stop_evt.is_set():
-                    self._stop_evt.wait(1)
-                self._stop_evt.wait(LAUNCHER_SETTLE)
-
             def start():
-                ensure_launcher()
                 if is_uri:
                     open_uri(target)
                     return None
@@ -693,16 +682,25 @@ class Launcher:
                 self._wait_proc(proc)  # gioco avviato direttamente: si aspetta il suo processo
             elif track and Path(track).is_dir():
                 # avviato tramite launcher: si controlla che il gioco parta davvero, altrimenti si riprova
-                # (start() riapre il launcher se nel frattempo e' stato chiuso)
+                # (start() riapre il launcher se nel frattempo e' stato chiuso).
+                # Battle.net accoda il comando mentre il client si carica: ripeterlo fa partire il gioco appena
+                # e' pronto, invece di aspettare che il launcher sia «attivo» prima di mandarglielo (40 s + 8 s).
+                resends = LAUNCH_RESENDS if store_id == "battlenet" and not is_uri else 0
                 for attempt in range(LAUNCH_TRIES):
                     deadline = time.time() + LAUNCH_CHECK
+                    next_resend = time.time() + LAUNCH_RESEND
                     while time.time() < deadline and not self._game_procs(track) and not self._stop_evt.is_set():
                         self._stop_evt.wait(2)
+                        if resends and not self._game_procs(track) and time.time() >= next_resend:
+                            self._proc = start()
+                            resends -= 1
+                            next_resend = time.time() + LAUNCH_RESEND
                     if self._game_procs(track) or self._stop_evt.is_set() or attempt == LAUNCH_TRIES - 1:
                         break
                     self._set(message=f"Il gioco non e' partito: nuovo tentativo {attempt + 2}/{LAUNCH_TRIES}")
                     proc = start()
                     self._proc = proc
+                    resends = LAUNCH_RESENDS if store_id == "battlenet" and not is_uri else 0
                 if lname and self._game_procs(track) and (self.cfg.app.get("launch") or {}).get("hide_launcher", True):
                     threading.Thread(target=hide_launcher_windows, args=(lname, 15), daemon=True).start()  # il gioco passa avanti
                 t0 = time.time() if self._game_procs(track) else t0

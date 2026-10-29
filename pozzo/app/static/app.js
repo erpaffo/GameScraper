@@ -1498,7 +1498,8 @@ async function renderPorts(pv, force = false) {
           onerror="if (this.dataset.full && this.src.indexOf('thumb') > 0) { this.src = this.dataset.full; this.dataset.full = '' } else this.remove()">` : ""}
         <span class="fc-kind">${esc(i.consoles.map((c) => d.consoles[c] || c).join(", "))}</span>
         ${i.installed?.update ? `<span class="fc-new">⬆ ${esc(i.installed.latest)}</span>` : i.installed ? `<span class="fc-owned">✓ Installato</span>` : ""}
-        ${i.roms.length ? `<span class="fc-wish pt-rom" title="Hai la ROM: ${esc(i.roms.map((r) => r.title).join(", "))}">🎮 ROM</span>` : ""}</div>
+        ${i.roms.length ? `<span class="fc-wish pt-rom" title="Hai la ROM: ${esc(i.roms.map((r) => r.title).join(", "))}">🎮 ROM</span>`
+          : i.in_store?.length ? `<span class="fc-wish pt-rom" title="ROM non posseduta, scaricabile dagli store">🛒 ROM negli store</span>` : ""}</div>
       <div class="fc-info"><b title="${esc(i.name)}">${esc(i.name)}</b>
         <span class="muted small">${esc([i.project !== i.name ? i.project : "", i.developer, i.installed?.version || i.version].filter(Boolean).join(" · "))}</span></div></div>`).join("")
       || `<p class="muted">Nessun port con questi filtri.</p>`;
@@ -1594,6 +1595,9 @@ async function renderPort(pv, slug) {
     <div class="d-h">ROM originale</div>
     ${i.roms.length ? i.roms.map((r) => `<div class="sv-row"><span>🎮 ${esc(r.title)}</span><span class="muted small" title="${esc(r.file)}">${esc(romFile(r))}</span>
         <button class="btn" data-game="${r.id}">Apri</button></div>`).join("")
+      : i.in_store?.length ? `<p class="warn small">Non hai la ROM originale, ma è disponibile negli store: scaricala e poi torna qui.</p>`
+        + i.in_store.map((r) => `<div class="sv-row"><span>🛒 ${esc(r.title)}</span><span class="muted small">${esc(platName(r.platform))}</span>
+        <button class="btn primary" data-game="${r.id}">⬇ Scarica la ROM</button></div>`).join("")
       : `<p class="muted small">Non hai la ROM di questo gioco nella libreria. Il port ha bisogno della tua copia originale.</p>`}
     ${m && m.setup.length ? m.setup.map((s) => `<div class="sv-row"><span>${esc(s.label)} <span class="muted small">→ ${esc(s.destination)}${s.accepted.filter(Boolean).length ? ` (${esc(s.accepted.filter(Boolean).join(", "))})` : ""}</span></span>
         ${s.present ? `<span class="muted small">✓ presente</span>` : ""}

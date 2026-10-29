@@ -322,10 +322,10 @@ def _store_entries(cfg, cache) -> list[dict]:
             "grp": "windows/t:" + normalize(title),
         })
     # metadati SOLO dalle fonti offline (LaunchBox/TheGamesDB), cercati col pulsante "Metadati store":
-    # descrizioni/generi/valutazioni forniti online dagli store non si usano (tranne i dati fissi di Minecraft e Battle.net)
+    # descrizioni/generi/valutazioni forniti online dagli store non si usano (tranne i dati fissi di Minecraft, Battle.net e Riot)
     from .ratings import combine
     for e in entries:
-        if e["store"] not in ("minecraft", "battlenet"):
+        if e["store"] not in ("minecraft", "battlenet", "riot"):
             e.update(description=None, developer=None, publisher=None, genres=[], release_date=None, year=None)
         m = cache.kv_get("storemeta:" + e["key"]) or {}
         e["players"] = str(m["players"]) if m.get("players") else None

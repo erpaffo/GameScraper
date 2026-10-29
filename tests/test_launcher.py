@@ -192,6 +192,54 @@ def test_shortcut(tmp: Path):
     print("ok  collegamento sul desktop")
 
 
+def test_battlenet_launch_non_aspetta_il_launcher(tmp_path: Path):
+    """Battle.net: il comando di avvio parte subito (niente pre-apertura del launcher + 40/8 s di attesa) e
+    viene ripetuto mentre il client si carica, finché il gioco non compare."""
+    import time
+    cfg = C.Config()
+    launcher_exe = tmp_path / "battle.net launcher.exe"
+    launcher_exe.write_bytes(b"")
+    sent = []
+
+    class FakeProc:
+        returncode = 0
+
+        def poll(self):
+            return 0
+
+    class FakeSub:
+        CREATE_NO_WINDOW = 0
+
+        @staticmethod
+        def Popen(cmd, **kw):  # noqa: N802 - stesso nome di subprocess.Popen
+            sent.append(cmd)
+            return FakeProc()
+
+    saved = (L.subprocess, L.Launcher._game_procs, L._procs_named, L.hide_launcher_windows, L.LAUNCH_RESEND)
+    L.subprocess, L._procs_named, L.hide_launcher_windows, L.LAUNCH_RESEND = (
+        FakeSub, (lambda name: []), (lambda *a, **k: None), 0.05)
+    L.Launcher._game_procs = staticmethod(lambda folder: [])  # il gioco non compare mai: decide stop()
+    try:
+        ln = L.Launcher(cfg, FakeUser())
+        t0 = time.time()
+        ln.launch_pc("battlenet:hs_beta", "Hearthstone",
+                     {"type": "exe", "target": str(launcher_exe), "args": ["--exec=launch WTCG"]},
+                     str(tmp_path), "Battle.net", "battlenet")
+        time.sleep(2.5)  # una sola pausa del ciclo di controllo (2 s) piu' un margine
+        inviati = list(sent)
+        ln.stop()
+        deadline = time.time() + 10
+        while ln.state.get("status") != "finished" and time.time() < deadline:
+            time.sleep(0.05)
+    finally:
+        L.subprocess, L.Launcher._game_procs, L._procs_named, L.hide_launcher_windows, L.LAUNCH_RESEND = saved
+    # il primo processo avviato e' gia' il comando del gioco, non Battle.net «vuoto»
+    assert inviati[0] == [str(launcher_exe), "--exec=launch WTCG"], inviati
+    assert len(inviati) >= 2, inviati  # comando ripetuto: il client in caricamento lo aveva ignorato
+    assert time.time() - t0 < 8 and ln.state.get("status") == "finished", ln.state
+    print("ok  Battle.net: comando di avvio subito e ripetuto, nessuna attesa fissa del launcher")
+
+
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_eden_plan_and_command(Path(t))
@@ -199,6 +247,8 @@ if __name__ == "__main__":
         test_scripts_and_close_launcher(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_stop_game(Path(t))
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+        test_battlenet_launch_non_aspetta_il_launcher(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_sharpemu_ps5(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:

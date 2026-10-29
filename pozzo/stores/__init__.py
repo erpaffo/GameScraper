@@ -21,10 +21,11 @@ from .gog import Gog
 from .manual import Manual
 from .minecraft import Minecraft
 from .ports import Ports
+from .riot import Riot
 from .steam import Steam, images as steam_images
 from .xbox import Xbox
 
-PROVIDERS = [Steam, Epic, Gog, Amazon, BattleNet, Xbox, Minecraft, Ports, Manual]
+PROVIDERS = [Steam, Epic, Gog, Amazon, BattleNet, Riot, Xbox, Minecraft, Ports, Manual]
 BY_ID = {p.id: p for p in PROVIDERS}
 STORE_ORDER = [p.id for p in PROVIDERS]
 
