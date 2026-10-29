@@ -325,6 +325,7 @@ if __name__ == "__main__":
         test_aggiorna_da_solo(Path(t))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         test_install_update_rom(Path(t))
-    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
-        test_percorso_breve(Path(t))
+    if sys.platform == "win32":  # il limite dei percorsi lunghi vale solo su Windows (path_problem)
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+            test_percorso_breve(Path(t))
     print("TUTTI I TEST OK")
