@@ -277,7 +277,7 @@ def test_percorso_breve(tmp: Path):
         assert p and p["folder"] == man["folder"] and p["limit"] == 70 and p["short"] == str(breve / "SMSLauncher"), p
         assert PT.path_problem(cfg, {**man, "repository": "altro/progetto"}) is None, "solo i port con un limite noto"
         assert PT._target(cfg, "SMSLauncher", "sms", "chasem-dev/sms-launcher") == breve / "SMSLauncher", "installazione diretta nella cartella breve"
-        assert PT._target(cfg, "Altro", "altro", "altro/progetto") == long_dir / "Altro", "gli altri port restano nella cartella dei port"
+        assert PT._target(cfg, "Altro", "altro", "altro/progetto") == long_dir.resolve() / "Altro", "gli altri port restano nella cartella dei port"
         assert "port_links" not in cfg.app or "sms" not in (cfg.app.get("port_links") or {})
         # quello gia' installato si sposta dall'API (in background, come le installazioni), con i file dell'utente
         (long_dir / "SMSLauncher").mkdir(parents=True)
