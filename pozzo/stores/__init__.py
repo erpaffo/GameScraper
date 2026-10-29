@@ -113,7 +113,14 @@ async def _download_images(cfg, cache, client, games: list[dict], log, progress=
     task = progress.add_task("Immagini giochi PC", total=len(jobs)) if progress and jobs else None
 
     async def one(g, kind, url, dest):
-        p = await download_media(client, url, dest, limiter=lim)
+        # giochi browser: l'URL dell'immagine arriva da una pagina web qualsiasi, si scarica solo da IP pubblici
+        web = g["store"] == "manual" and (g.get("launch") or {}).get("type") == "uri"
+        if web:
+            from ..webmeta import safe_async_client
+            async with safe_async_client(timeout=15, follow_redirects=True, headers=dict(client.headers)) as c:
+                p = await download_media(c, url, dest, limiter=lim)
+        else:
+            p = await download_media(client, url, dest, limiter=lim)
         if p:
             g["media"][kind] = p.relative_to(cache.folder).as_posix()
         if task is not None:

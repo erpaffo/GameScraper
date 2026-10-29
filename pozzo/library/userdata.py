@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS sync_times(tbl TEXT, id TEXT, field TEXT, t REAL, PRI
 SHARED_SCHEMA = """
 CREATE TABLE IF NOT EXISTS game_profiles(key TEXT PRIMARY KEY, data TEXT);
 CREATE TABLE IF NOT EXISTS manual_games(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, exe TEXT, args TEXT,
-                                        cwd TEXT, added REAL, kind TEXT DEFAULT 'game');
+                                        cwd TEXT, added REAL, kind TEXT DEFAULT 'game', meta TEXT);
 -- immagini scelte dall'utente (percorso nella cache), valide al posto di quelle delle fonti
 CREATE TABLE IF NOT EXISTS media_overrides(key TEXT, kind TEXT, path TEXT, PRIMARY KEY(key, kind));
 """
@@ -60,8 +60,10 @@ class UserData:
         for col, typ in (("note", "TEXT"), ("my_rating", "INT")):  # nota personale e voto (1-5) dell'utente
             if col not in cols:
                 self.db.execute(f"ALTER TABLE user_games ADD COLUMN {col} {typ}")
-        if "kind" not in {r[1] for r in self.db.execute("PRAGMA table_info(manual_games)")}:  # game | app
+        if "kind" not in {r[1] for r in self.db.execute("PRAGMA table_info(manual_games)")}:  # game | app | browser
             self.db.execute("ALTER TABLE manual_games ADD COLUMN kind TEXT DEFAULT 'game'")
+        if "meta" not in {r[1] for r in self.db.execute("PRAGMA table_info(manual_games)")}:  # browser: JSON dei metadati della pagina
+            self.db.execute("ALTER TABLE manual_games ADD COLUMN meta TEXT")
         wcols = {r[1] for r in self.db.execute("PRAGMA table_info(wishlist)")}
         # prezzo migliore sui negozi di key (GG.deals): attuale, minimo storico, pagina di confronto;
         # aks = dettaglio prezzi (JSON: Steam, key, offerte ITAD; nome storico, prima veniva da allkeyshop), cover = copertina
@@ -250,20 +252,23 @@ class UserData:
     # ------------------------------------------------------------ giochi PC aggiunti a mano
     def manual_games(self) -> list[dict]:
         import json
-        cur = self._q("SELECT id, title, exe, args, cwd, kind FROM manual_games ORDER BY title")
+        cur = self._q("SELECT id, title, exe, args, cwd, kind, meta FROM manual_games ORDER BY title")
         return [{"id": r[0], "title": r[1], "exe": r[2], "args": json.loads(r[3] or "[]"), "cwd": r[4],
-                 "kind": r[5] or "game"} for r in cur]
+                 "kind": r[5] or "game", "meta": json.loads(r[6] or "{}")} for r in cur]
 
-    def add_manual(self, title: str, exe: str, args: list[str], cwd: str = "", kind: str = "game") -> int:
-        """Lo stesso exe con gli stessi argomenti non si aggiunge due volte: si riusa la voce esistente."""
+    def add_manual(self, title: str, exe: str, args: list[str], cwd: str = "", kind: str = "game",
+                   meta: dict | None = None) -> int:
+        """Lo stesso exe con gli stessi argomenti non si aggiunge due volte: si riusa la voce esistente.
+        Giochi browser (kind="browser"): `exe` e' l'URL e `meta` i metadati della pagina."""
         import json
         with self.lock:
             row = self.db.execute("SELECT id FROM manual_games WHERE lower(exe)=lower(?) AND args=?",
                                   (exe, json.dumps(args))).fetchone()
             if row:
                 return row[0]
-            cur = self.db.execute("INSERT INTO manual_games(title, exe, args, cwd, added, kind) VALUES(?,?,?,?,?,?)",
-                                  (title.strip(), exe, json.dumps(args), cwd, time.time(), kind))
+            cur = self.db.execute("INSERT INTO manual_games(title, exe, args, cwd, added, kind, meta) VALUES(?,?,?,?,?,?,?)",
+                                  (title.strip(), exe, json.dumps(args), cwd, time.time(), kind,
+                                   json.dumps(meta, ensure_ascii=False) if meta else None))
             self.db.commit()
             return cur.lastrowid
 

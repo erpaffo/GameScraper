@@ -1479,6 +1479,8 @@ def create_app(cfg) -> FastAPI:
     @app.post("/api/manual")
     def api_manual_add(body: dict = Body(...)):
         import shlex
+        if body.get("kind") == "browser":
+            return _add_browser_game(body)
         exe = (body.get("exe") or "").strip().strip('"')
         if not exe or not Path(exe).is_file():
             raise HTTPException(400, "Seleziona un file .exe esistente")
@@ -1487,6 +1489,24 @@ def create_app(cfg) -> FastAPI:
         kind = "app" if body.get("kind") == "app" else "game"
         mid = user.add_manual(title, exe, args, (body.get("cwd") or "").strip(), kind)
         return _refresh_manual(mid)
+
+    def _add_browser_game(body: dict):
+        """Gioco browser: URL http/https pubblico; titolo e metadati (Open Graph) letti dalla pagina.
+        Se la pagina non e' raggiungibile il gioco si aggiunge lo stesso e l'errore torna in `warning`."""
+        from urllib.parse import urlsplit
+        from ..webmeta import WebMetaError, fetch_meta, validate_url
+        try:
+            url = validate_url(body.get("url") or "")
+        except WebMetaError as e:
+            raise HTTPException(400, str(e))
+        meta, warning = {}, None
+        try:
+            meta = fetch_meta(url)
+        except WebMetaError as e:
+            warning = f"Metadati non letti: {e}"
+        title = (body.get("title") or "").strip() or meta.get("title") or urlsplit(url).hostname
+        mid = user.add_manual(title, url, [], "", "browser", meta)
+        return {**_refresh_manual(mid), "warning": warning}
 
     @app.delete("/api/manual/{key:path}")
     def api_manual_delete(key: str):

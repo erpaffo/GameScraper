@@ -1415,14 +1415,24 @@ function openAddGame(kind = "game") {
   const dlg = $("#add-game");
   $("#ag-exe").value = ""; $("#ag-title").value = ""; $("#ag-title").dataset.auto = ""; $("#ag-args").value = "";
   $("#ag-kind").value = kind;
+  agKindChanged();
   dlg.showModal();
   $("#ag-exe").focus();
+}
+
+/** «Browser / URL»: il campo diventa un URL, niente Sfoglia e niente argomenti. */
+function agKindChanged() {
+  const web = $("#ag-kind").value === "browser";
+  $("#ag-exe-lbl").textContent = web ? "URL" : "Eseguibile";
+  $("#ag-exe").placeholder = web ? "https://www.chess.com" : "C:\\Giochi\\MioGioco\\gioco.exe";
+  $("#ag-title").placeholder = web ? "se vuoto: titolo della pagina" : "se vuoto: nome del file .exe";
+  $("#ag-pick").hidden = $("#ag-args-lbl").hidden = web;
 }
 
 /** Titolo = nome del file .exe (senza estensione), a meno che l'utente ne abbia scritto uno suo. */
 function agTitleFromExe() {
   const t = $("#ag-title");
-  if (t.value && t.dataset.auto !== t.value) return;
+  if ($("#ag-kind").value === "browser" || (t.value && t.dataset.auto !== t.value)) return;
   const name = $("#ag-exe").value.trim().replace(/^"|"$/g, "").split(/[\\/]/).pop().replace(/\.[^.]+$/, "");
   t.value = name;
   t.dataset.auto = name;
@@ -1430,18 +1440,21 @@ function agTitleFromExe() {
 
 async function saveAddGame() {
   const exe = $("#ag-exe").value.trim();
-  const kind = $("#ag-kind").value === "app" ? "app" : "game";
-  if (!exe) return toast(kind === "app" ? "Scegli il file .exe dell'applicazione" : "Scegli il file .exe del gioco", true);
+  const kind = ({ app: "app", browser: "browser" })[$("#ag-kind").value] || "game";
+  if (!exe) return toast(kind === "browser" ? "Inserisci l'URL del gioco" : kind === "app" ? "Scegli il file .exe dell'applicazione" : "Scegli il file .exe del gioco", true);
   const btn = $("#ag-save");
   btn.disabled = true;
   btn.textContent = "Aggiungo…";
+  let res;
   try {
-    await api("/api/manual", { body: { exe, title: $("#ag-title").value.trim(), args: $("#ag-args").value, kind } });
+    res = await api("/api/manual", { body: kind === "browser" ? { url: exe, title: $("#ag-title").value.trim(), kind }
+      : { exe, title: $("#ag-title").value.trim(), args: $("#ag-args").value, kind } });
   } catch (e) { return toast(e.message, true); }
   finally { btn.disabled = false; btn.textContent = "Aggiungi"; }
   $("#add-game").close();
   await reload(true);  // il gioco e' gia' in libreria: copertina e metadati arrivano dopo, solo per lui
-  toast(kind === "app" ? "Applicazione aggiunta" : "Gioco aggiunto: cerco copertina e dati…");
+  toast(res && res.warning ? `Gioco browser aggiunto. ${res.warning}` : kind === "app" ? "Applicazione aggiunta"
+    : kind === "browser" ? "Gioco browser aggiunto" : "Gioco aggiunto: cerco copertina e dati…", !!(res && res.warning));
   pollManual();
 }
 
@@ -4286,6 +4299,7 @@ function bind() {
       agTitleFromExe();
     }
   };
+  $("#ag-kind").onchange = agKindChanged;
   $("#ag-exe").onchange = agTitleFromExe;  // anche se il percorso viene incollato a mano
   $("#ag-title").oninput = () => { $("#ag-title").dataset.auto = ""; };
   $("#ag-save").onclick = saveAddGame;

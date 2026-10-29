@@ -1,4 +1,4 @@
-"""Giochi PC aggiunti a mano (qualsiasi .exe): salvati nei dati utente, non toccati dalle ricostruzioni."""
+"""Giochi PC aggiunti a mano (qualsiasi .exe) e giochi browser (URL): salvati nei dati utente, non toccati dalle ricostruzioni."""
 
 from __future__ import annotations
 
@@ -22,6 +22,13 @@ class Manual(StoreProvider):
         ud = UserData(Path(self.cfg.cache) / "userdata.db")
         games = []
         for m in ud.manual_games():
+            if m["kind"] == "browser":  # exe = URL; si apre nel browser predefinito come un URI di store
+                meta = m.get("meta") or {}
+                games.append(StoreGame(
+                    store=self.id, id=str(m["id"]), title=m["title"], installed=True, page=m["exe"],
+                    description=meta.get("description") or "", images={"cover": meta["image"]} if meta.get("image") else {},
+                    launch={"type": "uri", "target": m["exe"]}))
+                continue
             exe = Path(m["exe"])
             games.append(StoreGame(
                 store=self.id, id=str(m["id"]), title=m["title"], installed=exe.exists(), install_dir=str(exe.parent),

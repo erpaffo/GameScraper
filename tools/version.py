@@ -273,7 +273,8 @@ def cmd_commit(level: str | None = None, force=False):
             git("reset", "-q", "--", *held)
         if not git("diff", "--cached", "--name-only"):
             raise SystemExit("Niente da committare")
-        git("commit", "-q", "-m", f"Version {vs(new)}")
+        git("commit", "-q", "-m", f"Version {vs(new)}", "-m",
+            "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>")
     print(f"Commit «Version {vs(new)}» ({lvl}, da {vs(base)})" + (f"; lasciati fuori: {', '.join(held)}" if held else "")
           + ". Per pubblicare: git push")
 

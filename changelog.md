@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.1 (2026-10-30)
+### Aggiunto
+
+- Giochi browser aggiunti per URL (es. chess.com) dal dialogo di aggiunta manuale: solo http/https, host locali e IP privati bloccati, titolo/descrizione/immagine Open Graph letti dalla pagina con limiti di tempo, dimensione e redirect
+
 ## 0.10.0 (2026-10-29)
 
 ### Aggiunto

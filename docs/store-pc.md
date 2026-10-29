@@ -43,6 +43,22 @@ Nel campo **Tipo** scegli **Gioco** o **Applicazione**: le applicazioni (un prog
 nella vista **🧩 Applicazioni** invece che tra i giochi, e si avviano allo stesso modo. Le voci aggiunte due volte
 per sbaglio si tolgono con **🧹 Rimuovi doppioni manuali** nell'estensione *Pulizia libreria*.
 
+### Giochi browser (URL)
+
+Nello stesso dialogo scegli **Tipo › Browser / URL** (es. `https://www.chess.com`), inserisci l'URL e, se vuoi, un
+titolo; **Aggiungi** salva il gioco. **Gioca** apre l'URL nel browser predefinito (il tempo di gioco non viene
+misurato). Titolo (se lasci vuoto il campo), descrizione e immagine di copertina si leggono dai tag statici della
+pagina (`og:title`, `og:description`, `og:image`, con ripiego su `<title>` e `meta description`), senza JavaScript
+né dipendenze aggiuntive, e restano salvati: si vedono nella libreria e nella scheda del gioco.
+
+Per sicurezza l'URL è trattato come input non attendibile: sono ammessi solo `http` e `https`; host locali
+(`localhost`, `.local`, nomi senza dominio) e indirizzi IP privati, loopback o link-local sono rifiutati, anche
+dopo un redirect. Il controllo vale anche per l'immagine di copertina e per ogni redirect, ed è fatto sull'indirizzo IP realmente
+usato dalla connessione (contro il DNS rebinding); i proxy di sistema non vengono usati per queste richieste.
+La lettura ha limiti: 8 secondi di timeout, 1 MB di HTML, al massimo 5 redirect. Se il sito non
+risponde il gioco viene aggiunto lo stesso e l'app mostra l'errore (es. «Tempo scaduto nel contattare il sito»).
+Il flusso dei giochi `.exe` e delle applicazioni non cambia.
+
 L'aggiunta è immediata e non avvia nessun aggiornamento degli store: la voce compare subito, mentre copertina e
 immagini arrivano in sottofondo.
 

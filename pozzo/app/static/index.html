@@ -667,16 +667,18 @@
   <dialog id="add-game" class="small-dlg">
     <form method="dialog" class="dlg-head"><h2>Aggiungi un gioco o un'applicazione</h2><button class="icon-btn">✕</button></form>
     <div class="dlg-body">
-      <label class="lbl-field">Eseguibile
+      <label class="lbl-field"><span id="ag-exe-lbl">Eseguibile</span>
         <span class="row tight"><input id="ag-exe" class="field grow" placeholder="C:\Giochi\MioGioco\gioco.exe">
         <button class="btn" id="ag-pick" type="button">Sfoglia…</button></span></label>
       <label class="lbl-field">Tipo <select id="ag-kind" class="field">
         <option value="game">Gioco</option>
-        <option value="app">Applicazione (programma che non è un gioco)</option></select></label>
+        <option value="app">Applicazione (programma che non è un gioco)</option>
+        <option value="browser">Browser / URL (gioco online, es. chess.com)</option></select></label>
       <label class="lbl-field">Titolo <input id="ag-title" class="field" placeholder="se vuoto: nome del file .exe"></label>
-      <label class="lbl-field">Argomenti (facoltativi) <input id="ag-args" class="field" placeholder="es. -fullscreen"></label>
+      <label class="lbl-field" id="ag-args-lbl">Argomenti (facoltativi) <input id="ag-args" class="field" placeholder="es. -fullscreen"></label>
       <p class="muted small">Copertina e immagini vengono cercate automaticamente (Steam, IGDB). Il tempo di gioco viene registrato.
-        Le applicazioni finiscono nella vista <b>Applicazioni</b> invece che tra i giochi.</p>
+        Le applicazioni finiscono nella vista <b>Applicazioni</b> invece che tra i giochi.
+        I giochi <b>browser</b> si aprono nel browser predefinito; titolo, descrizione e immagine si leggono dalla pagina (solo http/https).</p>
       <div class="row end"><button class="btn primary" id="ag-save" type="button">Aggiungi</button></div>
     </div>
   </dialog>
