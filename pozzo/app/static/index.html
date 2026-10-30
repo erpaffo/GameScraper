@@ -9,6 +9,19 @@
 </head>
 <body>
 <div id="app">
+  <header id="experience-bar">
+    <button class="experience-drawer-toggle" id="drawer-toggle" type="button" aria-expanded="false" aria-controls="sidebar">
+      <span aria-hidden="true">☰</span> Esplora
+    </button>
+    <div class="brand"><span class="logo">◆</span> Pozzo Launcher</div>
+    <nav id="experience-nav" aria-label="Navigazione principale">
+      <button type="button" data-view="home">Home</button>
+      <button type="button" data-view="all">Libreria</button>
+      <button type="button" data-view="favorites">Preferiti</button>
+      <button type="button" data-view="shop">Store</button>
+    </nav>
+  </header>
+  <button id="drawer-scrim" type="button" aria-label="Chiudi il cassetto di navigazione" hidden></button>
   <aside id="sidebar">
     <div class="brand"><span class="logo">◆</span> Pozzo Launcher</div>
     <button class="profile-btn" id="profile-btn" type="button" title="Profilo utente: preferiti, tempo di gioco e collezioni di chi gioca">
@@ -485,6 +498,9 @@
 
       <!-- ---------------- aspetto: temi e plugin -->
       <section data-pane="look">
+        <h3>Profilo di esperienza desktop</h3>
+        <p class="muted small">Scelta valida per tutta questa installazione; non cambia tema, Big Picture o interfaccia del telefono.</p>
+        <div id="experience-list" class="experience-list"></div>
         <h3>Tema</h3>
         <div id="theme-list" class="theme-list"></div>
         <h3>Plugin</h3>

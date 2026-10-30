@@ -19,6 +19,7 @@ const S = {
   disc: store.get("disc", { preset: "", genre: "", decade: "" }),
   shopF: store.get("shopF", { src: "", plat: "", size: "", hideDlc: false }), shop: [], shopIds: new Set(),
 };
+const isShelves = () => document.documentElement.dataset.experience === "shelves";
 
 // prima i giochi posseduti (pochi, subito), poi in sottofondo il catalogo degli store online
 let onlineSeq = 0;
@@ -74,6 +75,7 @@ async function loadOnline(seq) {
     libraryChanged();
     renderSidebar();
     refreshGrid(true);
+    if (S.view.type === "home") renderShelvesHome($("#plugin-view"));
   } catch (e) {
     if (seq === onlineSeq) toast("Giochi degli store non caricati: " + e.message, true);
   } finally {
@@ -552,8 +554,26 @@ function markActive() {
   document.querySelectorAll("#nav .nav-item").forEach((a) => {
     const on = a.dataset.view === S.view.type && (a.dataset.id || null) === (S.view.id || null)
       && (a.dataset.plat || null) === (S.view.plat || null);
+    a.tabIndex = 0;
+    a.setAttribute("role", "button");
     a.classList.toggle("active", on);
+    if (on) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   });
+  document.querySelectorAll("#experience-nav [data-view]").forEach((a) => {
+    const on = a.dataset.view === S.view.type;
+    a.classList.toggle("active", on);
+    if (on) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  });
+}
+
+function setDrawer(open, restoreFocus = true) {
+  if (!isShelves()) return;
+  const aside = $("#sidebar"), toggle = $("#drawer-toggle");
+  aside.classList.toggle("drawer-open", open);
+  toggle.setAttribute("aria-expanded", String(open));
+  $("#drawer-scrim").hidden = !open;
+  if (open) $("#nav .nav-item:not([hidden])")?.focus();
+  else if (restoreFocus) toggle.focus();
 }
 
 function renderDiscTools() {
@@ -586,7 +606,7 @@ function viewTitle() {
     top: !v.id || v.id === "all" ? "🏆 Migliori giochi" : `🏆 Top 100 · ${platName(v.id)}`,
     status: `${STATUS[v.id]?.icon || ""} ${STATUS[v.id]?.label || ""}`,
     smart: `${S.smart.find((x) => x.id === v.id)?.icon || "⚡"} ${S.smart.find((x) => x.id === v.id)?.name || "Collezione"}`,
-    foryou: "Per te", multi: "Multigiocatore in locale", shop: "Store · da installare", all: "Tutti i giochi", favorites: "Preferiti", recent: "Giocati di recente", missing: "Senza dati",
+    home: "Home", foryou: "Per te", multi: "Multigiocatore in locale", shop: "Store · da installare", all: "Tutti i giochi", favorites: "Preferiti", recent: "Giocati di recente", missing: "Senza dati",
     hidden: "Nascosti", dups: "Duplicati", platform: platName(v.id), collection: S.collBySlug.get(v.id)?.name || "Collezione",
     store: v.id === "all" ? "Giochi PC" : `PC · ${S.stores.find((x) => x.id === v.id)?.name || v.id}`,
     plugin: GS.ui.views.get(v.id)?.title || "Estensione" }[v.type] || "Giochi";
@@ -633,12 +653,26 @@ function updateHeader() {
 }
 
 function setView(v) {
+  if (v.type === "home" && !isShelves()) v = { type: "all" };
+  const wasHome = S.view.type === "home";
   S.view = v;
   store.set("view", v);
   GS.emit("viewChanged", v);
+  document.body.classList.toggle("shelves-home-mode", v.type === "home" && isShelves());
   const pv = $("#plugin-view");
+  if (v.type === "home") pv.className = "shelves-home";
+  else if (wasHome) pv.className = "";
   document.body.classList.toggle("foryou-mode", ["foryou", "free", "ports", "wishlist", "stats", "shots", "top"].includes(v.type));
   if (v.type !== "collection") $("#coll-banner").hidden = true;
+  if (v.type === "home") {
+    $("#grid-scroll").hidden = true;
+    pv.hidden = false;
+    markActive();
+    updateHeader();
+    $("#view-count").textContent = "";
+    renderShelvesHome(pv);
+    return;
+  }
   if (["free", "ports", "wishlist", "stats", "shots", "top"].includes(v.type)) {
     $("#grid-scroll").hidden = true;
     pv.hidden = false;
@@ -747,6 +781,78 @@ function collCard(x) {
     <img class="nfc-icon" src="/coll-img/${slug}/icon?w=256" alt="" loading="lazy" onerror="this.remove()">
     <div class="nfc-txt"><b>${esc(x.coll.name)}</b><span>${esc(x.why || "")}</span></div>
     ${x.played ? `<div class="nfc-prog"><i style="width:${Math.round((100 * x.played) / x.games.length)}%"></i></div>` : ""}</div>`;
+}
+
+function shelfGame(g) {
+  const meta = [g.year, g.store ? (STORE_SHORT[g.store] || "PC") : platName(g.platform)].filter(Boolean).join(" · ");
+  return `<button class="shelf-game" type="button" data-shelf-game="${g.id}" aria-label="Apri ${esc(g.title)}">
+    <span class="shelf-cover" style="--h:${hue(g.title)}"><img src="/img/${g.id}/cover?w=300" alt="" loading="lazy"><span>${esc(g.title)}</span></span>
+    <span class="shelf-game-title">${esc(g.title)}</span><span class="shelf-game-meta">${esc(meta)}</span></button>`;
+}
+
+function renderShelvesHome(pv) {
+  if (!pv || S.view.type !== "home") return;
+  const games = S.games.filter((g) => g.id === g.grp.primary && !g.grp.hidden);
+  const recent = games.filter((g) => g.grp.last > 0).sort((a, b) => b.grp.last - a.grp.last);
+  const favorites = games.filter((g) => g.grp.favorite);
+  let recommendations = [], collectionRows = [];
+  try {
+    const tastes = RECO.tastes();
+    recommendations = RECO.rows(S.games, tastes).filter((r) => r.items?.length);
+    collectionRows = RECO.collectionRows(S.games, S.colls, tastes).filter((r) => r.items?.length);
+  } catch (e) { console.warn("Suggerimenti non disponibili", e); }
+  const hero = recent[0] || recommendations[0]?.items?.[0] || games[0];
+  const sections = [
+    { title: "Continua a giocare", items: recent.slice(0, 16) },
+    ...recommendations.slice(0, 3).map((r) => ({ title: r.title, why: r.why, items: r.items.slice(0, 16) })),
+    { title: "I tuoi preferiti", items: favorites.slice(0, 16) },
+    ...(recent.length || recommendations.length || favorites.length ? [] : [{ title: "Dalla tua libreria", items: games.slice(0, 16) }]),
+  ].filter((r) => r.items.length);
+  pv.innerHTML = `<section class="shelves-hero"${hero ? ` data-hero="${hero.id}"` : ""}>
+      <img class="shelves-hero-art" alt="" hidden>
+      <div class="shelves-hero-copy">
+        <div class="shelves-kicker">${hero ? (recent.length ? "Bentornato" : "Una selezione per te") : "La tua raccolta"}</div>
+        <h2>${hero ? esc(hero.title) : "La libreria inizia da qui"}</h2>
+        <p>${hero ? "Apri la scheda per riprendere da dove eri rimasto o scoprire altri dettagli." : "Aggiungi o importa i tuoi giochi: li organizzeremo qui per piattaforma, attività e collezione."}</p>
+        <div class="shelves-actions">
+          ${hero ? `<button class="btn primary" type="button" data-shelf-game="${hero.id}">Apri gioco</button>` : ""}
+          <button class="btn" type="button" data-home-view="all">Vai alla libreria</button>
+          ${!games.length ? `<button class="btn" type="button" data-home-scan>⟳ Cerca nuovi giochi</button>` : ""}
+        </div>
+      </div>
+    </section>
+    ${!games.length && !recommendations.length ? `<section class="shelves-empty"><h2>Ancora nessun gioco da mostrare</h2>
+      <p class="muted">Puoi collegare uno store, aggiungere un gioco o avviare una scansione dalle impostazioni.</p>
+      <button class="btn" type="button" data-home-view="all">Apri la libreria</button></section>` : ""}
+    ${sections.map((r) => `<section class="shelf-section"><h2>${esc(r.title)}${r.why ? `<small>${esc(r.why)}</small>` : ""}</h2>
+      <div class="shelf-lane">${r.items.map(shelfGame).join("")}</div></section>`).join("")}
+    ${collectionRows.length ? `<section class="shelf-section"><h2>Collezioni</h2><div class="shelf-lane">
+      ${collectionRows.flatMap((r) => r.items).slice(0, 12).map((x) => `<button class="shelf-collection" type="button" data-shelf-collection="${esc(x.coll.slug)}">
+        <b>${esc(x.coll.name)}</b><span>${esc(x.why || `${x.games.length} giochi`)}</span></button>`).join("")}
+    </div></section>` : ""}`;
+  pv.onclick = (e) => {
+    const game = e.target.closest("[data-shelf-game]");
+    if (game) { openDetail(+game.dataset.shelfGame); return; }
+    const collection = e.target.closest("[data-shelf-collection]");
+    if (collection) { setView({ type: "collection", id: collection.dataset.shelfCollection }); return; }
+    if (e.target.closest("[data-home-view]")) { setView({ type: "all" }); return; }
+    if (e.target.closest("[data-home-scan]")) $("#scan-btn").click();
+  };
+  if (hero) {
+    const id = hero.id, target = pv.querySelector(".shelves-hero");
+    api(`/api/game/${id}`).then((d) => {
+      if (S.view.type !== "home" || target.dataset.hero !== String(id)) return;
+      const art = d.media?.hero || d.media?.fanart || d.media?.screenshot || d.media?.header || d.media?.cover;
+      const image = target.querySelector(".shelves-hero-art");
+      if (art) {
+        image.onload = () => { target.classList.add("has-art"); image.hidden = false; };
+        image.onerror = () => { image.hidden = true; target.classList.remove("has-art"); };
+        image.src = art;
+      }
+      const description = (d.description || "").trim();
+      if (description) target.querySelector("p").textContent = description.slice(0, 260) + (description.length > 260 ? "…" : "");
+    }).catch(() => {});
+  }
 }
 
 /* ---- questionario "A cosa vuoi giocare?" */
@@ -2949,6 +3055,9 @@ async function accountAction(t) {
 async function loadAppearance() {
   let ext;
   try { ext = await api("/api/extensions"); } catch (e) { return toast(e.message, true); }
+  $("#experience-list").innerHTML = (ext.experiences || []).map((x) => `<label class="experience-choice">
+      <span><input type="radio" name="experience" value="${esc(x.id)}" ${x.id === ext.active_experience ? "checked" : ""}>
+        <b>${esc(x.name)}</b></span><span class="muted small">${esc(x.description || "")}</span></label>`).join("");
   $("#theme-list").innerHTML = ext.themes.map((t) => `<label class="theme-card ${t.id === ext.active_theme ? "on" : ""}">
       <input type="radio" name="theme" value="${esc(t.id)}" ${t.id === ext.active_theme ? "checked" : ""}>
       <span class="sw" style="background:${esc(t.preview || "#1c2030")}"></span>
@@ -3669,10 +3778,28 @@ function bind() {
     if (a.dataset.pluginItem && !a.dataset.view) {
       const it = GS.ui.sidebarItems.find((x) => x.id === a.dataset.pluginItem);
       try { it?.onClick?.(GS); } catch (err) { toast(err.message, true); }
+      setDrawer(false, false);
       return;
     }
     if (a.dataset.view === "ports") PORTS_F.open = null; // dalla barra laterale: sempre il catalogo
     setView({ type: a.dataset.view, id: a.dataset.id || null, plat: a.dataset.plat || undefined });
+    setDrawer(false, false);
+  });
+  $("#nav").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const a = e.target.closest(".nav-item");
+    if (!a) return;
+    e.preventDefault();
+    a.click();
+  });
+  $("#drawer-toggle").onclick = () => setDrawer(!$("#sidebar").classList.contains("drawer-open"));
+  $("#drawer-scrim").onclick = () => setDrawer(false);
+  $("#experience-nav").addEventListener("click", (e) => {
+    const a = e.target.closest("[data-view]");
+    if (a) { setView({ type: a.dataset.view }); setDrawer(false, false); } // altrimenti il cassetto resta aperto sopra la libreria
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && $("#sidebar").classList.contains("drawer-open")) setDrawer(false);
   });
   $("#inst-filter").value = S.instFilter;
   // altri store PC: aggiunta, rimozione, categoria e filtro
@@ -4285,6 +4412,18 @@ function bind() {
     await loadExtensions();
     loadAppearance();
   });
+  $("#experience-list").addEventListener("change", async (e) => {
+    if (e.target.name !== "experience") return;
+    document.querySelectorAll('#experience-list input[name="experience"]').forEach((input) => { input.disabled = true; });
+    try {
+      await api("/api/app/experience", { body: { experience: e.target.value } });
+      store.set("view", e.target.value === "shelves" ? { type: "home" } : { type: "all" });
+      location.reload(); // riavvio pulito: struttura e vista partono dalla stessa esperienza
+    } catch (err) {
+      toast(err.message, true);
+      loadAppearance();
+    }
+  });
   $("#plugin-list").addEventListener("change", async (e) => {
     const c = e.target.closest("[data-plugin]");
     if (!c) return;
@@ -4370,6 +4509,7 @@ GS.redraw = () => { if (S.games.length) refreshGrid(true); };  // ridisegna le c
   bind();
   loading("Caricamento dei tuoi giochi…");
   await loadExtensions(); // prima della libreria: l'attesa si vede gia' col tema scelto
+  if (isShelves() && !store.get("view", null)) S.view = { type: "home" };
   loadProfile();
   try {
     await SETUP.open();  // primo avvio: configurazione guidata (non fa nulla se gia' configurato)

@@ -58,6 +58,17 @@ from ..matching import normalize
 STATIC = Path(__file__).parent / "static"
 THUMB_WIDTHS = (200, 300, 450, 700, 1280)
 
+
+def _asset_version() -> str:
+    from .. import __version__
+
+    digest = hashlib.sha256()
+    for path in sorted((*STATIC.glob("*.css"), *STATIC.glob("*.js"))):
+        digest.update(path.name.encode("utf-8"))
+        digest.update(path.read_bytes())
+    return f"{__version__}.{digest.hexdigest()[:12]}"
+
+
 # Clicca da soli i pulsanti degli accorciatori con pubblicita' (stessa logica dello userscript ouo_skipper):
 # "I'm a human" sblocca il conteggio, "Get Link" porta al file. Un pulsante disattivato ignora il clic.
 SKIPPER_JS = """
@@ -3192,8 +3203,7 @@ def create_app(cfg) -> FastAPI:
 
     @app.get("/activity")
     def activity_page():
-        from .. import __version__
-        html = (STATIC / "activity.html").read_text(encoding="utf-8").replace("{{v}}", str(__version__))
+        html = (STATIC / "activity.html").read_text(encoding="utf-8").replace("{{v}}", _asset_version())
         return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
     @app.get("/api/mobile/state")
@@ -3234,7 +3244,12 @@ def create_app(cfg) -> FastAPI:
     # ------------------------------------------------------------ temi, plugin, link esterni
     @app.get("/api/extensions")
     def api_extensions():
-        return {"themes": X.list_themes(cfg), "active_theme": cfg.app.get("theme", "default"),
+        themes = X.list_themes(cfg)
+        active = cfg.app.get("theme", "default")
+        if not isinstance(active, str) or active not in {t["id"] for t in themes}:
+            active = "default"
+        return {"themes": themes, "active_theme": active, "active_experience": X.active_experience(cfg),
+                "experiences": list(X.EXPERIENCES),
                 "plugins": X.list_plugins(cfg, plugin_errors),
                 "paths": {"themes": str(X.user_dir(cfg, "themes")), "plugins": str(X.user_dir(cfg, "plugins"))}}
 
@@ -3326,6 +3341,14 @@ def create_app(cfg) -> FastAPI:
             raise HTTPException(404, "Tema non trovato")
         C.save_settings(cfg, app={"theme": tid})
         return {"ok": True}
+
+    @app.post("/api/app/experience")
+    def api_experience(body: dict = Body(...)):
+        experience = body.get("experience")
+        if not isinstance(experience, str) or experience not in {x["id"] for x in X.EXPERIENCES}:
+            raise HTTPException(400, "Profilo di esperienza non valido")
+        C.save_settings(cfg, app={"experience": experience})
+        return {"experience": experience}
 
     @app.post("/api/app/plugin")
     def api_plugin_toggle(body: dict = Body(...)):
@@ -3919,16 +3942,12 @@ def create_app(cfg) -> FastAPI:
 
     @app.get("/")
     def index():
-        # la versione nell'indirizzo dei file statici evita che il browser usi una copia vecchia
-        # di app.js/core.js dopo un aggiornamento (era il motivo di pulsanti con comportamenti strani)
-        from .. import __version__
-        html = (STATIC / "index.html").read_text(encoding="utf-8").replace("{{v}}", str(__version__))
+        html = (STATIC / "index.html").read_text(encoding="utf-8").replace("{{v}}", _asset_version())
         return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
     @app.get("/bigpicture")
     def bigpicture():
-        from .. import __version__
-        html = (STATIC / "bigpicture.html").read_text(encoding="utf-8").replace("{{v}}", str(__version__))
+        html = (STATIC / "bigpicture.html").read_text(encoding="utf-8").replace("{{v}}", _asset_version())
         return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
     app.mount("/static", StaticFiles(directory=STATIC), name="static")

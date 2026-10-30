@@ -272,6 +272,9 @@ async function loadExtensions() {
   let ext;
   try { ext = await api("/api/extensions"); } catch (e) { console.warn("estensioni non disponibili", e); return; }
   const mode = GS.mode;
+  if (mode === "desktop") {
+    document.documentElement.dataset.experience = ext.active_experience === "shelves" ? "shelves" : "catalog";
+  }
   document.querySelectorAll("link[data-ext]").forEach((l) => l.remove());
   const theme = ext.themes.find((t) => t.id === ext.active_theme);
   const css = theme && (mode === "bigpicture" ? theme.bigpicture : theme.desktop);

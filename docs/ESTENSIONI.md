@@ -73,6 +73,13 @@ In **Impostazioni › Aspetto** si sceglie il tema e si vede l'anteprima del col
 
 ![Impostazioni › Aspetto: scelta del tema e plugin installati](images/impostazioni-aspetto.jpg)
 
+In **Impostazioni › Aspetto** si può scegliere anche il profilo di esperienza desktop:
+**Catalogo** mantiene la navigazione classica; **Scaffali** aggiunge una Home con suggerimenti e
+scaffali orizzontali, una barra di navigazione superiore e un cassetto con tutte le viste e le estensioni.
+La scelta è globale per l'installazione e non dipende dal profilo utente. Il tema resta una preferenza
+separata e continua a valere anche in Big Picture. I profili di esperienza sono quelli supportati
+dall'applicazione: le estensioni non possono installare markup o codice per crearne di nuovi.
+
 ---
 
 ## Plugin

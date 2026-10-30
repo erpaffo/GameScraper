@@ -112,8 +112,20 @@ def test_library_and_api(tmp: Path):
         assert c.get("/themes/oled/../../server.py").status_code == 404  # niente uscita dalla cartella del tema
         assert c.get("/plugin-api/prova/ciao").json()["ciao"] == "prova"
         assert "per_piattaforma" in c.get("/plugin-api/statistiche/riepilogo").json()
+        assert c.get("/api/extensions").json()["active_theme"] == "default"
+        assert c.get("/api/extensions").json()["active_experience"] == "catalog"
+        assert {x["name"] for x in ext["experiences"]} == {"Catalogo", "Scaffali"}
         assert c.post("/api/app/theme", json={"theme": "oled"}).status_code == 200
-        print("ok  temi e plugin: elenco, file statici, endpoint dei plugin, cambio tema")
+        assert c.get("/api/extensions").json()["active_theme"] == "oled"
+        assert c.post("/api/app/experience", json={"experience": "shelves"}).status_code == 200
+        assert c.get("/api/extensions").json()["active_experience"] == "shelves"
+        assert config.read_settings(cfg)["app"]["experience"] == "shelves"
+        assert c.post("/api/app/experience", json={"experience": "<script>"}).status_code == 400
+        assert c.post("/api/profiles", json={"name": "Luca"}).json()["created"]["id"] == "luca"
+        assert c.post("/api/profiles/active", json={"id": "luca"}).status_code == 200
+        assert c.get("/api/extensions").json()["active_experience"] == "shelves"
+        assert c.get("/api/extensions").json()["active_theme"] == "oled"
+        print("ok  temi e plugin: esperienza globale persistente e tema indipendente dal profilo")
 
         lib = c.get("/api/library").json()
         cols = lib["games"]["cols"]

@@ -9,6 +9,7 @@ Esegui: python tests/test_frontend.py
 """
 import json
 import os
+import re
 import sqlite3
 import sys
 import tempfile
@@ -46,7 +47,28 @@ def make_library(cache: Path, rom: Path):
     db.close()
 
 
+def test_experience_ui():
+    root = Path(__file__).resolve().parent.parent / "pozzo/app/static"
+    page = (root / "index.html").read_text(encoding="utf-8")
+    app = (root / "app.js").read_text(encoding="utf-8")
+    css = (root / "app.css").read_text(encoding="utf-8")
+    assert 'id="experience-bar"' in page and 'id="drawer-toggle"' in page and 'aria-controls="sidebar"' in page
+    assert 'data-view="home"' in page and 'id="experience-list"' in page
+    assert 'function renderShelvesHome' in app and 'data-shelf-game' in app
+    assert 'classList.toggle("shelves-home-mode", v.type === "home" && isShelves())' in app
+    assert 'body.shelves-home-mode #toolbar .tools > #search' in css
+    assert "min-height: clamp(180px, 30vh, 250px)" in css
+    assert "@media (max-height: 640px)" in css and ".shelves-hero p { display: none; }" in css
+    assert 'location.reload(); // riavvio pulito' in app
+    assert 'data-mode="desktop"][data-experience="shelves"]' in css
+    assert "setDrawer(false, false); } // altrimenti" in app, "la navigazione superiore deve chiudere il cassetto"
+    assert "#nav .nav-item .ico {" in css
+    assert "@media (prefers-reduced-motion: reduce)" in css and "shelf-game:focus-visible" in css
+    print("ok  UI Scaffali: home, nav/cassetto accessibili e stile desktop isolato")
+
+
 def main():
+    test_experience_ui()
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         tmp = Path(t)
         rom = tmp / "game.gba"
@@ -59,6 +81,13 @@ def main():
         cfg.launch = {"gba": {"emulator": "melonds", "args": ["-c", "import time; time.sleep(1.2)", "{rom}"]}}
         app = create_app(cfg)
         with TestClient(app) as c:
+            from pozzo import __version__
+            index = c.get("/")
+            css_url = re.search(r'/static/app\.css\?v=([^"]+)', index.text)
+            assert index.status_code == 200 and css_url and css_url.group(1).startswith(f"{__version__}.")
+            for path in ("/activity", "/bigpicture"):
+                assert f"/static/app.css?v={css_url.group(1)}" in c.get(path).text
+
             lib = c.get("/api/library").json()
             rows = {r[1]: r for r in lib["games"]["rows"]}
             groups = lib["groups"]["rows"]

@@ -30,6 +30,10 @@ from pathlib import Path
 from .. import config as C
 
 BUILTIN_THEMES = Path(__file__).parent / "themes"
+EXPERIENCES = (
+    {"id": "catalog", "name": "Catalogo", "description": "Interfaccia classica con navigazione laterale."},
+    {"id": "shelves", "name": "Scaffali", "description": "Home a scaffali e navigazione principale superiore."},
+)
 BUILTIN_PLUGINS = Path(__file__).parent / "plugins"  # solo lo store: le altre estensioni si installano da li'
 STORE_ID = "estensioni"
 API_VERSION = 1
@@ -112,6 +116,11 @@ def list_themes(cfg) -> list[dict]:
                         "desktop": f"/themes/{d.name}/{m['desktop']}" if m.get("desktop") else None,
                         "bigpicture": f"/themes/{d.name}/{m['bigpicture']}" if m.get("bigpicture") else None})
     return out
+
+
+def active_experience(cfg) -> str:
+    value = cfg.app.get("experience", "catalog")
+    return value if isinstance(value, str) and value in {item["id"] for item in EXPERIENCES} else "catalog"
 
 
 def theme_file(cfg, tid: str, rel: str) -> Path | None:

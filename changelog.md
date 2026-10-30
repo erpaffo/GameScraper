@@ -4,6 +4,20 @@
 ### Aggiunto
 
 - Giochi browser aggiunti per URL (es. chess.com) dal dialogo di aggiunta manuale: solo http/https, host locali e IP privati bloccati, titolo/descrizione/immagine Open Graph letti dalla pagina con limiti di tempo, dimensione e redirect
+- Profili desktop Catalogo e Scaffali: Home a scaffali, navigazione superiore e cassetto; scelta globale per installazione.
+
+### Corretto
+
+- L'esperienza Scaffali chiude il cassetto dopo il cambio schermata e allinea meglio le icone della navigazione
+- La Home Scaffali compatta i filtri e il banner per mostrare subito le copertine
+
+### Migliorato
+
+- La Home Scaffali aggiunge microinterazioni, profondità e animazioni rispettose delle preferenze di movimento
+
+### In corso
+
+- Motore e profili di esperienza
 
 ## 0.10.0 (2026-10-29)
 
