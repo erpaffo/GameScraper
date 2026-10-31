@@ -50,7 +50,8 @@ button, input, select { font: inherit; color: inherit; }
 .muted { color: var(--muted); }
 code { background: var(--bg-3); padding: 1px 6px; border-radius: 5px; font-size: 12px; }
 
-#app { display: grid; grid-template-columns: var(--sidebar) 1fr; height: 100vh; }
+body { display: flex; flex-direction: column; }
+#app { display: grid; grid-template-columns: var(--sidebar) 1fr; flex: 1; min-height: 0; }
 
 /* ---------------- sidebar */
 #sidebar { background: var(--bg-2); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
@@ -778,24 +779,26 @@ html[data-mode="desktop"][data-experience-nav="top"] #app {
   grid-template: 62px minmax(0, 1fr) / minmax(0, 1fr);
 }
 html[data-mode="desktop"][data-experience-nav="none"] #app {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: 44px minmax(0, 1fr);
 }
-html[data-mode="desktop"][data-experience-nav="none"] #main { grid-column: 1; }
-/* Senza barra: solo il pulsante del menu, sospeso in alto a sinistra, apre il cassetto. */
+html[data-mode="desktop"][data-experience-nav="none"] #main { grid-column: 2; grid-row: 1; }
+/* Senza barra superiore: una barra laterale stretta con il solo pulsante del menu, che apre il cassetto. */
 html[data-mode="desktop"][data-experience-nav="none"] #experience-bar {
-  position: fixed; z-index: 52; top: 12px; left: 12px; display: flex;
+  grid-column: 1; grid-row: 1; display: flex; flex-direction: column; align-items: center; padding: 8px 0;
+  background: var(--bg-2); border-right: 1px solid var(--line);
 }
-html[data-mode="desktop"][data-experience-nav="none"] #experience-bar .brand { display: none; }
+html[data-mode="desktop"][data-experience-nav="none"] #experience-bar .brand,
+html[data-mode="desktop"][data-experience-nav="none"] #experience-bar .experience-drawer-toggle .lbl { display: none; }
 html[data-mode="desktop"][data-experience-nav="none"] #experience-bar .experience-drawer-toggle {
-  background: color-mix(in srgb, var(--bg-2) 85%, transparent); border: 1px solid var(--line); backdrop-filter: blur(8px);
+  width: 32px; height: 32px; min-height: 32px; padding: 0; justify-content: center;
 }
 html[data-mode="desktop"][data-experience-nav="none"] #sidebar { display: none; }
 html[data-mode="desktop"][data-experience-nav="none"] #sidebar > .brand { display: none; }
 html[data-mode="desktop"][data-experience-nav="none"] #sidebar.drawer-open {
-  position: fixed; z-index: 51; inset: 0 auto 0 0; display: flex; width: min(340px, 88vw); padding-top: 64px;
+  position: fixed; z-index: 51; inset: var(--mb-h, 0px) auto 0 44px; display: flex; width: min(340px, 88vw);
   border-right: 1px solid var(--line); box-shadow: 16px 0 44px rgba(0,0,0,.4); animation: shelf-drawer-in .16s ease-out;
 }
-html[data-mode="desktop"][data-experience-nav="none"] #drawer-scrim:not([hidden]) { inset: 0; }
+html[data-mode="desktop"][data-experience-nav="none"] #drawer-scrim:not([hidden]) { inset: var(--mb-h, 0px) 0 0 44px; }
 html[data-mode="desktop"][data-experience-nav="top"] #experience-bar {
   grid-area: 1 / 1;
   display: flex;
@@ -807,6 +810,8 @@ html[data-mode="desktop"][data-experience-nav="top"] #experience-bar {
   border-bottom: 1px solid var(--line);
 }
 #experience-bar .brand { padding: 0; white-space: nowrap; }
+/* Le Impostazioni coprono la pagina: la barra/pulsante Esplora non deve restare sopra e nascondere "Indietro". */
+body.settings-open #experience-bar, body.settings-open #drawer-scrim { display: none !important; }
 .experience-drawer-toggle, #experience-nav button {
   border: 0;
   border-radius: 8px;
@@ -827,7 +832,7 @@ html[data-mode="desktop"][data-experience-nav="top"] #main { grid-area: 2 / 1; }
 html[data-mode="desktop"][data-experience-nav="top"] #sidebar.drawer-open {
   position: fixed;
   z-index: 51;
-  inset: 62px auto 0 0;
+  inset: calc(62px + var(--mb-h, 0px)) auto 0 0;
   display: flex;
   width: min(340px, 88vw);
   border-right: 1px solid var(--line);
@@ -839,7 +844,7 @@ html[data-mode="desktop"][data-experience-nav="top"] #sidebar > .brand { display
 #drawer-scrim:not([hidden]) {
   position: fixed;
   z-index: 50;
-  inset: 62px 0 0;
+  inset: calc(62px + var(--mb-h, 0px)) 0 0;
   display: block;
   border: 0;
   background: rgba(3,5,9,.62);

@@ -3153,8 +3153,10 @@ function experiencePreviewMarkup(experience) {
 }
 
 async function loadAppearance() {
-  let ext;
-  try { ext = await api("/api/extensions"); } catch (e) { return toast(e.message, true); }
+  await GS.experiencesReady;
+  let ext = GS.extensions;
+  GS.extensions = null; // usata una sola volta: poi i dati tornano freschi dal server
+  if (!ext) try { ext = await api("/api/extensions"); } catch (e) { return toast(e.message, true); }
   SET.theme = ext.active_theme;
   $("#experience-list").innerHTML = (ext.experiences || []).map((x) => {
     const experience = GS.experiences.get(x.id) || x;
@@ -3615,8 +3617,9 @@ async function checkUpdate(force = false, show = false) {
       + (u.newer && u.install_kind ? ` <button class="btn primary" id="about-install">⬇ Installa e riavvia</button>` : "");
     if ($("#about-install")) $("#about-install").onclick = installUpdate;
   } else if (u.newer && store.get("updateSeen", "") !== u.latest) {
-    store.set("updateSeen", u.latest); // un solo avviso per versione
-    updatePopup(u);
+    updatePopup(u); // "visto" solo dopo un clic: se non lo noti o non c'e' rete, riappare
+  } else if (u.error && !u.latest) {
+    setTimeout(() => checkUpdate(false, false), 60000); // controllo fallito (es. rete non ancora pronta): riprova
   }
 }
 
@@ -3629,6 +3632,7 @@ function updatePopup(u) {
   p.innerHTML = `<b>⬆ Nuova versione ${esc(u.latest)}</b><span>${u.install_kind ? "Clicca per scaricare e installare" : "Clicca per scaricarla"}</span><i title="Chiudi">✕</i>`;
   p.onclick = (e) => {
     p.remove();
+    store.set("updateSeen", u.latest); // un solo avviso per versione, dopo che l'hai chiuso o cliccato
     if (e.target.tagName === "I") return;
     if (!u.install_kind) return api("/api/open", { body: { url: u.url } });
     openSettings("about");
@@ -4460,7 +4464,9 @@ function bind() {
     try { const t = await api("/api/api-token", { body: {} }); $("#api-token").value = t.token; toast("Nuovo token creato"); }
     catch (e) { toast(e.message, true); }
   };
-  checkUpdate(false, false); // subito all'avvio, in parallelo al caricamento dei giochi (la risposta resta in cache 12 ore)
+  checkUpdate(false, false); // subito all'avvio, in parallelo al caricamento dei giochi (la risposta resta in cache 2 ore)
+  setInterval(() => checkUpdate(false, false), 30 * 60000); // app lasciata aperta per giorni
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) checkUpdate(false, false); });
   $("#health-list").addEventListener("click", (e) => { const b = e.target.closest(".hl-fix"); if (b) healthFix(SET.health[+b.dataset.i].fix); });
   $("#backup-list").addEventListener("click", (e) => { const b = e.target.closest(".bk-restore"); if (b) restoreBackup(b.dataset.name); });
   initSettingsLayout();

@@ -1,0 +1,7 @@
+/* Catalogo: copertine in primo piano, titoli marcati e sidebar piu' compatta, per distinguersi da Originale. */
+html[data-experience-id="catalog"] .tile .cover { border-radius: 14px; box-shadow: 0 8px 22px rgba(0,0,0,.38); }
+html[data-experience-id="catalog"] .tile:hover .cover { transform: translateY(-5px) scale(1.02); }
+html[data-experience-id="catalog"] .tile .t { margin-top: 9px; font-size: 13.5px; font-weight: 700; }
+html[data-experience-id="catalog"] .tile .s { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; }
+html[data-experience-id="catalog"] .grid-header { font-size: 18px; border-bottom: 2px solid var(--accent); }
+html[data-experience-id="catalog"] #nav .nav-item.active { border-left: 3px solid var(--accent); border-radius: 0 7px 7px 0; }

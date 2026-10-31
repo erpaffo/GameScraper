@@ -24,6 +24,7 @@ import json
 import queue
 import re
 import threading
+import time
 import tomllib
 import traceback
 from pathlib import Path
@@ -157,7 +158,19 @@ def active_experience(cfg) -> str:
     } else "catalog"
 
 
+_EXP_CACHE: tuple[float, list[dict]] | None = None
+
+
 def list_experiences() -> list[dict]:
+    """Esperienze incluse nell'app: l'elenco e' in cache (scansione su disco lenta, es. OneDrive)."""
+    global _EXP_CACHE
+    now = time.monotonic()
+    if _EXP_CACHE is None or now - _EXP_CACHE[0] > 30:
+        _EXP_CACHE = (now, _scan_experiences())
+    return [dict(x) for x in _EXP_CACHE[1]]
+
+
+def _scan_experiences() -> list[dict]:
     """Scopre esperienze incluse nell'app senza consentire cartelle o link esterni."""
     out, seen = [], set()
     try:

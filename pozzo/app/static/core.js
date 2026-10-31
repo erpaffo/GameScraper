@@ -300,11 +300,11 @@ async function loadExtensions() {
   const mode = GS.mode;
   document.querySelectorAll("link[data-ext]").forEach((l) => l.remove());
   if (mode === "desktop") {
-    GS.experienceErrors = {};
-    for (const experience of ext.experiences || []) {
+    GS.experienceErrors = GS.experienceErrors || {};
+    const loadExperience = async (experience) => {
       if (!experience.available || !experience.script) {
         if (experience.error) GS.experienceErrors[experience.id] = experience.error;
-        continue;
+        return;
       }
       try {
         GS._loadingExperience = experience.id;
@@ -316,6 +316,15 @@ async function loadExtensions() {
       } finally {
         GS._loadingExperience = null;
       }
+    };
+    // Solo l'esperienza attiva blocca l'avvio; le altre (servono a Impostazioni > Aspetto) si caricano dopo, una alla volta
+    // perche' registerExperience valida l'id con _loadingExperience.
+    const all = ext.experiences || [];
+    if (!GS.experiencesReady) {
+      await Promise.all(all.filter((x) => x.id === ext.active_experience).map(loadExperience));
+      GS.experiencesReady = (async () => {
+        for (const x of all) if (x.id !== ext.active_experience) await loadExperience(x);
+      })();
     }
     GS.experience = GS.experiences.get(ext.active_experience) || GS.experiences.get("catalog")
       || { id: "catalog", name: "Catalogo", description: "Interfaccia classica con navigazione laterale.",
@@ -355,6 +364,9 @@ async function loadExtensions() {
   }
   document.documentElement.dataset.theme = ext.active_theme || "default";
   GS.plugins = ext.plugins;
+  GS.extensions = ext;
+  const prefetched = new Map(ext.plugins.filter((x) => x.enabled && x.frontend).map((p) => [p.id, import(p.frontend)]));
+  prefetched.forEach((promise) => promise.catch(() => {}));
   for (const p of ext.plugins.filter((x) => x.enabled)) {
     if (p.style) {
       const l = document.createElement("link");
@@ -363,7 +375,7 @@ async function loadExtensions() {
     }
     if (p.frontend) {
       try {
-        const m = await import(p.frontend);
+        const m = await prefetched.get(p.id);
         if (typeof m.default === "function") await m.default(GS, { id: p.id, settings: p.settings || {} });
       } catch (e) {
         console.error(`Plugin ${p.id}:`, e);

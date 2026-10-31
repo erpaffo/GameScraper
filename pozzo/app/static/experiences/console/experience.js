@@ -56,9 +56,13 @@ GS.registerExperience({
     actions.append(openButton);
     feature.append(title, subtitle, actions);
 
-    const games = Array.isArray(context?.state?.games)
-      ? context.state.games.filter((game) => game && game.id != null)
+    const MAX_LANE = 80; // il catalogo online conta migliaia di titoli: un solo DOM enorme blocca l'interfaccia
+    const owned = Array.isArray(context?.state?.games)
+      ? context.state.games.filter((game) => game && game.id != null && game.store !== "online"
+        && (!game.grp || (game.id === game.grp.primary && !game.grp.hidden)))
       : [];
+    const total = owned.length;
+    const games = owned.slice().sort((a, b) => (b.grp?.last || 0) - (a.grp?.last || 0)).slice(0, MAX_LANE);
     const gameById = new Map(games.map((game) => [String(game.id), game]));
     const openGame = (game) => {
       if (game && typeof GS.openGame === "function") GS.openGame(game.id);
@@ -95,7 +99,7 @@ GS.registerExperience({
     };
 
     if (games.length) {
-      count.textContent = `${games.length} ${games.length === 1 ? "GIOCO" : "GIOCHI"}`;
+      count.textContent = `${total} ${total === 1 ? "GIOCO" : "GIOCHI"}`;
       title.textContent = "Scegli il tuo prossimo gioco";
       subtitle.textContent = "Sposta il focus su un titolo per metterlo in primo piano.";
       for (const game of games) {
@@ -146,14 +150,14 @@ GS.registerExperience({
     content.append(header, library, feature);
 
     root.addEventListener("focusin", (event) => {
-      const button = event.target.closest("[data-console-game]");
+      const button = event.target instanceof Element ? event.target.closest("[data-console-game]") : null;
       if (button && root.contains(button)) {
         const game = gameById.get(button.dataset.consoleGame);
         if (game) setHero(game);
       }
     });
     root.addEventListener("keydown", (event) => {
-      if (!event.target.matches("[data-console-game]")) return;
+      if (!(event.target instanceof Element) || !event.target.matches("[data-console-game]")) return;
       const buttons = Array.from(lane.querySelectorAll("[data-console-game]"));
       const index = buttons.indexOf(event.target);
       let next = index;
@@ -166,15 +170,17 @@ GS.registerExperience({
       buttons[next]?.focus();
     });
     root.addEventListener("click", (event) => {
-      const open = event.target.closest("[data-console-open]");
+      const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+      if (!target) return;
+      const open = target.closest("[data-console-open]");
       if (open && root.contains(open)) {
         openGame(gameById.get(open.dataset.consoleOpen));
         return;
       }
-      if (event.target.closest("[data-console-library]") && typeof context?.setView === "function") {
+      if (target.closest("[data-console-library]") && typeof context?.setView === "function") {
         context.setView({ type: "all" });
       }
-      const gameButton = event.target.closest("[data-console-game]");
+      const gameButton = target.closest("[data-console-game]");
       if (gameButton && root.contains(gameButton)) {
         openGame(gameById.get(gameButton.dataset.consoleGame));
       }

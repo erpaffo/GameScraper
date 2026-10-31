@@ -67,7 +67,8 @@
   const bar = document.createElement("nav");
   bar.id = "menubar";
   bar.innerHTML = Object.keys(MENUS).map((k) => `<button type="button" class="mb-top" data-m="${k}">${k}</button>`).join("");
-  document.getElementById("main").prepend(bar);
+  document.getElementById("app").before(bar); // in cima alla finestra, sopra ogni esperienza
+  document.documentElement.style.setProperty("--mb-h", `${bar.offsetHeight}px`);
 
   // Attivita': tutte le operazioni in sottofondo (pannello qui sotto o finestra separata)
   bar.insertAdjacentHTML("beforeend", `<button type="button" id="mb-act" title="Operazioni in corso">⚙ Attività <span id="mb-act-n"></span></button>`);

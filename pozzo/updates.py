@@ -24,12 +24,17 @@ from . import __version__
 
 REPO = "erpaffo/Pozzo-Launcher"
 LATEST = f"https://api.github.com/repos/{REPO}/releases/latest"
-TTL = 12 * 3600
+TTL = 2 * 3600
 
 
 def parse(v: str) -> tuple[int, ...]:
     """'v0.2.1' -> (0, 2, 1); parti non numeriche (es. '-dev') ignorate."""
     return tuple(int(x) for x in re.findall(r"\d+", (v or "").split("-")[0])[:3]) or (0,)
+
+
+def _newer(hit: dict | None) -> bool:
+    latest = (hit or {}).get("latest")
+    return bool(latest) and parse(latest) > parse(__version__)
 
 
 def changelog() -> str:
@@ -59,9 +64,9 @@ def check(cache, force: bool = False) -> dict:
                                    "size": a.get("size") or 0, "digest": a.get("digest")} for a in j.get("assets") or []]}
             cache.kv_set("update_check", hit)
         except (httpx.HTTPError, ValueError) as e:
-            return {"current": __version__, "error": f"{type(e).__name__}: {e}"[:200], **(hit or {})}
-    latest = hit.get("latest")
-    return {"current": __version__, **hit, "newer": bool(latest) and parse(latest) > parse(__version__)}
+            return {"current": __version__, **(hit or {}), "error": f"{type(e).__name__}: {e}"[:200],
+                    "newer": _newer(hit)}  # rete assente: vale comunque l'ultima versione nota in cache
+    return {"current": __version__, **hit, "newer": _newer(hit)}
 
 
 # ---------------------------------------------------------------- installazione dall'app

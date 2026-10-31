@@ -34,7 +34,17 @@ class Cache:
         self.media_dir.mkdir(parents=True, exist_ok=True)
         # timeout: app e riga di comando possono scrivere insieme (es. scraping in corso + aggiornamento store)
         self.db = sqlite3.connect(self.folder / "cache.db", timeout=60)
-        self.db.execute("PRAGMA journal_mode=WAL")
+        # WAL resta nel file: cambiare modalita' ogni volta chiede un blocco esclusivo che, con un'altra
+        # connessione aperta (thread dell'app, riga di comando), fallisce subito senza rispettare il timeout
+        for attempt in range(20):
+            try:
+                if self.db.execute("PRAGMA journal_mode").fetchone()[0].lower() != "wal":
+                    self.db.execute("PRAGMA journal_mode=WAL")
+                break
+            except sqlite3.OperationalError:
+                if attempt == 19:
+                    raise
+                time.sleep(0.1)
         self.db.execute("PRAGMA synchronous=NORMAL")
         self.db.executescript(SCHEMA)
         self._pending = 0
