@@ -18,6 +18,40 @@ La tua libreria di giochi in un posto solo: ROM di ogni console e giochi PC dagl
 </p>
 <p align="center"><sub>Libreria di esempio con giochi di fantasia.</sub></p>
 
+### Grafiche
+
+Ogni grafica cambia il modo di sfogliare la libreria, non solo i colori: si sceglie da **Impostazioni › Aspetto**.
+
+<p align="center">
+  <img src="docs/img/esp-catalogo.jpg" width="49%" alt="Grafica Catalogo">
+  <img src="docs/img/esp-scaffali.jpg" width="49%" alt="Grafica Scaffali">
+</p>
+<p align="center">
+  <img src="docs/img/esp-console.jpg" width="49%" alt="Grafica Console, con barra laterale stretta">
+  <img src="docs/img/esp-dashboard.jpg" width="49%" alt="Grafica Dashboard">
+</p>
+<p align="center">
+  <img src="docs/img/esp-cinema.jpg" width="49%" alt="Grafica Cinema">
+  <img src="docs/img/esp-vetrina.jpg" width="49%" alt="Grafica Vetrina">
+</p>
+<p align="center"><sub>Catalogo · Scaffali · Console · Dashboard · Cinema · Vetrina (c'è anche Originale, la vista storica).</sub></p>
+
+### Temi
+
+I temi sono indipendenti dalla grafica e si possono combinare.
+
+<p align="center">
+  <img src="docs/img/tema-chiaro.jpg" width="49%" alt="Tema Chiaro">
+  <img src="docs/img/tema-notte-blu.jpg" width="49%" alt="Tema Notte blu">
+</p>
+<p align="center">
+  <img src="docs/img/tema-oled.jpg" width="49%" alt="Tema OLED">
+  <img src="docs/img/tema-retro.jpg" width="49%" alt="Tema Retrò">
+</p>
+<p align="center">
+  <img src="docs/img/aspetto.jpg" width="60%" alt="Impostazioni, sezione Aspetto">
+</p>
+
 ## Cosa fa
 
 - **Scraping veloce**: riconosce le ROM offline (CRC e nome sui DAT No-Intro/Redump) e interroga le fonti online solo per ciò che manca, rispettando i loro limiti. Riprende da dove si era fermato.
@@ -26,7 +60,8 @@ La tua libreria di giochi in un posto solo: ROM di ogni console e giochi PC dagl
 - **Big Picture**: schermo intero pensato per il controller, anche da divano.
 - **Telefono e streaming**: sfoglia e avvia i giochi dal telefono, che diventa anche un controller (giroscopio compreso); streaming con Sunshine e Moonlight.
 - **Store online**: elenchi di giochi di altri siti, aggiunti come «store» di ogni console.
-- **Estensioni e temi**: le estensioni si installano da uno store dentro l'app (cosa gioco stasera, obiettivi, calendario uscite, diario di gioco…).
+- **Grafiche e temi**: sette grafiche (Catalogo, Scaffali, Console, Dashboard, Cinema, Vetrina, Originale) e temi chiaro, notte blu, OLED, retrò, combinabili a piacere.
+- **Estensioni**: le estensioni si installano da uno store dentro l'app (cosa gioco stasera, obiettivi, calendario uscite, diario di gioco…).
 - **Extra**: giochi gratis, lista desideri con prezzi, port PC, copie dei salvataggi, Discord, esportazione per ES-DE e Pegasus.
 
 ## Download

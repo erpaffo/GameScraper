@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.11.0 (2026-10-31)
+
+### Aggiunto
+
+- Esperienza Catalogo con stile proprio (copertine e titoli più marcati), distinta da Originale
+- README con galleria di screenshot di grafiche e temi e script tools/demo_screenshots.py per rigenerarli
+
+### Cambiato
+
+- Esperienza Console: barra laterale stretta con il solo pulsante ☰ per aprire la navigazione, nascosta nelle Impostazioni
+- La barra dei menu (File, Strumenti, Visualizza, Impostazioni) sta sempre in cima alla finestra, sopra la barra dell'esperienza
+
+### Migliorato
+
+- Avvio più rapido: solo l'esperienza attiva blocca il caricamento, le altre e i plugin si caricano in parallelo o in sottofondo; Aspetto riusa i dati già scaricati
+- Console mostra al massimo 80 giochi posseduti (non più l'intero catalogo online) e l'elenco delle esperienze è in cache sul server
+- Controllo aggiornamenti: cache di 2 ore, ripetuto ogni 30 minuti e al ritorno in primo piano, nuovo tentativo dopo un errore; l'avviso resta finché non lo chiudi o lo clicchi, anche senza rete
+
+### Corretto
+
+- Console: gestione sicura di clic e tastiera su target non elemento
+- Cache: «database is locked» all'apertura quando un'altra connessione era attiva (WAL impostato solo se serve, con nuovi tentativi)
+
+### In corso
+
+- Motore e profili di esperienza
+- Pagina impostazioni — `pozzo\app\static\index.html` `pozzo\app\static\app.js` `pozzo\app\static\app.css` `pozzo\app\server.py` `pozzo\app\static\settings`
+
 ## 0.10.1 (2026-10-30)
 ### Aggiunto
 
@@ -14,11 +42,6 @@
 ### Migliorato
 
 - La Home Scaffali aggiunge microinterazioni, profondità e animazioni rispettose delle preferenze di movimento
-
-### In corso
-
-- Motore e profili di esperienza
-- Pagina impostazioni — `pozzo\app\static\index.html` `pozzo\app\static\app.js` `pozzo\app\static\app.css` `pozzo\app\server.py` `pozzo\app\static\settings`
 
 ## 0.10.0 (2026-10-29)
 
