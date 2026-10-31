@@ -1,0 +1,27 @@
+<h3>Salute</h3>
+<p class="muted">Cosa non va e come sistemarlo. Controlli sul PC, nessuna richiesta online.</p>
+<div id="health-list"></div>
+<button class="btn" id="health-reload">↻ Ricontrolla</button>
+
+<h3>Versione e aggiornamenti</h3>
+<p>Pozzo Launcher <b id="about-ver"></b> <span class="muted small" id="about-data"></span></p>
+<div id="about-update" class="muted"></div>
+<button class="btn" id="about-check">↻ Controlla aggiornamenti</button>
+
+<h3>Dati scaricati</h3>
+<p class="muted small">Metadati, copertine e cache: dove stanno e quanto pesano. <button class="btn" id="storage-go">⟳ Calcola</button></p>
+<div id="storage-box" class="small"></div>
+
+<h3>API locale</h3>
+<p class="muted small">Per script, Stream Deck, Home Assistant e webhook: gli endpoint <code>/api/v1</code>
+  restano gli stessi tra le versioni e vogliono questo token (<code>Authorization: Bearer …</code>).
+  Esempi e regole nelle <a href="#" data-open="https://github.com/erpaffo/Pozzo-Launcher/blob/main/docs/riferimento.md#api-locale">istruzioni</a>.</p>
+<div class="row wrap small">
+  <input class="field grow" id="api-token" readonly>
+  <button class="btn" id="api-token-copy" type="button">Copia</button>
+  <button class="btn" id="api-token-new" type="button" title="Il token cambia: gli script gia' configurati smettono di funzionare">Nuovo token</button>
+</div>
+<p class="muted small" id="api-url"></p>
+
+<h3>Novità</h3>
+<div id="about-log" class="changelog"></div>

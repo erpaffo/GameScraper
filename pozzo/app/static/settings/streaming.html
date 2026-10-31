@@ -1,0 +1,42 @@
+<h3>Streaming con Moonlight</h3>
+<p class="muted small">Lo streaming usa <a href="#" data-open="https://app.lizardbyte.dev/Sunshine">Sunshine</a> sul PC e
+  <a href="#" data-open="https://moonlight-stream.org">Moonlight</a> (gratis per Android, iPhone, tablet, TV, PC, Mac) dove vuoi giocare.
+  Pozzo Launcher pubblica in Moonlight la Big Picture e i tuoi giochi principali con le copertine.</p>
+<div id="sun-box"></div>
+<h4>Ottimizza lo streaming</h4>
+<div id="stream-opt"></div>
+<details class="small stream-guide"><summary><b>Consigli per TV, box e telefono</b> (dove si perde più tempo)</summary>
+  <ul>
+    <li><b>Modalità Gioco della TV</b>: attivala (o «Low latency / ALLM»). Da sola toglie spesso 30–60 ms.</li>
+    <li><b>Cavo anche sulla TV o sul box</b>: se non si può, Wi-Fi a 5 GHz o 6 GHz vicino al router, mai 2,4 GHz.</li>
+    <li><b>Un box invece dell'app della TV</b>: Nvidia Shield, Apple TV 4K o Google TV Streamer decodificano molto più in fretta di una smart TV.</li>
+    <li><b>Moonlight</b>, nelle impostazioni: 60 fps (120 se la TV li regge), <i>Frame pacing</i> su «Lowest latency»
+      (o «Prefer lowest latency»), bitrate 20–40 Mbit/s in 1080p, HEVC solo se il dispositivo lo decodifica in hardware.</li>
+    <li><b>Controller via cavo USB</b> alla TV o al box quando possibile: il Bluetooth aggiunge qualche millisecondo.</li>
+    <li><b>Statistiche</b>: in Moonlight attiva l'overlay delle prestazioni. «Host processing» alto = PC; «Decoding» alto = TV/box; «Network» alto = rete.</li>
+  </ul>
+</details>
+<details class="small stream-guide" open><summary><b>Come giocare: TV, telefono, iPad</b></summary>
+  <p><b>Sulla TV con un controller collegato alla TV</b> (il controller non va collegato al PC)</p>
+  <ol>
+    <li>Sul PC: Sunshine deve essere <b>avviato</b> (pulsante in questa pagina; resta attivo anche dopo i riavvii).</li>
+    <li>Sulla TV installa <b>Moonlight</b>: Android TV / Google TV / Fire TV dallo store; Apple TV dall'App Store;
+      LG webOS e Samsung Tizen con le versioni della comunità (<i>Moonlight TV</i>). In alternativa un Chromecast con Google TV o una Fire TV Stick.</li>
+    <li>Abbina il controller in <b>Bluetooth alla TV</b> (impostazioni della TV › Telecomandi e accessori).</li>
+    <li>Apri Moonlight: il PC compare da solo (stessa rete). Sceglilo, scrivi il PIN che appare nell'<i>interfaccia web di Sunshine</i> (link qui sopra, scheda PIN).</li>
+    <li>Premi <b>Pubblica in Moonlight</b> qui sopra, poi in Moonlight scegli <i>Pozzo Launcher Big Picture</i> o un gioco.
+      Moonlight manda i tasti del controller al PC, dove Sunshine crea un controller Xbox virtuale (ViGEmBus): per l'emulatore è come un controller vero.</li>
+  </ol>
+  <p><b>Sul telefono o sull'iPad, con il gioco sullo schermo del telefono</b></p>
+  <ul>
+    <li>Installa <b>Moonlight</b> (App Store / Play Store) e abbina il PC come sopra.</li>
+    <li><b>Controller a schermo</b>: Moonlight ha i tasti virtuali sopra il video. Su iPhone/iPad: impostazioni di Moonlight ›
+      <i>On-Screen Controls</i> › <i>Full</i> (sempre visibili) o <i>Auto</i> (spariscono quando colleghi un controller).
+      Su Android: impostazioni › <i>Mostra i controlli a schermo</i>.</li>
+    <li><b>Controller vero</b>: abbinalo in Bluetooth al telefono/iPad (PS5, PS4, Xbox, Switch Pro, MFi): Moonlight lo usa da solo e nasconde i tasti a schermo.</li>
+  </ul>
+  <p><b>Il telefono come controller</b>, con il gioco sul monitor del PC o sulla TV collegata al PC: abbina il telefono nell'app qui sopra e nella scheda di un gioco
+    scegli <i>Gioca con il telefono come controller</i> (anche giroscopio e più giocatori).</p>
+  <p class="muted">Se Moonlight non trova il PC: Sunshine fermo (vedi sopra o Impostazioni › Sistema › Salute), PC e TV su reti diverse,
+    oppure il firewall di Windows che blocca Sunshine sulle reti private.</p>
+</details>

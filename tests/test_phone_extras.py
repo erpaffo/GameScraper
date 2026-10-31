@@ -328,7 +328,8 @@ def test_avvisi_giochi_gratis_e_port(tmp_path, monkeypatch=None):
         cfg = make_cfg(tmp_path)
         api = client(cfg)  # l'app crea gli avvisi (app.state.alerts)
         sent = []
-        mp.setattr(notify, "send", lambda *a, **k: sent.append(a[1:3]) or True)
+        acts = []
+        mp.setattr(notify, "send", lambda *a, **k: sent.append(a[1:3]) or acts.append(a[3:]) or True)
         d = {"items": [{"source": "steam", "console": "", "title": "Gioco Gratis", "url": "u"}]}
         mp.setattr(freegames, "get", lambda cache, force=False, log=print: d)
         config.set_setting(cfg, "free_state", {"seen": [], "claimed": []})  # la pagina dei giochi gratis e' gia' stata vista
@@ -347,6 +348,7 @@ def test_avvisi_giochi_gratis_e_port(tmp_path, monkeypatch=None):
         mp.setattr(ports, "update_info", lambda cache, man, tok="", force=False: {"latest": "2.0", "update": True})
         api.app.state.alerts["ports"]()
         assert sent and "Snow" in sent[0][1] and "2.0" in sent[0][1], sent
+        assert acts[-1] == ({"view": "ports", "port": "snow"},), acts  # il clic apre la pagina del port
         sent.clear()
         api.app.state.alerts["ports"]()  # stessa versione: nessun secondo avviso
         assert sent == [], sent

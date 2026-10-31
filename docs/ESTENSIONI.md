@@ -1,10 +1,11 @@
 # Temi e plugin di Pozzo Launcher
 
-Pozzo Launcher si personalizza in due modi:
+Pozzo Launcher si personalizza in tre modi:
 
 | | Per chi | Cosa cambia | Linguaggio |
 |---|---|---|---|
-| **Tema** | Chiunque | Colori, caratteri, forme, sfondi, layout | Solo CSS |
+| **Tema** | Chiunque | Colori dell'interfaccia | Solo CSS |
+| **Profilo di esperienza** | Chi vuole cambiare l'interfaccia desktop | Struttura, navigazione, Home e presentazione del dettaglio | JavaScript |
 | **Plugin** | Chi programma | Nuove funzioni: pulsanti, pagine, store, fonti di dati, reazioni agli eventi | JavaScript e/o Python |
 
 Le cartelle si trovano accanto a `config.toml`:
@@ -41,7 +42,7 @@ themes/mio-tema/
 }
 ```
 
-**theme.css**: di solito basta ridefinire le variabili.
+**theme.css**: ridefinisci le variabili di colore per mantenere il tema combinabile con tutti i profili di esperienza.
 ```css
 :root {
   --bg: #0b140e;        /* sfondo */
@@ -54,11 +55,10 @@ themes/mio-tema/
   --accent: #3ddc84;    /* colore principale (selezione, pulsanti) */
   --accent-2: #00b894;  /* secondo colore dei gradienti */
   --fav: #ffd54a;
-  --radius: 14px;       /* arrotondamento delle copertine */
 }
 ```
 
-Puoi anche cambiare qualsiasi elemento: `.tile`, `.cover`, `#sidebar`, `#detail`, `.btn.primary`… Nella Big Picture: `.card`, `.shelf`, `.bp-hero`, `.bp-btn`… Per i font esterni si può usare `@import` da Google Fonts.
+Un tema può tecnicamente contenere regole CSS arbitrarie. Per non legarlo a una sola esperienza, limita i temi ai colori e usa un profilo di esperienza per cambiare layout o struttura; le regole CSS mirate a `.tile`, `#sidebar` o `.detail` possono sovrascrivere l'aspetto scelto dall'esperienza.
 
 Sulla pagina sono disponibili due attributi utili:
 
@@ -73,12 +73,78 @@ In **Impostazioni › Aspetto** si sceglie il tema e si vede l'anteprima del col
 
 ![Impostazioni › Aspetto: scelta del tema e plugin installati](images/impostazioni-aspetto.jpg)
 
-In **Impostazioni › Aspetto** si può scegliere anche il profilo di esperienza desktop:
-**Catalogo** mantiene la navigazione classica; **Scaffali** aggiunge una Home con suggerimenti e
-scaffali orizzontali, una barra di navigazione superiore e un cassetto con tutte le viste e le estensioni.
-La scelta è globale per l'installazione e non dipende dal profilo utente. Il tema resta una preferenza
-separata e continua a valere anche in Big Picture. I profili di esperienza sono quelli supportati
-dall'applicazione: le estensioni non possono installare markup o codice per crearne di nuovi.
+---
+
+## Profili di esperienza
+
+Il tema e il profilo di esperienza sono preferenze distinte: il tema applica la pelle visiva (CSS),
+mentre l'esperienza sceglie alcuni comportamenti e la disposizione dell'interfaccia **desktop**.
+Si selezionano separatamente in **Impostazioni › Aspetto** e si possono combinare liberamente.
+Cambiare tema non cambia esperienza e viceversa. I temi continuano ad applicarsi anche in Big Picture;
+il contratto delle esperienze descritto qui è caricato solo nell'interfaccia desktop.
+
+Le esperienze incluse nell'app sono nel percorso:
+
+```
+pozzo/app/static/experiences/<id>/
+  experience.js      # obbligatorio per registrare il profilo
+  style.css          # facoltativo: stile aggiuntivo per quel profilo
+```
+
+Il motore cerca cartelle incluse sotto `pozzo/app/static/experiences/` con un ID in minuscolo
+(lettera iniziale, poi lettere, numeri, `_` o `-`); non segue cartelle che risolvono fuori da quella
+radice. Per i file serve solo `experience.js` e, se presente, `style.css`. Non è un formato di plugin:
+lo Store estensioni non installa esperienze di terzi. Per aggiungerne una occorre includerne i file
+nell'applicazione distribuita. Il codice JavaScript caricato è codice dell'app e non un'esperienza di
+terzi isolata in un sandbox.
+
+`experience.js` è un modulo JavaScript che registra il profilo con `GS.registerExperience(...)`;
+non serve un export predefinito:
+
+```js
+GS.registerExperience({
+  id: "mia-esperienza",            // deve corrispondere al nome della cartella
+  name: "La mia esperienza",       // obbligatorio
+  description: "Una Home semplice.",
+  nav: "sidebar",                  // "sidebar", "top" oppure "none"
+  detail: "panel",                 // "panel", "page" oppure "modal"
+  home: (element) => { element.textContent = "La mia Home"; },
+  card: null,
+  onFocus: (game) => console.log("Tessera attiva:", game.title),
+});
+```
+
+Campi e callback supportati:
+
+| Campo | Contratto effettivo |
+|---|---|
+| `id` | Obbligatorio; formato `[a-z][a-z0-9_-]*` e deve coincidere con l'ID della cartella caricata. |
+| `name` | Obbligatorio, stringa. `description` è facoltativa; se omessa diventa vuota. |
+| `nav` | Obbligatorio: `sidebar` mantiene la barra laterale; `top` mostra la navigazione superiore con le voci Home, Libreria, Preferiti e Store, più il pulsante che apre il cassetto laterale; `none` nasconde la barra dell'esperienza e la barra laterale. Le voci non sono configurabili dal profilo. |
+| `detail` | Obbligatorio: `panel` presenta il dettaglio nel pannello laterale; `page` lo presenta a schermo intero e porta il focus al dettaglio; `modal` lo presenta come sovrapposizione centrata con ruolo `dialog` e `aria-modal="true"`, portando il focus sul pulsante di chiusura. `panel` non riceve un ruolo ARIA specifico dal motore. Sono modalità di presentazione del dettaglio esistente, non renderer personalizzati. |
+| `home(element, context)` | Facoltativa; chiamata per disegnare la Home nel nodo DOM. `context` contiene `renderShelvesHome`, `state` (stato dell'interfaccia) e `setView`. È invocata sincronicamente: il motore non attende una Promise restituita dal callback. Se il profilo ha `home`, viene selezionata la Home all'avvio senza una vista già salvata e quando lo si sceglie nel selettore. Se il callback genera un'eccezione, la Home mostra un messaggio di indisponibilità e l'errore va in console. |
+| `card(game, markup, context)` | Facoltativa; chiamata sincronicamente per ogni scheda, con il gioco, il markup HTML predefinito e `{ experience, state }`. Una stringa sostituisce il markup; un `Element` sostituisce i figli della scheda; altri valori non lo modificano. Un'eccezione viene registrata in console e la scheda standard resta disponibile. |
+| `onFocus(game)` | Facoltativa; chiamata quando il focus passa a una tessera di gioco, con l'oggetto gioco corrispondente. Non è un evento di focus della finestra; può essere usata, per esempio, per aggiornare un contenuto in primo piano. Un'eccezione viene registrata in console. |
+
+Il motore verifica i campi obbligatori, i valori di `nav`/`detail`, i tipi dei callback e la corrispondenza dell'ID. Se lo script non registra il profilo previsto o fallisce, il selettore lo disabilita e mostra l'errore. `style.css`, se presente, viene caricato solo per l'esperienza selezionata; gli asset arbitrari non sono esposti dalla rotta delle esperienze. Non esiste un callback per definire una barra di navigazione personalizzata o un nuovo tipo di dettaglio.
+
+Le esperienze incluse sono:
+
+| Esperienza | Interfaccia e navigazione | Dettaglio |
+|---|---|---|
+| **Originale** (`original`) | Interfaccia originale legacy, barra laterale. | Pannello laterale. |
+| **Catalogo** (`catalog`) | Catalogo classico, barra laterale. | Pannello laterale. |
+| **Scaffali** (`shelves`) | Home con suggerimenti e scaffali orizzontali; navigazione superiore e cassetto laterale. | Pannello laterale. |
+| **Console** (`console`) | Schermata immersiva senza navigazione generale; spostare il focus tra le tessere aggiorna il gioco in primo piano. | Schermo intero. |
+| **Dashboard** (`dashboard`) | Home dashboard con gioco in evidenza, sezioni recenti/preferiti/raccolta e guida rapida; navigazione superiore. | Pannello laterale. |
+| **Cinema** (`cinema`) | Home cinematografica con banner e righe orizzontali di giochi; navigazione superiore. | Sovrapposizione modale. |
+| **Vetrina** (`storefront`) | Home vetrina con gioco in evidenza, raccolta e filtri per piattaforma; navigazione superiore. | Schermo intero. |
+
+Il selettore mostra anteprime schematiche, non screenshot generati dal profilo: sono previste varianti distinte per **Console**, **Dashboard**, **Cinema**, **Vetrina**, **Originale**, **Catalogo** e **Scaffali**. **Originale** è il preset legacy e conserva il selettore CSS storico della vista Catalogo; resta una scelta distinta nel selettore. Le anteprime illustrano la disposizione, non garantiscono l'aspetto finale del JavaScript o CSS. Anche i temi restano selezionabili indipendentemente nella propria sezione del selettore, con la loro anteprima colore.
+
+La scelta dell'esperienza è salvata globalmente in `settings.json` (`app.experience`), per l'installazione e non per il singolo profilo utente; un ID non più disponibile ricade su **Catalogo**. La scelta del tema è salvata separatamente (`app.theme`). **Scaffali** è un esempio di Home personalizzata con suggerimenti e scaffali orizzontali; **Catalogo** e **Originale** mantengono la navigazione laterale.
+
+Per l'ispirazione visiva, non usare nomi ufficiali, loghi o artwork di altre piattaforme.
 
 ---
 
@@ -125,13 +191,18 @@ export default function (gs, ctx) {
   gs.addSidebarItem({ id: "mia", label: "La mia pagina", icon: "✨", view: "mia-pagina" });
   gs.registerView("mia-pagina", { title: "La mia pagina", render: (el) => { el.innerHTML = "<h2>Ciao!</h2>"; } });
 
-  // scheda nelle impostazioni
-  gs.addSettingsTab({ id: "mio", label: "Mio plugin", render: (el) => { el.innerHTML = "…"; } });
+  // sottopagina nelle impostazioni, sotto «Streaming»
+  gs.addSettingsTab({ id: "mio", label: "Mio plugin", category: "streaming",
+    render: (el) => { el.innerHTML = "…"; } });
 
   // eventi dell'interfaccia
   gs.on("gameOpened", (game) => console.log("aperto", game.title));
 }
 ```
+
+`category` è facoltativo. Se omesso, la sottopagina compare sotto **Estensioni**. I valori disponibili sono
+`generale`, `aspetto`, `libreria`, `fonti`, `store`, `emulatori`, `controller`, `streaming`, `integrazioni`,
+`estensioni`, `dati` e `sistema`. Le categorie si possono aprire direttamente con link come `#settings/streaming`.
 
 **Eventi dell'interfaccia**:
 - `libraryLoaded`: libreria caricata o ricaricata;

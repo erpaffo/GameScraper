@@ -1,4 +1,4 @@
-"""Test delle API del frontend su una libreria finta (nessun file reale toccato).
+﻿"""Test delle API del frontend su una libreria finta (nessun file reale toccato).
 
 Copre: caricamento libreria, versioni regionali raggruppate, preferiti a livello di gioco,
 collezioni personali, modifiche alle collezioni automatiche che sopravvivono a una
@@ -50,13 +50,45 @@ def make_library(cache: Path, rom: Path):
 def test_experience_ui():
     root = Path(__file__).resolve().parent.parent / "pozzo/app/static"
     page = (root / "index.html").read_text(encoding="utf-8")
+    appearance = (root / "settings/aspetto.html").read_text(encoding="utf-8")
     app = (root / "app.js").read_text(encoding="utf-8")
+    core = (root / "core.js").read_text(encoding="utf-8")
+    catalog = (root / "experiences/catalog/experience.js").read_text(encoding="utf-8")
+    shelves = (root / "experiences/shelves/experience.js").read_text(encoding="utf-8")
+    original = (root / "experiences/original/experience.js").read_text(encoding="utf-8")
+    console = (root / "experiences/console/experience.js").read_text(encoding="utf-8")
+    dashboard = (root / "experiences/dashboard/experience.js").read_text(encoding="utf-8")
+    cinema = (root / "experiences/cinema/experience.js").read_text(encoding="utf-8")
+    storefront = (root / "experiences/storefront/experience.js").read_text(encoding="utf-8")
     css = (root / "app.css").read_text(encoding="utf-8")
     assert 'id="experience-bar"' in page and 'id="drawer-toggle"' in page and 'aria-controls="sidebar"' in page
-    assert 'data-view="home"' in page and 'id="experience-list"' in page
-    assert 'function renderShelvesHome' in app and 'data-shelf-game' in app
-    assert 'classList.toggle("shelves-home-mode", v.type === "home" && isShelves())' in app
-    assert 'body.shelves-home-mode #toolbar .tools > #search' in css
+    assert 'data-view="home"' in page and 'id="experience-list"' in appearance
+    assert "function renderShelvesHome(pv)" in app and "context.renderShelvesHome(element)" in shelves
+    assert 'classList.toggle("experience-home-mode", v.type === "home")' in app and 'pv.className = "experience-home"' in app
+    assert 'if (S.view.type === "home") renderExperienceHome($("#plugin-view"))' in app
+    assert "registerExperience(experience)" in core
+    assert "GS._loadingExperience = experience.id" in core and "GS.experiences.has(experience.id)" in core
+    assert "GS.experiences.get(ext.active_experience)" in core and "\n    experiences.get(ext.active_experience)" not in core
+    assert "\n        loadingExperience = experience.id" not in core
+    assert 'GS.registerExperience({' in catalog and 'nav: "sidebar"' in catalog and 'home: null' in catalog
+    assert 'nav: "top"' in shelves and "context.renderShelvesHome(element)" in shelves
+    assert 'id: "original"' in original and 'home: null' in original
+    assert 'experience-preview__navigation' in app and 'experience-preview__hero' in app
+    assert 'experience-preview__row' in app and 'experience-preview__tile' in app
+    assert 'data-experience-preview="${esc(experience.id)}"' in app
+    assert "Interfaccia originale" in app and "experience-preview--${esc(experience.id)}" in app
+    assert "Scegli il tuo prossimo gioco" in console and "ArrowRight" in console and "onFocus(game)" in console
+    assert "Guida rapida" in dashboard and "gs-dashboard__tiles" in dashboard
+    assert 'rail("Continua a giocare"' in cinema and 'detail: "modal"' in cinema
+    assert "Esplora per piattaforma" in storefront and "data-vetrina-filter" in storefront
+    assert 'aria-hidden="true"' in app
+    assert "const usesDrawer" in app and "isShelves" not in app
+    assert 'GS.experience.id === "original" ? "catalog" : GS.experience.id' in core
+    assert 'body.experience-home-mode #toolbar .tools > #search' in css
+    for experience in ("console", "dashboard", "cinema", "storefront"):
+        assert f'data-experience-preview="{experience}"' in css
+    assert "console: []," in app and '.experience-preview[data-experience-preview="console"] .experience-preview__navigation { display: none; }' in css
+    assert 'grid-template-columns: repeat(2, minmax(0, 1fr))' in css
     assert "min-height: clamp(180px, 30vh, 250px)" in css
     assert "@media (max-height: 640px)" in css and ".shelves-hero p { display: none; }" in css
     assert 'location.reload(); // riavvio pulito' in app
@@ -64,11 +96,66 @@ def test_experience_ui():
     assert "setDrawer(false, false); } // altrimenti" in app, "la navigazione superiore deve chiudere il cassetto"
     assert "#nav .nav-item .ico {" in css
     assert "@media (prefers-reduced-motion: reduce)" in css and "shelf-game:focus-visible" in css
-    print("ok  UI Scaffali: home, nav/cassetto accessibili e stile desktop isolato")
+    print("ok  motore esperienze, anteprime accessibili, home e navigazione compatibili")
+
+
+def test_experience_hooks_and_detail_modes():
+    root = Path(__file__).resolve().parent.parent / "pozzo/app/static"
+    app = (root / "app.js").read_text(encoding="utf-8")
+    core = (root / "core.js").read_text(encoding="utf-8")
+    assert "GS.experience.home(element, { renderShelvesHome, state: S, setView })" in app
+    assert "GS.experience.card(g, el.innerHTML, { experience: GS.experience, state: S })" in app
+    assert 'layer.addEventListener("focusin"' in app
+    assert 'e.target.closest(".tile[data-id]")' in app
+    assert "typeof GS.experience?.onFocus !== \"function\"" in app and "GS.experience.onFocus(game)" in app
+    assert "GS.experience?.onFocus?.({ experience: GS.experience, state: S })" not in app
+    console = (root / "experiences/console/experience.js").read_text(encoding="utf-8")
+    assert 'root.addEventListener("focusin"' in console and "onFocus(game)" in console
+    assert "function presentDetail()" in app
+    assert '["panel", "page", "modal"].includes(GS.experience?.detail)' in app
+    assert 'detail.setAttribute("role", "dialog")' in app and 'detail.setAttribute("aria-modal", "true")' in app
+    assert 'detail.setAttribute("role", "region")' in app and 'detail.setAttribute("aria-labelledby", "detail-title")' in app
+    assert 'if (mode === "modal")' in app and 'if (mode !== "panel") $("#detail-close").focus()' in app and 'id="detail-title"' in app
+    assert 'dataset.presentation === "modal"' in app and 'focusable[focusable.length - 1].focus()' in app
+    assert '#detail[data-presentation="page"].open' in (root / "app.css").read_text(encoding="utf-8")
+    assert '#detail[data-presentation="modal"].open' in (root / "app.css").read_text(encoding="utf-8")
+    assert 'details = ["modal", "page", "panel"]' in core
+    print("ok  home/card/onFocus hook callsites and panel/page/modal detail behavior")
+
+
+def test_experience_discovery(client):
+    from pozzo.app import extensions
+
+    data = client.get("/api/extensions").json()
+    experiences = {item["id"]: item for item in data["experiences"]}
+    assert data["active_experience"] == "catalog", data
+    assert {"original", "catalog", "shelves"} <= experiences.keys()
+    assert all(experiences[name]["available"] for name in ("original", "catalog", "shelves"))
+    assert experiences["original"]["name"] == "Originale"
+    assert experiences["original"]["nav"] == "sidebar" and experiences["original"]["detail"] == "panel"
+    assert experiences["catalog"]["nav"] == "sidebar" and experiences["catalog"]["detail"] == "panel"
+    assert experiences["original"]["script"] == "/experiences/original/experience.js"
+    assert experiences["catalog"]["script"] == "/experiences/catalog/experience.js"
+    assert experiences["shelves"]["script"] == "/experiences/shelves/experience.js"
+    assert client.get(experiences["catalog"]["script"]).status_code == 200
+    assert "GS.registerExperience" in client.get(experiences["shelves"]["script"]).text
+    assert "home: null" in client.get(experiences["original"]["script"]).text
+    assert extensions.experience_file("shelves", "../catalog/experience.js") is None
+    assert extensions.experience_file("../shelves", "experience.js") is None
+    assert client.post("/api/app/experience", json={"experience": "missing"}).status_code == 400
+    assert client.post("/api/app/experience", json={"experience": "original"}).status_code == 200
+    assert client.get("/api/extensions").json()["active_experience"] == "original"
+    assert client.post("/api/app/experience", json={"experience": "shelves"}).status_code == 200
+    assert client.get("/api/extensions").json()["active_experience"] == "shelves"
+    assert client.post("/api/app/experience", json={"experience": "catalog"}).status_code == 200
+    selected = client.get("/api/extensions").json()
+    assert selected["active_experience"] == "catalog" and selected["active_theme"] == "default"
+    print("ok  Originale distinta, discovery sicura, legacy catalog e tema indipendente")
 
 
 def main():
     test_experience_ui()
+    test_experience_hooks_and_detail_modes()
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
         tmp = Path(t)
         rom = tmp / "game.gba"
@@ -76,11 +163,13 @@ def main():
         make_library(tmp, rom)
         cfg = config.Config(cache=tmp, output=tmp / "out")
         cfg.config_path = tmp / "config.toml"  # settings.json nella cartella temporanea, non in quella corrente
+        cfg.app["experience"] = "catalog"  # valore legacy: resta Catalogo e non viene rimappato
         # finto emulatore: python che dorme 1,2 s
         cfg.emulators = {"melonds": sys.executable}
         cfg.launch = {"gba": {"emulator": "melonds", "args": ["-c", "import time; time.sleep(1.2)", "{rom}"]}}
         app = create_app(cfg)
         with TestClient(app) as c:
+            test_experience_discovery(c)
             from pozzo import __version__
             index = c.get("/")
             css_url = re.search(r'/static/app\.css\?v=([^"]+)', index.text)
@@ -950,10 +1039,11 @@ def test_library_parts():
 
 
 def test_single_store_refresh_button():
-    """Impostazioni › Account: accanto a «Aggiorna store» (tutti) c'è un ⟳ per riga che manda only=[id]."""
-    js = (Path(__file__).resolve().parent.parent / "pozzo" / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    """Impostazioni › Store: accanto a «Aggiorna store» (tutti) c'è un ⟳ per riga che manda only=[id]."""
+    root = Path(__file__).resolve().parent.parent / "pozzo" / "app" / "static"
+    js = (root / "app.js").read_text(encoding="utf-8")
     assert 'data-acc-refresh="${x.id}"' in js and "only: [t.dataset.accRefresh]" in js
-    assert 'id="acc-refresh"' in (Path(__file__).resolve().parent.parent / "pozzo" / "app" / "static" / "index.html").read_text(encoding="utf-8")
+    assert 'id="acc-refresh"' in (root / "settings" / "store.html").read_text(encoding="utf-8")
     print("ok  pulsante per aggiornare un solo store, oltre a quello per tutti")
 
 

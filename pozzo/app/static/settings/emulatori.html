@@ -1,0 +1,28 @@
+<div class="row">
+  <input id="emu-folder" class="field grow" placeholder="Cartella che contiene gli emulatori, es. C:\Emulatori">
+  <button class="btn" id="emu-folder-pick">Sfoglia…</button>
+  <button class="btn" id="emu-detect">🔍 Trova emulatori</button>
+</div>
+<h3>Programmi</h3>
+<p class="muted small">Un percorso per emulatore: vale per tutte le console che lo usano.</p>
+<div id="emu-paths"></div>
+<div class="row"><button class="btn" id="emu-add">＋ Aggiungi un altro emulatore</button></div>
+<h3>Emulatore per console</h3>
+<p class="muted small">«Automatico» usa il primo emulatore installato tra quelli consigliati. Negli argomenti
+  <code>{rom}</code> è il file del gioco, <code>{core}</code> il core di RetroArch.</p>
+<div id="emu-table"></div>
+<div class="row end">
+  <span class="muted small" id="emu-saved-to"></span>
+  <button class="btn primary" id="emu-save">Salva</button>
+</div>
+<h3>Avvio dei giochi</h3>
+<p class="muted small">Script eseguiti per <b>tutti</b> i giochi (console e PC), ad esempio per cambiare risoluzione o
+  attivare l'HDR. Un comando o un file <code>.bat</code>/<code>.ps1</code>; ricevono <code>POZZO_TITLE</code> e
+  <code>POZZO_KEY</code>. Ogni gioco può averne di propri in «⚙ Profilo di avvio».</p>
+<div class="pf-grid">
+  <label class="wide">Prima dell'avvio <input class="field" id="ln-before" placeholder="es. C:\Script\prima.bat"></label>
+  <label class="wide">Dopo la chiusura <input class="field" id="ln-after" placeholder="es. C:\Script\dopo.bat"></label>
+</div>
+<label class="chk"><input type="checkbox" id="ln-close"> Chiudi il launcher dello store (Steam, Epic, GOG Galaxy,
+  Battle.net, Amazon) a fine partita, se l'aveva aperto il gioco</label>
+<div class="row end"><button class="btn primary" id="ln-save" type="button">Salva</button></div>

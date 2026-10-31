@@ -1,0 +1,19 @@
+<h3>Discord — «Sto giocando a …»</h3>
+<p class="muted small">Il tuo profilo Discord mostra il gioco in corso (titolo, console e tempo di gioco) finché
+  Pozzo Launcher è aperto. Usa il canale locale di Discord: <b>nessun dato esce dal PC</b> e non serve un server.
+  Discord deve essere aperto; le immagini non sono mostrabili (Discord accetta solo asset caricati
+  sull'applicazione, non indirizzi web).</p>
+<div class="row wrap">
+  <label class="chk"><input type="checkbox" id="dc-on"> Attiva la presenza su Discord</label>
+  <label class="chk"><input type="checkbox" id="dc-time" checked> Mostra il tempo di gioco</label>
+</div>
+<div class="row wrap">
+  <label class="lbl-field grow">ID applicazione Discord
+    <input class="field" id="dc-id" placeholder="es. 1234567890123456789" autocomplete="off">
+  </label>
+  <button class="btn primary" id="dc-save" type="button">Salva</button>
+</div>
+<p class="muted small">Per ottenere l'ID: <a href="#" data-open="https://discord.com/developers/applications">discord.com/developers/applications</a>
+  › <i>New Application</i> › nome «Pozzo Launcher» › <i>OAuth2</i> (o «General Information») e copia l'<i>Application ID</i>.
+  Non serve caricare immagini né aggiungere bot.</p>
+<p class="small" id="dc-state"></p>

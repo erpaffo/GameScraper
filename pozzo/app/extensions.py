@@ -22,6 +22,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import queue
+import re
 import threading
 import tomllib
 import traceback
@@ -30,10 +31,41 @@ from pathlib import Path
 from .. import config as C
 
 BUILTIN_THEMES = Path(__file__).parent / "themes"
-EXPERIENCES = (
-    {"id": "catalog", "name": "Catalogo", "description": "Interfaccia classica con navigazione laterale."},
-    {"id": "shelves", "name": "Scaffali", "description": "Home a scaffali e navigazione principale superiore."},
-)
+BUILTIN_EXPERIENCES = Path(__file__).parent / "static" / "experiences"
+DEFAULT_EXPERIENCE = {
+    "id": "catalog", "name": "Catalogo", "description": "Interfaccia classica con navigazione laterale.",
+    "nav": "sidebar", "detail": "panel",
+}
+EXPERIENCE_METADATA = {
+    "original": {
+        "name": "Originale", "description": "Interfaccia originale del launcher, con navigazione laterale e schede a pannello.",
+        "nav": "sidebar", "detail": "panel",
+    },
+    "catalog": {
+        "name": "Catalogo", "description": "Catalogo della libreria con navigazione laterale.",
+        "nav": "sidebar", "detail": "panel",
+    },
+    "shelves": {
+        "name": "Scaffali", "description": "Home a scaffali e navigazione principale superiore.",
+        "nav": "top", "detail": "panel",
+    },
+    "console": {
+        "name": "Console", "description": "Raccolta immersiva navigabile per selezione e messa a fuoco.",
+        "nav": "none", "detail": "page",
+    },
+    "dashboard": {
+        "name": "Dashboard", "description": "Home a gruppi di giochi con accesso rapido alle viste.",
+        "nav": "top", "detail": "panel",
+    },
+    "cinema": {
+        "name": "Cinema", "description": "Home con gioco in evidenza e file orizzontali per la raccolta.",
+        "nav": "top", "detail": "modal",
+    },
+    "storefront": {
+        "name": "Vetrina", "description": "Home curata con giochi in evidenza e sezioni della raccolta.",
+        "nav": "top", "detail": "page",
+    },
+}
 BUILTIN_PLUGINS = Path(__file__).parent / "plugins"  # solo lo store: le altre estensioni si installano da li'
 STORE_ID = "estensioni"
 API_VERSION = 1
@@ -120,7 +152,66 @@ def list_themes(cfg) -> list[dict]:
 
 def active_experience(cfg) -> str:
     value = cfg.app.get("experience", "catalog")
-    return value if isinstance(value, str) and value in {item["id"] for item in EXPERIENCES} else "catalog"
+    return value if isinstance(value, str) and value in {
+        item["id"] for item in list_experiences() if item.get("available")
+    } else "catalog"
+
+
+def list_experiences() -> list[dict]:
+    """Scopre esperienze incluse nell'app senza consentire cartelle o link esterni."""
+    out, seen = [], set()
+    try:
+        dirs = sorted(BUILTIN_EXPERIENCES.iterdir()) if BUILTIN_EXPERIENCES.exists() else []
+    except OSError:
+        dirs = []
+    root = BUILTIN_EXPERIENCES.resolve()
+    for d in dirs:
+        if not re.fullmatch(r"[a-z][a-z0-9_-]*", d.name):
+            continue
+        try:
+            folder = d.resolve()
+            if folder.parent != root or not folder.is_dir():
+                continue
+            metadata = EXPERIENCE_METADATA.get(d.name, {})
+            has_script = experience_file(d.name, "experience.js") is not None
+            has_style = experience_file(d.name, "style.css") is not None
+            available = has_script or d.name == "catalog"
+            out.append({
+                "id": d.name,
+                "name": metadata.get("name", d.name),
+                "description": metadata.get("description", ""),
+                "nav": metadata.get("nav", "sidebar"),
+                "detail": metadata.get("detail", "panel"),
+                "script": f"/experiences/{d.name}/experience.js" if has_script else None,
+                "style": f"/experiences/{d.name}/style.css" if has_style else None,
+                "available": available,
+                "error": None if has_script else "File experience.js mancante" if d.name != "catalog" else
+                    "File experience.js mancante: uso il comportamento predefinito sicuro.",
+            })
+            seen.add(d.name)
+        except OSError as e:
+            out.append({"id": d.name, "name": d.name, "description": "", "script": None, "style": None,
+                        "available": False, "error": f"Cartella illeggibile: {e}"})
+            seen.add(d.name)
+    if "catalog" not in seen:
+        out.insert(0, {**DEFAULT_EXPERIENCE, "script": None, "style": None, "available": True,
+                       "error": "Cartella dell'esperienza predefinita mancante: uso il comportamento sicuro incorporato."})
+    out.sort(key=lambda item: (item["id"] != "catalog", item["id"]))
+    return out
+
+
+def experience_file(experience_id: str, rel: str) -> Path | None:
+    """Risoluzione statica limitata ai due asset previsti in ogni cartella esperienza."""
+    if not re.fullmatch(r"[a-z][a-z0-9_-]*", experience_id) or rel not in ("experience.js", "style.css"):
+        return None
+    try:
+        root = (BUILTIN_EXPERIENCES / experience_id).resolve()
+        f = (root / rel).resolve()
+        if root.parent == BUILTIN_EXPERIENCES.resolve() and root.is_dir() and root in f.parents and f.is_file():
+            return f
+    except OSError:
+        pass
+    return None
 
 
 def theme_file(cfg, tid: str, rel: str) -> Path | None:

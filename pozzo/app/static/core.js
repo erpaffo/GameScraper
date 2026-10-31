@@ -236,6 +236,9 @@ function decodeLibrary(lib) {
 /* ------------------------------------------------------------------ estensioni */
 const GS = (() => {
   const handlers = new Map();
+  const experiences = new Map();
+  experiences.set("catalog", { id: "catalog", name: "Catalogo", description: "Interfaccia classica con navigazione laterale.",
+    nav: "sidebar", home: null, card: null, detail: "panel", onFocus: null });
   const ui = { gameActions: [], detailSections: [], tileBadges: [], sidebarItems: [], views: new Map(), settingsTabs: [] };
   const add = (list) => (item) => {
     if (!item || !item.id) throw new Error("serve un id");
@@ -247,14 +250,37 @@ const GS = (() => {
   const GS = {
     apiVersion: 1,
     mode: document.documentElement.dataset.mode || "desktop",
+    _loadingExperience: null,
+    experiences,
+    experience: { id: "catalog", name: "Catalogo", description: "Interfaccia classica con navigazione laterale.",
+      nav: "sidebar", home: null, card: null, detail: "panel", onFocus: null },
     api, esc, fold, store, ui, fmtSize,
+    registerExperience(experience) {
+      const navs = ["sidebar", "top", "none"], details = ["modal", "page", "panel"];
+      if (!experience || !/^[a-z][a-z0-9_-]*$/.test(experience.id || "")
+          || (GS._loadingExperience && experience.id !== GS._loadingExperience)
+          || typeof experience.name !== "string" || !navs.includes(experience.nav)
+          || !details.includes(experience.detail)
+          || (experience.home != null && typeof experience.home !== "function")
+          || (experience.card != null && typeof experience.card !== "function")
+          || (experience.onFocus != null && typeof experience.onFocus !== "function")) {
+        throw new Error("Contratto esperienza non valido");
+      }
+      const registered = {
+        id: experience.id, name: experience.name, description: String(experience.description || ""),
+        nav: experience.nav, home: experience.home || null, card: experience.card || null,
+        detail: experience.detail, onFocus: experience.onFocus || null,
+      };
+      experiences.set(registered.id, registered);
+      return registered;
+    },
     on(ev, fn) { if (!handlers.has(ev)) handlers.set(ev, new Set()); handlers.get(ev).add(fn); return () => handlers.get(ev).delete(fn); },
     emit(ev, data) { for (const fn of handlers.get(ev) || []) { try { fn(data); } catch (e) { console.error(`[GS] ${ev}:`, e); } } },
     addGameAction: add(ui.gameActions), // {id, label, icon?, when?(game), run(game)}
     addDetailSection: add(ui.detailSections), // {id, title, render(game) -> html|Element|Promise}
     addTileBadge: add(ui.tileBadges), // {id, render(game) -> testo|null}
     addSidebarItem: add(ui.sidebarItems), // {id, label, icon?, view?, onClick?}
-    addSettingsTab: add(ui.settingsTabs), // {id, label, render(el)}
+    addSettingsTab: add(ui.settingsTabs), // {id, label, category?, render(el)}
     registerView(id, view) { ui.views.set(id, view); GS.emit("uiChanged", { kind: "views" }); }, // {title, render(el)}
     // forniti dall'interfaccia attiva (desktop o Big Picture)
     toast: (m) => console.log(m),
@@ -272,10 +298,39 @@ async function loadExtensions() {
   let ext;
   try { ext = await api("/api/extensions"); } catch (e) { console.warn("estensioni non disponibili", e); return; }
   const mode = GS.mode;
-  if (mode === "desktop") {
-    document.documentElement.dataset.experience = ext.active_experience === "shelves" ? "shelves" : "catalog";
-  }
   document.querySelectorAll("link[data-ext]").forEach((l) => l.remove());
+  if (mode === "desktop") {
+    GS.experienceErrors = {};
+    for (const experience of ext.experiences || []) {
+      if (!experience.available || !experience.script) {
+        if (experience.error) GS.experienceErrors[experience.id] = experience.error;
+        continue;
+      }
+      try {
+        GS._loadingExperience = experience.id;
+        await import(experience.script);
+        if (!GS.experiences.has(experience.id)) throw new Error("Lo script non ha registrato l'esperienza");
+      } catch (e) {
+        GS.experienceErrors[experience.id] = `${e.name}: ${e.message}`;
+        console.warn(`Esperienza ${experience.id}:`, e);
+      } finally {
+        GS._loadingExperience = null;
+      }
+    }
+    GS.experience = GS.experiences.get(ext.active_experience) || GS.experiences.get("catalog")
+      || { id: "catalog", name: "Catalogo", description: "Interfaccia classica con navigazione laterale.",
+        nav: "sidebar", home: null, card: null, detail: "panel", onFocus: null };
+    document.documentElement.dataset.experienceId = GS.experience.id;
+    // Keep the legacy CSS selector stable so the Originale preset keeps its pre-registry layout.
+    document.documentElement.dataset.experience = GS.experience.id === "original" ? "catalog" : GS.experience.id;
+    document.documentElement.dataset.experienceNav = GS.experience.nav;
+    document.documentElement.dataset.experienceDetail = GS.experience.detail;
+    const topNav = GS.experience.nav === "top", drawer = GS.experience.nav !== "sidebar";
+    const bar = $("#experience-bar"), nav = $("#experience-nav"), toggle = $("#drawer-toggle");
+    if (bar) bar.hidden = !drawer;
+    if (nav) { nav.hidden = !topNav; nav.style.display = topNav ? "" : "none"; }
+    if (toggle) { toggle.hidden = !drawer; toggle.style.display = drawer ? "" : "none"; }
+  }
   const theme = ext.themes.find((t) => t.id === ext.active_theme);
   const css = theme && (mode === "bigpicture" ? theme.bigpicture : theme.desktop);
   // barra del titolo e bordo della finestra nativa dello stesso colore dello sfondo del tema
@@ -290,6 +345,14 @@ async function loadExtensions() {
     l.onload = titlebarColor;
     document.head.appendChild(l);
   } else titlebarColor();
+  if (mode === "desktop") {
+    const selected = (ext.experiences || []).find((item) => item.id === GS.experience.id);
+    if (selected && selected.style) {
+      const l = document.createElement("link");
+      l.rel = "stylesheet"; l.href = selected.style; l.dataset.ext = "experience";
+      document.head.appendChild(l);
+    }
+  }
   document.documentElement.dataset.theme = ext.active_theme || "default";
   GS.plugins = ext.plugins;
   for (const p of ext.plugins.filter((x) => x.enabled)) {

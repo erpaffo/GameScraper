@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 /* Pozzo Launcher - frontend.
  * Tutta la libreria arriva in un'unica risposta compatta: ricerca, filtri, ordinamenti e
  * raggruppamenti sono calcolati qui in memoria (istantanei anche con 15.000 giochi).
@@ -19,7 +19,7 @@ const S = {
   disc: store.get("disc", { preset: "", genre: "", decade: "" }),
   shopF: store.get("shopF", { src: "", plat: "", size: "", hideDlc: false }), shop: [], shopIds: new Set(),
 };
-const isShelves = () => document.documentElement.dataset.experience === "shelves";
+const usesDrawer = () => GS.experience?.nav !== "sidebar"; // top e none aprono la navigazione come cassetto
 
 // prima i giochi posseduti (pochi, subito), poi in sottofondo il catalogo degli store online
 let onlineSeq = 0;
@@ -75,7 +75,7 @@ async function loadOnline(seq) {
     libraryChanged();
     renderSidebar();
     refreshGrid(true);
-    if (S.view.type === "home") renderShelvesHome($("#plugin-view"));
+    if (S.view.type === "home") renderExperienceHome($("#plugin-view"));
   } catch (e) {
     if (seq === onlineSeq) toast("Giochi degli store non caricati: " + e.message, true);
   } finally {
@@ -277,6 +277,9 @@ function tileEl(g) {
   const el = document.createElement("div");
   el.className = "tile" + (S.selected === g.id ? " selected" : "") + (g.store && !g.installed ? " notinst" : "");
   el.dataset.id = g.id;
+  el.tabIndex = 0;
+  el.setAttribute("role", "button");
+  el.setAttribute("aria-label", `Apri ${g.title}, ${platName(g.platform)}`);
   const pn = platName(g.platform);
   const showPlat = S.view.type !== "platform";
   const sub = (showPlat ? [pn, g.year] : [g.year, g.dev]).concat((S.sort === "-size" || S.sort === "size" || S.view.type === "shop") && g.size ? [fmtSize(g.size)] : [])
@@ -295,6 +298,13 @@ function tileEl(g) {
   el.innerHTML = `<div class="cover" style="--h:${hue(g.title)}"><div class="ph">${esc(g.title)}<small>${esc(pn)}</small></div>`
     + (g.cover ? `<img alt="" decoding="async">` : "") + badges + `</div>`
     + `<div class="t" title="${esc(g.title)}">${esc(g.title)}</div><div class="s">${esc(sub)}</div>`;
+  if (typeof GS.experience?.card === "function") {
+    try {
+      const card = GS.experience.card(g, el.innerHTML, { experience: GS.experience, state: S });
+      if (typeof card === "string") el.innerHTML = card;
+      else if (card instanceof Element) el.replaceChildren(card);
+    } catch (e) { console.warn(`Scheda esperienza ${GS.experience.id}:`, e); }
+  }
   if (g.cover) {
     const img = el.querySelector("img");
     img.onload = () => img.classList.add("ok");
@@ -567,7 +577,7 @@ function markActive() {
 }
 
 function setDrawer(open, restoreFocus = true) {
-  if (!isShelves()) return;
+  if (!usesDrawer()) return;
   const aside = $("#sidebar"), toggle = $("#drawer-toggle");
   aside.classList.toggle("drawer-open", open);
   toggle.setAttribute("aria-expanded", String(open));
@@ -653,14 +663,14 @@ function updateHeader() {
 }
 
 function setView(v) {
-  if (v.type === "home" && !isShelves()) v = { type: "all" };
+  if (v.type === "home" && typeof GS.experience?.home !== "function") v = { type: "all" };
   const wasHome = S.view.type === "home";
   S.view = v;
   store.set("view", v);
   GS.emit("viewChanged", v);
-  document.body.classList.toggle("shelves-home-mode", v.type === "home" && isShelves());
+  document.body.classList.toggle("experience-home-mode", v.type === "home");
   const pv = $("#plugin-view");
-  if (v.type === "home") pv.className = "shelves-home";
+  if (v.type === "home") pv.className = "experience-home";
   else if (wasHome) pv.className = "";
   document.body.classList.toggle("foryou-mode", ["foryou", "free", "ports", "wishlist", "stats", "shots", "top"].includes(v.type));
   if (v.type !== "collection") $("#coll-banner").hidden = true;
@@ -670,7 +680,7 @@ function setView(v) {
     markActive();
     updateHeader();
     $("#view-count").textContent = "";
-    renderShelvesHome(pv);
+    renderExperienceHome(pv);
     return;
   }
   if (["free", "ports", "wishlist", "stats", "shots", "top"].includes(v.type)) {
@@ -855,6 +865,15 @@ function renderShelvesHome(pv) {
   }
 }
 
+function renderExperienceHome(element) {
+  if (typeof GS.experience?.home !== "function") return;
+  try { GS.experience.home(element, { renderShelvesHome, state: S, setView }); }
+  catch (e) {
+    console.error(`Home esperienza ${GS.experience.id}:`, e);
+    element.textContent = "Home non disponibile.";
+  }
+}
+
 /* ---- questionario "A cosa vuoi giocare?" */
 const QZ = { step: 0, a: {} };
 function openQuiz() {
@@ -923,8 +942,29 @@ function fmtTime(sec) {
 }
 function fmtDate(ts) { return ts ? new Date(ts * 1000).toLocaleString("it", { dateStyle: "medium", timeStyle: "short" }) : "—"; }
 
+function presentDetail() {
+  const detail = $("#detail");
+  const mode = ["panel", "page", "modal"].includes(GS.experience?.detail) ? GS.experience.detail : "panel";
+  detail.dataset.presentation = mode;
+  detail.classList.add("open");
+  detail.setAttribute("aria-hidden", "false");
+  detail.setAttribute("aria-labelledby", "detail-title");
+  if (mode === "modal") {
+    detail.setAttribute("role", "dialog");
+    detail.setAttribute("aria-modal", "true");
+    document.documentElement.dataset.detailModal = "true";
+  } else {
+    detail.setAttribute("role", "region");
+    detail.removeAttribute("aria-modal");
+    delete document.documentElement.dataset.detailModal;
+  }
+  if (mode !== "panel") $("#detail-close").focus();
+  detail.scrollTop = 0;
+}
+
 async function openDetail(id) {
   const my = ++S.openSeq; // un fetch lento non deve sovrascrivere il gioco aperto dopo
+  if (!S.detail) S.detailFocus = document.activeElement;
   S.selected = id;
   document.querySelectorAll(".tile.selected").forEach((t) => t.classList.remove("selected"));
   S.nodes.get(id)?.classList.add("selected");
@@ -969,7 +1009,7 @@ async function openDetail(id) {
   $("#detail-body").innerHTML = `
     <div class="d-top">
       <div class="d-cover">${d.media.cover ? `<img src="${d.media.cover}?w=450" alt="">` : ""}</div>
-      <div class="d-title"><h2>${esc(d.title)}</h2><div class="muted">${esc(d.platform_name)}${d.year ? " · " + d.year : ""}</div></div>
+      <div class="d-title"><h2 id="detail-title">${esc(d.title)}</h2><div class="muted">${esc(d.platform_name)}${d.year ? " · " + d.year : ""}</div></div>
     </div>
     <div class="d-actions">
       ${mainBtn}
@@ -1037,9 +1077,7 @@ async function openDetail(id) {
     <div class="d-h">File</div>
     <div class="files">${d.files.map(esc).join("<br>")}${d.crc ? `<br>CRC ${esc(d.crc)}` : ""}
       ${Object.keys(d.sources).length ? `<br>Fonti: ${esc([...new Set(Object.values(d.sources))].join(", "))}` : ""}</div>`;
-  $("#detail").classList.add("open");
-  $("#detail").setAttribute("aria-hidden", "false");
-  $("#detail").scrollTop = 0;
+  presentDetail();
   renderDetailSections(d);
   if (d.shots) loadDetailShots(d.id);
   loadSaves(d);
@@ -1268,9 +1306,15 @@ async function renderDetailSections(d) {
 
 function closeDetail() {
   S.openSeq++; // una risposta in arrivo non deve riaprire il pannello
-  $("#detail").classList.remove("open");
-  $("#detail").setAttribute("aria-hidden", "true");
+  const detail = $("#detail");
+  detail.classList.remove("open");
+  detail.setAttribute("aria-hidden", "true");
+  detail.removeAttribute("aria-modal");
+  detail.removeAttribute("aria-labelledby");
+  delete document.documentElement.dataset.detailModal;
   S.detail = null;
+  if (S.detailFocus?.isConnected) S.detailFocus.focus();
+  S.detailFocus = null;
 }
 
 async function setFlag(field, value) {
@@ -1587,7 +1631,7 @@ async function pollCollart(started = false) {
   const run = js.status === "running";
   $("#collart-missing").disabled = $("#collart-all").disabled = run;
   $("#collart-stop").hidden = !run;
-  if (run && $("#settings").open) caTimer = setTimeout(pollCollart, 2000);
+  if (run && settingsOpen()) caTimer = setTimeout(pollCollart, 2000);
 }
 async function startCollart(mode) {
   try { await api("/api/collart", { body: { mode } }); } catch (e) { return toast(e.message, true); }
@@ -2592,7 +2636,7 @@ async function loadRemote() {
     $("#stream-opt").innerHTML = `<div class="health">` + o.checks.map((x) => `<div class="hl-row hl-${x.level === "info" ? "ok" : x.level}">`
       + `<span class="hl-ico">${ico[x.level] || "•"}</span><div class="hl-txt"><b>${esc(x.title)}</b>${x.detail ? `<div class="muted small">${esc(x.detail)}</div>` : ""}</div></div>`).join("") + `</div>`;
   }).catch(() => {});
-  if (ph.enabled && SET.tab === "remote" && $("#settings").open) phoneTimer = setTimeout(loadRemote, ph.running ? 5000 : 1000);
+  if (ph.enabled && (SET.tab === "controller" || SET.tab === "streaming") && settingsOpen()) phoneTimer = setTimeout(loadRemote, ph.running ? 5000 : 1000);
 }
 async function phoneSet(body) {
   try { await api("/api/phone", { body }); } catch (e) { toast(e.message, true); }
@@ -2628,7 +2672,7 @@ async function pollStores(started = false) {
   try { js = await api("/api/stores/refresh"); } catch { return; }
   if (started && js.status !== "running") js.status = "running"; // appena avviato
   const box = $("#acc-progress");
-  if (box && $("#settings").open && SET.tab === "acc") renderJobInto(box, js);
+  if (box && settingsActive("store")) renderJobInto(box, js);
   if (js.status === "running") { storeTimer = setTimeout(pollStores, 1000); SET.storesRunning = true; return; }
   if (SET.storesRunning) {
     SET.storesRunning = false;
@@ -2638,7 +2682,7 @@ async function pollStores(started = false) {
       if (S.view.type === "ports") { S.ports = null; renderPorts($("#plugin-view")); } // pulsante «Gioca» del port appena installato
     }
     else if (js.status === "error") toast(js.phase, true);
-    if ($("#settings").open && SET.tab === "acc") loadAccounts();
+    if (settingsActive("store")) loadAccounts();
   }
 }
 
@@ -2668,6 +2712,7 @@ async function loadSources() {
   $("#sch-on").checked = !!sch.enabled;
   $("#sch-time").value = sch.time || "03:00";
   $("#sch-mode").value = sch.mode || "missing";
+  SET.sourcesSaved = collectSources(false);
   $("#sch-last").textContent = d.schedule_last ? `ultimo: ${d.schedule_last}` : "";
   $("#rawg-key").placeholder = d.sources.find((x) => x.id === "rawg")?.has_key ? "chiave salvata (••••) — incolla per cambiarla" : "incolla la chiave";
   if (d.bulk_job.status === "running") pollBulk();
@@ -2688,7 +2733,7 @@ function renderSources(rows) {
   }).join("");
 }
 
-function collectSources() {
+function collectSources(includeKey = true) {
   const order = [], limits = {};
   document.querySelectorAll("#src-table tr[data-src]").forEach((tr) => {
     const id = tr.dataset.src;
@@ -2698,8 +2743,36 @@ function collectSources() {
     if (Object.keys(lim).length) limits[id] = lim;
   });
   const body = { order, limits, schedule: { enabled: $("#sch-on").checked, time: $("#sch-time").value, mode: $("#sch-mode").value } };
-  if ($("#rawg-key").value.trim()) body.rawg_key = $("#rawg-key").value.trim();
+  if (includeKey && $("#rawg-key").value.trim()) body.rawg_key = $("#rawg-key").value.trim();
   return body;
+}
+
+let sourceSaveTimer = 0, sourceSaveRevision = 0, sourceSaving = false;
+function scheduleSourceSave() {
+  sourceSaveRevision++;
+  clearTimeout(sourceSaveTimer);
+  if (sourceSaving) return;
+  sourceSaveTimer = setTimeout(() => saveSourceSettings(sourceSaveRevision), 450);
+}
+
+async function saveSourceSettings(revision) {
+  if (sourceSaving) return;
+  sourceSaving = true;
+  const previous = SET.sourcesSaved || collectSources(false);
+  const body = collectSources(false);
+  try {
+    SET.sources = await api("/api/sources", { body });
+    SET.sourcesSaved = body;
+    savedToast(async () => {
+      SET.sources = await api("/api/sources", { body: previous });
+      SET.sourcesSaved = previous;
+      loadSources();
+    });
+  } catch (e) { toast(e.message, true); }
+  finally {
+    sourceSaving = false;
+    if (revision !== sourceSaveRevision) scheduleSourceSave();
+  }
 }
 
 let bulkTimer = 0;
@@ -2709,7 +2782,7 @@ async function pollBulk() {
   if (!d) return;
   $("#bulk-log").textContent = (d.bulk_job.log || []).slice(-8).join("\n");
   if (d.bulk_job.status === "running") bulkTimer = setTimeout(pollBulk, 1500);
-  else if (SET.tab === "src") { loadSources(); if (d.bulk_job.status === "done") toast("Database aggiornato"); }
+  else if (settingsActive("fonti")) { loadSources(); if (d.bulk_job.status === "done") toast("Database aggiornato"); }
 }
 
 async function showPlan() {
@@ -3052,12 +3125,48 @@ async function accountAction(t) {
 }
 
 /* ---- impostazioni › aspetto: temi e plugin */
+function experiencePreviewMarkup(experience) {
+  const views = {
+    original: ["Raccolta", "Console", "Collezioni"],
+    catalog: ["Catalogo", "Tutti i giochi", "Preferiti"],
+    shelves: ["Home", "Libreria", "Preferiti"],
+    console: [],
+    dashboard: ["Home", "Libreria", "Preferiti"],
+    cinema: ["Home", "Libreria", "Store"],
+    storefront: ["Home", "In evidenza", "Categorie"],
+  };
+  const labels = views[experience.id] || ["Home", "Libreria"];
+  const navigation = `<div class="experience-preview__navigation">${labels.map((label) => `<span>${label}</span>`).join("")}</div>`;
+  const heroText = {
+    original: ["Interfaccia originale", "Libreria classica"],
+    catalog: ["Tutti i giochi", "Catalogo della libreria"],
+    shelves: ["La tua raccolta", "Continua a giocare"],
+    console: ["Gioco selezionato", "Focus sulla raccolta"],
+    dashboard: ["In primo piano", "Gruppi di giochi"],
+    cinema: ["Gioco in evidenza", "Continua a giocare"],
+    storefront: ["Scopri la raccolta", "Dettagli e categorie"],
+  }[experience.id] || [experience.name, experience.description || ""];
+  const count = experience.id === "dashboard" ? 4 : 3;
+  return `<div class="experience-preview experience-preview--${esc(experience.id)}" data-experience-preview="${esc(experience.id)}" aria-hidden="true">
+    ${navigation}<div class="experience-preview__hero"><b>${esc(heroText[0])}</b><span>${esc(heroText[1])}</span></div>
+    <div class="experience-preview__row">${Array.from({ length: count }, () => '<span class="experience-preview__tile"></span>').join("")}</div></div>`;
+}
+
 async function loadAppearance() {
   let ext;
   try { ext = await api("/api/extensions"); } catch (e) { return toast(e.message, true); }
-  $("#experience-list").innerHTML = (ext.experiences || []).map((x) => `<label class="experience-choice">
-      <span><input type="radio" name="experience" value="${esc(x.id)}" ${x.id === ext.active_experience ? "checked" : ""}>
-        <b>${esc(x.name)}</b></span><span class="muted small">${esc(x.description || "")}</span></label>`).join("");
+  SET.theme = ext.active_theme;
+  $("#experience-list").innerHTML = (ext.experiences || []).map((x) => {
+    const experience = GS.experiences.get(x.id) || x;
+    const error = GS.experienceErrors?.[x.id] || x.error;
+    const available = x.available && !GS.experienceErrors?.[x.id];
+    return `<label class="experience-choice">
+      <span><input type="radio" name="experience" value="${esc(x.id)}" ${x.id === GS.experience.id ? "checked" : ""}
+        ${available ? "" : "disabled"} aria-describedby="experience-description-${esc(x.id)}"><b>${esc(experience.name || x.name)}</b></span>
+      <span class="muted small" id="experience-description-${esc(x.id)}">${esc(experience.description || x.description || "")}</span>
+      ${experiencePreviewMarkup(experience)}
+      ${error ? `<span class="status-bad">${esc(error)}</span>` : ""}</label>`;
+  }).join("");
   $("#theme-list").innerHTML = ext.themes.map((t) => `<label class="theme-card ${t.id === ext.active_theme ? "on" : ""}">
       <input type="radio" name="theme" value="${esc(t.id)}" ${t.id === ext.active_theme ? "checked" : ""}>
       <span class="sw" style="background:${esc(t.preview || "#1c2030")}"></span>
@@ -3089,100 +3198,286 @@ function toast(msg, err = false) {
   toastTimer = setTimeout(() => (t.hidden = true), err ? 7000 : 3500);
 }
 
+function savedToast(undo, label = "Salvato") {
+  const t = $("#toast");
+  if (t.parentElement !== overlayHost()) overlayHost().appendChild(t);
+  t.className = "";
+  t.replaceChildren(document.createTextNode(label));
+  if (undo) {
+    t.append(" · ");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "toast-undo";
+    button.textContent = "Annulla";
+    button.onclick = async () => {
+      t.hidden = true;
+      try { await undo(); } catch (e) { toast(e.message, true); }
+    };
+    t.appendChild(button);
+  }
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.hidden = true), 4000);
+}
+
+function autosaveControl(element, save) {
+  const read = () => element.type === "checkbox" ? element.checked : element.value;
+  const write = (value) => { if (element.type === "checkbox") element.checked = value; else element.value = value; };
+  let saved = read();
+  element.addEventListener("focus", () => { saved = read(); });
+  element.addEventListener("change", async () => {
+    const previous = saved, next = read();
+    try {
+      await save(next);
+      saved = next;
+      savedToast(async () => { write(previous); await save(previous); saved = previous; });
+    } catch (e) {
+      write(previous);
+      toast(e.message, true);
+    }
+  });
+}
+
 /* ------------------------------------------------------------------ impostazioni */
-const SET = { tab: "scan", emu: null, preview: null, platforms: null, extraEmus: [], lastStatus: null };
+const SETTINGS_CATS = [
+  ["generale", "Generale", "sliders"], ["aspetto", "Aspetto", "palette"], ["libreria", "Libreria", "books"],
+  ["fonti", "Fonti dati", "database"], ["store", "Store e account", "store"], ["emulatori", "Emulatori e avvio", "gamepad"],
+  ["controller", "Controller e telefono", "phone"], ["streaming", "Streaming", "wifi"],
+  ["integrazioni", "Integrazioni", "link"], ["estensioni", "Estensioni", "puzzle"],
+  ["dati", "Dati e backup", "backup"], ["sistema", "Sistema", "monitor"],
+];
+const SETTINGS_ICONS = {
+  sliders: '<path d="M4 6h6m4 0h6M4 12h2m4 0h10M4 18h10m4 0h2"/><circle cx="12" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="16" cy="18" r="2"/>',
+  palette: '<path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.4-3.4 1.5 1.5 0 0 1 1.1-2.6H18a3 3 0 0 0 3-3c0-5-4-9-9-9Z"/><circle cx="7.5" cy="11" r=".8"/><circle cx="10" cy="7.5" r=".8"/><circle cx="15" cy="8" r=".8"/>',
+  books: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21V5.5Z"/><path d="M4 6h12v13M8 7v9m4-9v9"/>',
+  database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7"/>',
+  store: '<path d="M4 9h16l-1 12H5L4 9Z"/><path d="M8 9V6a4 4 0 0 1 8 0v3"/>',
+  gamepad: '<path d="M7 8h10a4 4 0 0 1 3.8 5l-1 3.5a2 2 0 0 1-3.2 1L14 15h-4l-2.6 2.5a2 2 0 0 1-3.2-1L3.2 13A4 4 0 0 1 7 8Z"/><path d="M7 11v4m-2-2h4m6-1h.01M17 14h.01"/>',
+  phone: '<rect x="6" y="2.5" width="12" height="19" rx="2"/><path d="M10 18.5h4"/>',
+  wifi: '<path d="M3 9a14 14 0 0 1 18 0M6.5 12.5a9 9 0 0 1 11 0M10 16a4 4 0 0 1 4 0"/><circle cx="12" cy="19" r=".8"/>',
+  link: '<path d="M10 13.5 8.5 15a3.5 3.5 0 0 1-5-5l3-3a3.5 3.5 0 0 1 5 0"/><path d="m14 10.5 1.5-1.5a3.5 3.5 0 0 1 5 5l-3 3a3.5 3.5 0 0 1-5 0"/><path d="m8.5 15 7-7"/>',
+  puzzle: '<path d="M9 4a2.5 2.5 0 1 1 5 0v2h5v5h-2a2.5 2.5 0 1 0 0 5h2v4H8v-4H6a2.5 2.5 0 1 1 0-5h2V6h1V4Z"/>',
+  backup: '<path d="M4 8h16v12H4zM7 8V5h10v3m-7 4h4"/><path d="m9 15 3 3 3-3m-3 3v-6"/>',
+  monitor: '<rect x="3" y="3" width="18" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/><circle cx="12" cy="10" r="3"/><path d="M12 8.5v2"/>',
+};
+
+function settingsIcon(name) {
+  return `<svg class="snav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${SETTINGS_ICONS[name] || SETTINGS_ICONS.monitor}</svg>`;
+}
+const SETTINGS_ALIASES = {
+  health: "sistema", about: "sistema", info: "sistema", scan: "libreria", src: "fonti",
+  acc: "store", emu: "emulatori", remote: "controller", integ: "integrazioni",
+  look: "aspetto", lib: "dati",
+};
+const SET = { tab: "generale", emu: null, preview: null, platforms: null, extraEmus: [], lastStatus: null };
+
+function settingsCategory(id) {
+  id = SETTINGS_ALIASES[id] || id;
+  return SETTINGS_CATS.find(([key]) => key === id) || null;
+}
+
+async function loadSettingsMarkup() {
+  const body = $("#settings-body");
+  await Promise.all(SETTINGS_CATS.map(async ([id]) => {
+    const pane = document.createElement("section");
+    pane.className = "settings-pane";
+    pane.dataset.pane = id;
+    pane.hidden = true;
+    body.appendChild(pane);
+    const response = await fetch(`/static/settings/${id}.html?v=${encodeURIComponent(document.documentElement.dataset.v || "")}`);
+    if (!response.ok) throw new Error(`Impossibile caricare le impostazioni «${id}» (${response.status})`);
+    pane.innerHTML = await response.text();
+  }));
+  const test = $("#pads-test-btn"), slot = $("#pads-test-setting");
+  if (test && slot) slot.replaceWith(settingsRow(
+    "Tasti ricevuti dai telefoni",
+    "Mostra quale tasto arriva al PC e se la vibrazione funziona. Si aggiorna solo mentre la prova è aperta.",
+    test,
+  ));
+  renderSettingsNav();
+}
+
+function settingsRow(title, description, control, status) {
+  const row = document.createElement("div");
+  row.className = "srow";
+  const text = document.createElement("div");
+  text.className = "srow-txt";
+  const heading = document.createElement("div");
+  heading.className = "srow-title";
+  heading.textContent = title;
+  const detail = document.createElement("div");
+  detail.className = "srow-desc";
+  detail.textContent = description;
+  text.append(heading, detail);
+  row.append(text, control);
+  if (status) row.append(status);
+  return row;
+}
+
+function renderSettingsNav() {
+  const nav = $("#settings-nav");
+  const pluginTabs = GS.ui.settingsTabs || [];
+  nav.innerHTML = SETTINGS_CATS.map(([id, label, icon]) => {
+    const children = pluginTabs.filter((t) => (settingsCategory(t.category)?.[0] || "estensioni") === id);
+    const badge = id === "sistema" ? `<i class="dot-issue" id="settings-alert" hidden></i>` : "";
+    return `<button type="button" class="snav-item" data-category="${id}"><span class="ico">${settingsIcon(icon)}</span>`
+      + `<span class="lbl">${label}</span>${badge}</button>`
+      + (children.length ? `<div class="snav-kids">${children.map((t) => `<button type="button" class="snav-item kid" data-category="ext:${esc(t.id)}">`
+        + `<span class="ico">${settingsIcon("puzzle")}</span><span class="lbl">${esc(t.label)}</span></button>`).join("")}</div>` : "");
+  }).join("");
+  for (const t of pluginTabs) {
+    const id = `ext:${t.id}`;
+    if (document.querySelector(`[data-pane="${CSS.escape(id)}"]`)) continue;
+    const pane = document.createElement("section");
+    pane.className = "settings-pane";
+    pane.dataset.pane = id;
+    pane.hidden = true;
+    $("#settings-body").appendChild(pane);
+  }
+}
+
+function settingsOpen() {
+  const page = $("#settings-page");
+  return !!page && !page.hidden;
+}
+
+function settingsActive(id) {
+  return settingsOpen() && SET.tab === id && !!document.querySelector(`#settings-body [data-pane="${CSS.escape(id)}"]`);
+}
 
 function openSettings(tab) {
-  const dlg = $("#settings");
-  // schede aggiunte dai plugin
-  for (const t of GS.ui.settingsTabs) {
-    if (!document.querySelector(`#tabs [data-tab="ext:${CSS.escape(t.id)}"]`)) {
-      $("#tabs").insertAdjacentHTML("beforeend", `<button type="button" class="tab" data-tab="ext:${esc(t.id)}">${esc(t.label)}</button>`);
-      $(".dlg-body", dlg).insertAdjacentHTML("beforeend", `<section data-pane="ext:${esc(t.id)}"></section>`);
-    }
-  }
-  if (!dlg.open) dlg.showModal();
-  showTab(typeof tab === "string" ? tab : SET.tab);
-  fitSettings();
+  const id = settingsCategory(typeof tab === "string" ? tab : SET.tab)?.[0]
+    || (typeof tab === "string" && tab.startsWith("ext:") ? tab : "generale");
+  if (!settingsOpen() || SET.tab !== id) history.pushState({ settings: id }, "", `#settings/${id}`);
+  showTab(id);
 }
 
-/** La finestra delle impostazioni si adatta a schede e pagina; se non ci sta nello schermo va a tutto schermo
-    e scorrono in orizzontale solo le schede (rotella, trascinamento, dito), mai il contenuto. */
-function fitSettings() {
-  const dlg = $("#settings");
-  if (!dlg.open) return;
-  const head = $(".dlg-head", dlg), tabs = $("#tabs"), body = $(".dlg-body", dlg);
-  const keep = body.scrollTop;                           // la rimisura non deve far saltare la pagina
-  dlg.classList.remove("full");
-  dlg.style.width = "";                                  // misura partendo dalla larghezza di base
-  const base = dlg.clientWidth;
-  const tabsW = [...tabs.children].reduce((w, t) => w + t.offsetWidth, 0) + 4 * Math.max(0, tabs.children.length - 1);
-  const chrome = head.clientWidth - tabs.clientWidth;    // padding e pulsante di chiusura
-  const need = Math.max(base, tabsW + chrome, base + body.scrollWidth - body.clientWidth);  // schede e contenuto piu' larghi
-  if (need > innerWidth * 0.94 || innerHeight < 560) dlg.classList.add("full");
-  else if (need > base) dlg.style.width = Math.ceil(need) + 2 + "px";   // +2: il bordo
-  body.scrollTop = keep;
-  fadeTabs();
-  scrollActiveTab();
-}
-
-function fadeTabs() {
-  const t = $("#tabs");
-  t.classList.toggle("can-l", t.scrollLeft > 1);
-  t.classList.toggle("can-r", t.scrollLeft + t.clientWidth < t.scrollWidth - 1);
-}
-
-function scrollActiveTab() {
-  const t = $("#tabs"), a = t.querySelector(".tab.active");
-  if (!a) return;
-  const r = a.getBoundingClientRect(), b = t.getBoundingClientRect();
-  if (r.left < b.left + 36) t.scrollLeft -= b.left + 36 - r.left;
-  else if (r.right > b.right - 36) t.scrollLeft += r.right - (b.right - 36);
-}
-
-function initSettingsLayout() {
-  const tabs = $("#tabs");
-  tabs.addEventListener("scroll", fadeTabs, { passive: true });
-  tabs.addEventListener("wheel", (e) => {              // rotella verticale = scorrimento delle schede
-    if (tabs.scrollWidth > tabs.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) { tabs.scrollLeft += e.deltaY; e.preventDefault(); }
-  }, { passive: false });
-  let drag = null, dragEnd = 0;
-  tabs.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse" && e.button === 0) drag = { x: e.clientX, l: tabs.scrollLeft, moved: false }; });
-  window.addEventListener("pointermove", (e) => {
-    if (!drag) return;
-    const dx = e.clientX - drag.x;
-    if (Math.abs(dx) > 5) drag.moved = true;
-    if (drag.moved) tabs.scrollLeft = drag.l - dx;
-  });
-  window.addEventListener("pointerup", () => { if (drag?.moved) dragEnd = performance.now(); drag = null; });
-  tabs.addEventListener("click", (e) => { if (performance.now() - dragEnd < 80) { e.stopPropagation(); e.preventDefault(); } }, true);  // dopo un trascinamento non si cambia scheda
-  tabs.addEventListener("focusin", scrollActiveTab);
-  // contenuto che arriva dopo (le schede caricano via rete) o finestra ridimensionata: si rimisura
-  let raf = 0;
-  const refit = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; fitSettings(); }); };
-  window.addEventListener("resize", refit);
-  new MutationObserver(refit).observe($("#settings .dlg-body"), { childList: true, subtree: true });
+function closeSettings() {
+  $("#settings-page").hidden = true;
+  document.body.classList.remove("settings-open");
+  stopPadTest();
+  if (location.hash.startsWith("#settings")) history.replaceState(null, "", location.pathname + location.search);
 }
 
 function showTab(tab) {
-  SET.tab = tab;
-  document.querySelectorAll("#tabs .tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
-  document.querySelectorAll("[data-pane]").forEach((p) => p.classList.toggle("active", p.dataset.pane === tab));
-  if (tab === "health") loadHealth();
-  else if (tab === "about") loadAbout();
-  else if (tab === "scan") { loadScan(); renderCustomConsoles(); loadPower(); }
-  else if (tab === "emu") loadEmu();
-  else if (tab === "remote") loadRemote();
-  else if (tab === "acc") { loadAccounts(); loadPcStores(); }
-  else if (tab === "src") loadSources();
-  else if (tab === "integ") loadIntegrations();
-  else if (tab === "look") loadAppearance();
-  else if (tab.startsWith("ext:")) {
-    const t = GS.ui.settingsTabs.find((x) => "ext:" + x.id === tab);
-    const pane = document.querySelector(`[data-pane="${CSS.escape(tab)}"]`);
-    if (t && pane) { pane.innerHTML = ""; Promise.resolve(t.render(pane, GS)).catch((e) => { pane.textContent = e.message; }); }
-  } else { api("/api/status").then(showStatus); loadBackups(); loadSync(); loadSaveDir(); }
-  if (tab === "remote") startPadTest(); else stopPadTest();  // la prova controller gira solo mentre la scheda e' aperta
+  stopPadTest();
+  const id = settingsCategory(tab)?.[0] || (tab.startsWith("ext:") ? tab : "generale");
+  renderSettingsNav();
+  const page = $("#settings-page");
+  page.hidden = false;
+  document.body.classList.add("settings-open");
+  SET.tab = id;
+  $("#settings-search").value = "";
+  $("#settings-results").hidden = true;
+  $("#settings-body").hidden = false;
+  document.querySelectorAll("#settings-nav [data-category]").forEach((b) => {
+    const active = b.dataset.category === id;
+    b.classList.toggle("active", active);
+    if (active) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+  });
+  document.querySelectorAll("#settings-body [data-pane]").forEach((p) => { p.hidden = p.dataset.pane !== id; });
+  const pane = document.querySelector(`#settings-body [data-pane="${CSS.escape(id)}"]`);
+  if (id.startsWith("ext:")) {
+    const ext = GS.ui.settingsTabs.find((x) => `ext:${x.id}` === id);
+    if (ext && pane) {
+      pane.innerHTML = "";
+      Promise.resolve(ext.render(pane, GS)).catch((e) => { pane.textContent = e.message; });
+    }
+  }
+  $("#settings-title").textContent = id.startsWith("ext:")
+    ? (GS.ui.settingsTabs.find((x) => `ext:${x.id}` === id)?.label || "Estensione")
+    : (settingsCategory(id)?.[1] || "Impostazioni");
+  $("#settings-body").scrollTop = 0;
+  if (id === "generale") { loadPower(); loadNotify(); }
+  else if (id === "sistema") { loadHealth(); loadAbout(); }
+  else if (id === "libreria") { loadScan(); loadSources(); renderCustomConsoles(); api("/api/status").then(showStatus); }
+  else if (id === "fonti") { loadSources(); pollHltb(); pollCollart(); }
+  else if (id === "store") { loadAccounts(); loadPcStores(); }
+  else if (id === "emulatori") loadEmu();
+  else if (id === "controller" || id === "streaming") loadRemote();
+  else if (id === "integrazioni") loadIntegrations();
+  else if (id === "aspetto" || id === "estensioni") loadAppearance();
+  else if (id === "dati") { loadBackups(); loadSync(); loadSaveDir(); }
+  else if (id.startsWith("ext:")) stopPadTest();
+  refreshSettingsHealth();
+}
+
+function initSettingsLayout() {
+  $("#settings-back").onclick = closeSettings;
+  $("#settings-nav").addEventListener("click", (e) => {
+    const button = e.target.closest("[data-category]");
+    if (button) {
+      const id = button.dataset.category;
+      history.pushState({ settings: id }, "", `#settings/${id}`);
+      showTab(id);
+    }
+  });
+  $("#settings-search").addEventListener("input", (e) => searchSettings(e.target.value));
+  $("#settings-results").addEventListener("click", (e) => {
+    const result = e.target.closest("[data-settings-category]");
+    if (!result) return;
+    const category = result.dataset.settingsCategory;
+    history.pushState({ settings: category }, "", `#settings/${category}`);
+    showTab(category);
+    const target = document.getElementById(result.dataset.settingsTarget);
+    target?.scrollIntoView({ block: "center" });
+    target?.classList.add("flash");
+    setTimeout(() => target?.classList.remove("flash"), 1200);
+  });
+  $("#settings-page").addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      if ($("#settings-search").value) {
+        $("#settings-search").value = "";
+        $("#settings-results").hidden = true;
+        $("#settings-body").hidden = false;
+      } else closeSettings();
+    }
+  });
+  window.addEventListener("popstate", () => {
+    const match = location.hash.match(/^#settings(?:\/([a-z0-9:_-]+))?$/i);
+    if (match) showTab(match[1] || "generale");
+    else closeSettings();
+  });
+}
+
+function searchSettings(query) {
+  const results = $("#settings-results");
+  query = query.trim().toLocaleLowerCase("it");
+  if (!query) {
+    results.hidden = true;
+    $("#settings-body").hidden = false;
+    results.innerHTML = "";
+    return;
+  }
+  const found = [];
+  for (const [id, label] of SETTINGS_CATS) {
+    const pane = document.querySelector(`#settings-body [data-pane="${CSS.escape(id)}"]`);
+    if (!pane) continue;
+    for (const el of pane.querySelectorAll("h3, h4, label, .srow-title")) {
+      const text = el.textContent.replace(/\s+/g, " ").trim();
+      if (!text.toLocaleLowerCase("it").includes(query)) continue;
+      let target = el.id || el.querySelector("input,select,textarea")?.id;
+      if (!target) {
+        target = `settings-search-${found.length}`;
+        el.id = target;
+      }
+      found.push({ id, label, text, target });
+    }
+  }
+  results.innerHTML = found.length ? found.map((x) => `<button class="sres" type="button" data-settings-category="${x.id}" data-settings-target="${esc(x.target)}">`
+    + `<span class="sres-cat">${esc(x.label)}</span>${esc(x.text)}</button>`).join("") : `<p class="muted">Nessuna impostazione trovata.</p>`;
+  results.hidden = false;
+  $("#settings-body").hidden = true;
+}
+
+function refreshSettingsHealth() {
+  const dot = $("#settings-alert");
+  if (!dot) return;
+  api("/api/health").then((d) => {
+    const count = (d.items || []).filter((x) => x.level === "warn" || x.level === "error").length;
+    dot.hidden = !count;
+    dot.title = count ? `${count} problemi da controllare` : "";
+  }).catch((e) => console.warn("Stato salute non disponibile:", e));
 }
 
 /* ---- impostazioni › integrazioni (Discord) */
@@ -3205,11 +3500,14 @@ function renderIntegrations(d) {
 
 async function loadIntegrations() {
   try { renderIntegrations(await api("/api/integrations")); } catch (e) { toast(e.message, true); }
+}
+
+async function loadNotify() {
   try {
     const n = await api("/api/app/notify");
     $("#nt-on").checked = !!n.enabled;
     $("#nt-state").textContent = n.available ? "" : "Le notifiche di Windows sono disponibili solo su Windows.";
-  } catch { /* niente: la scheda Discord funziona lo stesso */ }
+  } catch (e) { toast(e.message, true); }
 }
 
 /* ---- prova controller: ultimo stato ricevuto da ogni telefono (la scheda «Telefono e streaming») */
@@ -3219,7 +3517,7 @@ function startPadTest() {
   stopPadTest();
   const tick = async () => {
     const box = $("#pads-test");
-    if (!box || !$("#settings").open || SET.tab !== "remote") return stopPadTest();
+    if (!box || box.hidden || !settingsActive("controller")) return stopPadTest();
     try { renderPads(await api("/api/phone/pads")); } catch (e) { box.textContent = e.message; }
     padTestT = setTimeout(tick, 400);
   };
@@ -3642,7 +3940,7 @@ async function pollScan() {
   let js;
   try { js = await api("/api/scan"); } catch { return; }
   setScanRunning(js.status === "running");
-  if ($("#settings").open && SET.tab === "scan") renderScanJob(js);
+  if (settingsActive("libreria")) renderScanJob(js);
   // scansione finita: i file trovati compaiono subito, i metadati arrivano dopo senza bloccare
   if (js.status === "running" && js.phase === "Scraping" && SET.shownFor !== js.started) { SET.shownFor = js.started; reload(true); }
   if (js.status === "running") scanTimer = setTimeout(pollScan, 1000);
@@ -3654,7 +3952,7 @@ async function pollScan() {
     }
     else if (js.status === "error") toast(js.phase, true);
     else if (js.status === "cancelled") toast("Scraping interrotto: rilancialo per riprendere");
-    if ($("#settings").open && SET.tab === "scan") loadScan();
+    if (settingsActive("libreria")) loadScan();
   }
   SET.lastStatus = js.status;
 }
@@ -3824,11 +4122,11 @@ function bind() {
   };
   // aggiornamento di tutti gli store: modalità (avvio / orario / manuale), parallelismo, avvio a mano
   $("#srf-mode").onchange = () => { $("#srf-time").disabled = $("#srf-mode").value !== "daily"; };
-  $("#srf-save").onclick = async () => {
+  const saveStoreSchedule = async () => {
     const body = { mode: $("#srf-mode").value, time: $("#srf-time").value, workers: Number($("#srf-workers").value) || 4 };
-    try { renderStoreRefresh(await api("/api/store-refresh", { body })); } catch (e) { return toast(e.message, true); }
-    toast("Quando aggiornare gli store: salvato");
+    renderStoreRefresh(await api("/api/store-refresh", { body }));
   };
+  for (const id of ["srf-mode", "srf-time", "srf-workers"]) autosaveControl($("#" + id), saveStoreSchedule);
   $("#srf-run").onclick = async () => {
     try { await api("/api/store-refresh/run", { body: {} }); } catch (e) { return toast(e.message, true); }
     pollStoreRefresh();
@@ -3854,14 +4152,9 @@ function bind() {
     pollStoreRefresh();
   });
   // integrazioni: notifiche di Windows
-  $("#nt-on").onchange = async (e) => {
-    try { await api("/api/app/notify", { body: { enabled: e.target.checked } }); toast(e.target.checked ? "Notifiche attive" : "Notifiche spente"); }
-    catch (err) { toast(err.message, true); }
-  };
+  autosaveControl($("#nt-on"), (enabled) => api("/api/app/notify", { body: { enabled } }));
   // a coda vuota: sospendi o spegni
-  $("#pw-after").onchange = async (e) => {
-    try { await api("/api/app/power", { body: { after_jobs: e.target.value } }); loadPower(); } catch (err) { toast(err.message, true); }
-  };
+  autosaveControl($("#pw-after"), (after_jobs) => api("/api/app/power", { body: { after_jobs } }).then(loadPower));
   $("#pw-abort").onclick = async () => {
     try { await api("/api/app/power/abort", { body: {} }); loadPower(); toast("Annullato"); } catch (err) { toast(err.message, true); }
   };
@@ -3874,6 +4167,8 @@ function bind() {
     renderIntegrations({ discord: d.discord });
     toast(body.enabled ? "Presenza su Discord aggiornata" : "Presenza su Discord spenta");
   };
+  autosaveControl($("#dc-on"), (enabled) => api("/api/integrations/discord", { body: { enabled } }));
+  autosaveControl($("#dc-time"), (show_time) => api("/api/integrations/discord", { body: { show_time } }));
   $("#pcst-refresh").onclick = async () => {
     try { await api("/api/pc-stores/refresh", { body: {} }); } catch (e) { return toast(e.message, true); }
     pollStoreRefresh(); // la coda unica mostra l'avanzamento nel blocco «Aggiornamento degli store»
@@ -3900,7 +4195,7 @@ function bind() {
     savePcStores(PCST.rows.map((r) => (r.url === s.dataset.pcstKind ? { ...r, kind: s.value } : r)), false);
   });
   $("#acc-table").addEventListener("click", (e) => {
-    if (e.target.closest("[data-ports-open]")) { $("#settings").close(); setView({ type: "ports", id: null }); }
+    if (e.target.closest("[data-ports-open]")) { closeSettings(); setView({ type: "ports", id: null }); }
   });
   $("#inst-filter").onchange = (e) => { S.instFilter = e.target.value; store.set("instFilter", S.instFilter); refreshGrid(); };
   $("#pc-add").onclick = () => openAddGame();
@@ -3915,6 +4210,19 @@ function bind() {
   GS.on("uiChanged", () => { if (S.games.length) { renderSidebar(); } });
   layer.addEventListener("click", (e) => { const t = e.target.closest(".tile"); if (t) openDetail(+t.dataset.id); });
   layer.addEventListener("dblclick", (e) => { const t = e.target.closest(".tile"); if (t) play(+t.dataset.id); });
+  layer.addEventListener("focusin", (e) => {
+    const tile = e.target.closest(".tile[data-id]");
+    const game = tile && S.byId.get(+tile.dataset.id);
+    if (!game || typeof GS.experience?.onFocus !== "function") return;
+    try { GS.experience.onFocus(game); }
+    catch (err) { console.warn(`Focus esperienza ${GS.experience.id}:`, err); }
+  });
+  layer.addEventListener("keydown", (e) => {
+    const tile = e.target.closest(".tile[data-id]");
+    if (!tile || !["Enter", " "].includes(e.key)) return;
+    e.preventDefault();
+    openDetail(+tile.dataset.id);
+  });
   $("#platform-list").addEventListener("contextmenu", (e) => {
     const a = e.target.closest("[data-view=platform]");
     if (!a) return;
@@ -4124,10 +4432,6 @@ function bind() {
     try { await api("/api/ra", { body }); toast("RetroAchievements collegato"); $("#ra-key").value = ""; loadAccounts(); }
     catch (e) { toast(e.message, true); }
   };
-  $('[data-pane="acc"]').addEventListener("click", (e) => {
-    const o = e.target.closest("[data-open]");
-    if (o) { e.preventDefault(); api("/api/open", { body: { url: o.dataset.open } }); }
-  });
   $("#xf-pick").onclick = async () => { const p = window.pywebview?.api ? await pickPath("folder") : null; if (p) $("#xf-out").value = p; };
   // la pagina web ha un titolo proprio: il campo compare solo per quel formato
   $("#xf-format").onchange = () => { $("#xf-title-row").hidden = $("#xf-format").value !== "html"; };
@@ -4147,10 +4451,6 @@ function bind() {
   $("#health-reload").onclick = loadHealth;
   $("#about-check").onclick = () => checkUpdate(true, true);
   $("#storage-go").onclick = () => loadStorage(true);
-  $('[data-pane="about"]').addEventListener("click", (e) => {
-    const o = e.target.closest("[data-open]");
-    if (o) { e.preventDefault(); api("/api/open", { body: { url: o.dataset.open } }); }
-  });
   $("#api-token-copy").onclick = async () => {
     try { await navigator.clipboard.writeText($("#api-token").value); toast("Token copiato"); }
     catch { toast("Copia non riuscita: selezionalo e copialo a mano", true); }
@@ -4163,7 +4463,6 @@ function bind() {
   checkUpdate(false, false); // subito all'avvio, in parallelo al caricamento dei giochi (la risposta resta in cache 12 ore)
   $("#health-list").addEventListener("click", (e) => { const b = e.target.closest(".hl-fix"); if (b) healthFix(SET.health[+b.dataset.i].fix); });
   $("#backup-list").addEventListener("click", (e) => { const b = e.target.closest(".bk-restore"); if (b) restoreBackup(b.dataset.name); });
-  $("#tabs").addEventListener("click", (e) => { const b = e.target.closest(".tab"); if (b) { showTab(b.dataset.tab); fitSettings(); } });
   initSettingsLayout();
 
   // scraping
@@ -4234,16 +4533,24 @@ function bind() {
     if (!b) return;
     const tr = b.closest("tr"), dir = +b.dataset.mv;
     const sib = dir < 0 ? tr.previousElementSibling : tr.nextElementSibling;
-    if (sib) (dir < 0 ? sib.before(tr) : sib.after(tr));
+    if (sib) { (dir < 0 ? sib.before(tr) : sib.after(tr)); scheduleSourceSave(); }
   });
   $("#src-table").addEventListener("change", (e) => {
-    if (e.target.matches("[data-en]")) e.target.closest("tr").classList.toggle("src-off", !e.target.checked);
+    if (e.target.matches("[data-en]")) {
+      e.target.closest("tr").classList.toggle("src-off", !e.target.checked);
+      scheduleSourceSave();
+    }
   });
-  $("#src-save").onclick = async () => {
+  $("#src-table").addEventListener("input", (e) => {
+    if (e.target.matches("[data-lim]")) scheduleSourceSave();
+  });
+  for (const id of ["sch-on", "sch-time", "sch-mode"]) $("#" + id).addEventListener("change", scheduleSourceSave);
+  $("#rawg-save").onclick = async () => {
+    if (!$("#rawg-key").value.trim()) return toast("Incolla prima la chiave RAWG", true);
     try { SET.sources = await api("/api/sources", { body: collectSources() }); } catch (e) { return toast(e.message, true); }
     $("#rawg-key").value = "";
     loadSources();
-    toast("Fonti salvate: valgono dal prossimo scraping");
+    toast("Chiave RAWG salvata");
   };
   $("#bulk-list").addEventListener("click", async (e) => {
     const b = e.target.closest("[data-bulk]");
@@ -4252,12 +4559,8 @@ function bind() {
     toast("Download del database avviato");
     pollBulk();
   });
-  $('[data-pane="src"]').addEventListener("click", (e) => {
-    const a = e.target.closest("[data-open]");
-    if (a) { e.preventDefault(); api("/api/open", { body: { url: a.dataset.open } }); }
-  });
   $("#scan-plan").onclick = showPlan;
-  $("#setup-open").onclick = async () => { $("#settings").close(); await SETUP.open(true); await reload(true); };
+  $("#setup-open").onclick = async () => { closeSettings(); await SETUP.open(true); await reload(true); };
   $("#roms-change").onclick = async () => {
     let p = window.pywebview?.api ? await pickPath("folder") : prompt("Percorso della cartella delle ROM", $("#scan-root").textContent);
     if (!p) return;
@@ -4274,13 +4577,18 @@ function bind() {
     }
     if (e.target.id === "xr-paste") pasteFolder("windows");
   });
-  document.querySelector('[data-tab="src"]')?.addEventListener("click", () => { pollHltb(); pollCollart(); });
   $("#collart-missing").onclick = () => startCollart("missing");
   $("#collart-all").onclick = () => startCollart("all");
   $("#collart-stop").onclick = () => api("/api/collart/cancel", { body: {} });
   $("#smeta-all").onclick = () => startStoreMeta(false);
   $("#ph-on").onchange = (e) => phoneSet({ enabled: e.target.checked });
-  $('[data-pane="remote"]').addEventListener("change", async (e) => {
+  $("#pads-test-btn").onclick = (e) => {
+    const box = $("#pads-test");
+    box.hidden = !box.hidden;
+    e.currentTarget.setAttribute("aria-expanded", String(!box.hidden));
+    if (box.hidden) stopPadTest(); else startPadTest();
+  };
+  $("#settings-body").addEventListener("change", async (e) => {
     const t = e.target;
     if (t.id === "ph-mouse") phoneSet({ mouse: t.checked });
     if (t.id === "ph-ca-ok") phoneSet({ ca_installed: t.checked });
@@ -4294,7 +4602,7 @@ function bind() {
       loadRemote();
     }
   });
-  $('[data-pane="remote"]').addEventListener("click", async (e) => {
+  $("#settings-body").addEventListener("click", async (e) => {
     const t = e.target;
     const rb = t.closest("[data-pad-rumble]");
     if (rb) {
@@ -4304,8 +4612,6 @@ function bind() {
       } catch (err) { toast(err.message, true); }
       return;
     }
-    const o = t.closest("[data-open]");
-    if (o) { e.preventDefault(); api("/api/open", { body: { url: o.dataset.open } }); return; }
     if (t.dataset.es) {
       t.disabled = true;
       try {
@@ -4393,31 +4699,44 @@ function bind() {
     pollStores(true);
   };
   $("#acc-table").addEventListener("click", (e) => {
-    const t = e.target.closest("[data-acc-login],[data-acc-logout],[data-acc-code],[data-acc-save],[data-acc-refresh],[data-open]");
+    const t = e.target.closest("[data-acc-login],[data-acc-logout],[data-acc-code],[data-acc-save],[data-acc-refresh]");
     if (!t) return;
     e.preventDefault();
     if (t.dataset.accRefresh) {
       api("/api/stores/refresh", { body: { only: [t.dataset.accRefresh] } }).then(() => pollStores(true)).catch((err) => toast(err.message, true));
-    } else if (t.dataset.open) api("/api/open", { body: { url: t.dataset.open } }).catch((err) => toast(err.message, true));
-    else accountAction(t);
+    } else accountAction(t);
   });
   $("#acc-table").addEventListener("change", async (e) => {
     const c = e.target.closest("[data-acc-enable]");
-    if (c) { await api(`/api/accounts/${c.dataset.accEnable}/enabled`, { body: { enabled: c.checked } }); toast("Salvato: vale dal prossimo aggiornamento"); }
+    if (!c) return;
+    const previous = !c.checked, id = c.dataset.accEnable;
+    try {
+      await api(`/api/accounts/${id}/enabled`, { body: { enabled: c.checked } });
+      savedToast(async () => { await api(`/api/accounts/${id}/enabled`, { body: { enabled: previous } }); loadAccounts(); });
+    } catch (err) { c.checked = previous; toast(err.message, true); }
   });
   // aspetto: temi e plugin
   $("#theme-list").addEventListener("change", async (e) => {
     if (e.target.name !== "theme") return;
-    await api("/api/app/theme", { body: { theme: e.target.value } });
-    await loadExtensions();
-    loadAppearance();
+    const next = e.target.value;
+    const previous = SET.theme;
+    try {
+      await api("/api/app/theme", { body: { theme: next } });
+      await loadExtensions();
+      loadAppearance();
+      savedToast(previous ? async () => {
+        await api("/api/app/theme", { body: { theme: previous } });
+        await loadExtensions();
+        loadAppearance();
+      } : null);
+    } catch (err) { await loadAppearance(); toast(err.message, true); }
   });
   $("#experience-list").addEventListener("change", async (e) => {
     if (e.target.name !== "experience") return;
     document.querySelectorAll('#experience-list input[name="experience"]').forEach((input) => { input.disabled = true; });
     try {
       await api("/api/app/experience", { body: { experience: e.target.value } });
-      store.set("view", e.target.value === "shelves" ? { type: "home" } : { type: "all" });
+      store.set("view", GS.experiences.get(e.target.value)?.home ? { type: "home" } : { type: "all" });
       location.reload(); // riavvio pulito: struttura e vista partono dalla stessa esperienza
     } catch (err) {
       toast(err.message, true);
@@ -4427,8 +4746,12 @@ function bind() {
   $("#plugin-list").addEventListener("change", async (e) => {
     const c = e.target.closest("[data-plugin]");
     if (!c) return;
-    await api("/api/app/plugin", { body: { id: c.dataset.plugin, enabled: c.checked } });
-    toast("Salvato: riavvia l'app per applicare la modifica ai plugin");
+    const previous = !c.checked, id = c.dataset.plugin;
+    try {
+      await api("/api/app/plugin", { body: { id, enabled: c.checked } });
+      savedToast(async () => { await api("/api/app/plugin", { body: { id, enabled: previous } }); loadAppearance(); },
+        "Salvato · riavvia l'app per applicare");
+    } catch (err) { c.checked = previous; toast(err.message, true); }
   });
   // aggiungi gioco PC
   $("#ag-pick").onclick = async () => {
@@ -4488,6 +4811,12 @@ function bind() {
   });
   document.addEventListener("keydown", (e) => {
     const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName);
+    if (e.key === "Tab" && S.detail && $("#detail").dataset.presentation === "modal") {
+      const focusable = [...$("#detail").querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')];
+      if (!focusable.length) { e.preventDefault(); $("#detail-close").focus(); }
+      else if (e.shiftKey && document.activeElement === focusable[0]) { e.preventDefault(); focusable[focusable.length - 1].focus(); }
+      else if (!e.shiftKey && document.activeElement === focusable[focusable.length - 1]) { e.preventDefault(); focusable[0].focus(); }
+    }
     if (e.key === "/" && !typing) { e.preventDefault(); $("#search").focus(); }
     else if (e.key === "Escape") {
       if (!$("#popover").hidden) closePopover();
@@ -4504,12 +4833,26 @@ GS.library = () => S;
 GS.currentGame = () => S.detail;
 GS.refresh = () => reload(true);
 GS.redraw = () => { if (S.games.length) refreshGrid(true); };  // ridisegna le copertine (badge di un'estensione arrivati dopo)
+// clic su una notifica di Windows: apre la sezione (e la pagina del port) indicata dall'avviso
+window.gsNotifyAction = (a) => {
+  if (!a || a.view !== "ports") return;
+  closeSettings(); closeDetail();
+  PORTS_F.open = typeof a.port === "string" && /^[\w.-]+$/.test(a.port) ? a.port : null;
+  setView({ type: "ports" });
+};
 
 (async function main() {
+  try { await loadSettingsMarkup(); } catch (e) {
+    loading(null);
+    toast(`Errore nel caricamento delle impostazioni: ${e.message}`, true);
+    return;
+  }
   bind();
   loading("Caricamento dei tuoi giochi…");
   await loadExtensions(); // prima della libreria: l'attesa si vede gia' col tema scelto
-  if (isShelves() && !store.get("view", null)) S.view = { type: "home" };
+  const settingsHash = location.hash.match(/^#settings(?:\/([a-z0-9:_-]+))?$/i);
+  if (settingsHash) showTab(settingsHash[1] || "generale");
+  if (GS.experience.home && !store.get("view", null)) S.view = { type: "home" };
   loadProfile();
   try {
     await SETUP.open();  // primo avvio: configurazione guidata (non fa nulla se gia' configurato)

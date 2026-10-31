@@ -1,0 +1,29 @@
+<p class="muted">Le fonti vengono usate <b>in quest'ordine</b>: ognuna interroga solo i giochi a cui manca ancora
+  qualcosa. Metti prima quelle <b>offline</b> (nessuna richiesta ai siti) e dopo quelle online con quote.
+  I limiti valgono anche tra un'esecuzione e l'altra; in caso di errori ripetuti la fonte va in pausa da sola.</p>
+<table class="emu"><thead><tr><th style="width:56px"></th><th>Fonte</th><th style="width:130px">Oggi / mese</th>
+  <th style="width:90px" title="richieste al secondo">Ritmo/s</th><th style="width:100px">Max/giorno</th><th style="width:100px">Max/mese</th></tr></thead>
+  <tbody id="src-table"></tbody></table>
+<div class="row"><label class="lbl-field grow">Chiave RAWG (valutazioni e Metacritic, gratuita)
+  <span class="row tight"><input class="field grow" id="rawg-key" placeholder="incolla la chiave">
+  <a href="#" data-open="https://rawg.io/apidocs">Ottieni la chiave</a>
+  <button class="btn" id="rawg-save" type="button">Salva chiave</button></span></label></div>
+<h3>Database locali</h3>
+<p class="muted small">Scaricati per intero una volta a settimana/mese: poi tutte le ricerche sono locali, senza richieste.</p>
+<div id="bulk-list"></div>
+<pre class="log" id="bulk-log"></pre>
+<h3>Durate dei giochi (HowLongToBeat)</h3>
+<p class="muted small">Quanto serve per finire la storia, la storia con gli extra e il 100%. Prima i tempi ufficiali di IGDB
+  per i giochi già collegati (500 per richiesta, pochi secondi), poi HowLongToBeat per gli altri: circa 50 giochi al minuto
+  (il massimo che il sito accetta), iniziando dai giochi che hai giocato e dai più popolari. Cache di 6 mesi.</p>
+<div class="row"><span id="hltb-info" class="muted small grow"></span>
+  <button class="btn" id="hltb-missing">Cerca le mancanti</button><button class="btn" id="hltb-all">Aggiorna tutte</button>
+  <button class="btn" id="hltb-stop" hidden>■ Interrompi</button></div>
+<div id="hltb-progress" class="job-progress"></div>
+<h3>Immagini delle collezioni</h3>
+<p class="muted small">Logo e copertina di ogni saga da Wikipedia (una richiesta alla volta, in sottofondo all'avvio);
+  dove manca si usano le immagini dei giochi della collezione.</p>
+<div class="row"><span id="collart-info" class="muted small grow"></span>
+  <button class="btn" id="collart-missing">Cerca le mancanti</button><button class="btn" id="collart-all">Aggiorna tutte</button>
+  <button class="btn" id="collart-stop" hidden>■ Interrompi</button></div>
+  <div id="collart-progress" class="job-progress"></div>

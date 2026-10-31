@@ -1,0 +1,38 @@
+<p class="muted">Cartella ROM: <code id="scan-root"></code> <button class="btn" id="roms-change" type="button">📁 Cambia…</button>
+  <button class="btn" id="setup-open" type="button" title="Cartella ROM, store PC e account delle fonti, passo per passo">🧭 Configurazione guidata</button>
+  — le console vengono riconosciute dal nome della cartella.
+  Lo scraping interroga solo i giochi mai cercati prima, quindi è veloce anche su librerie grandi.</p>
+<div id="scan-extra"></div>
+<div id="scan-renamed"></div>
+<div id="scan-table"></div>
+<div id="scan-unknown"></div>
+<h3>Scraping automatico</h3>
+<div class="row"><label class="chk"><input type="checkbox" id="sch-on"> Ogni giorno alle</label>
+  <input type="time" class="field" id="sch-time" value="03:00">
+  <select class="field" id="sch-mode"><option value="missing">completa i dati mancanti</option><option value="new">solo giochi nuovi</option></select>
+  <span class="muted small" id="sch-last"></span></div>
+<p class="muted small">Funziona mentre l'app è aperta (anche ridotta a icona). Rispetta i limiti: se una quota finisce, riprende il giorno dopo.</p>
+<div class="row">
+  <select id="scan-mode" class="field" title="Cosa cercare">
+    <option value="new">Solo giochi nuovi o mai cercati</option>
+    <option value="missing">Completa i dati mancanti (riprova le fonti che non li avevano trovati)</option>
+    <option value="all">Riscarica tutto da capo (usa molta quota)</option>
+  </select>
+  <span class="spacer"></span>
+  <button class="btn" id="console-add">＋ Aggiungi console</button>
+  <button class="btn" id="scan-reload">↻ Ricontrolla cartelle</button>
+  <button class="btn" id="scan-plan" title="Quanti giochi e richieste per ogni fonte, tempi e giorni necessari">📊 Stima</button>
+  <button class="btn" id="scan-cancel" hidden>■ Interrompi</button>
+  <button class="btn primary" id="scan-start">⟳ Cerca nuovi giochi</button>
+</div>
+<div id="custom-consoles"></div>
+<div id="scan-plan-box"></div>
+<div id="scan-progress"></div>
+<pre id="scan-log" class="log"></pre>
+
+<h3>Aggiorna libreria</h3>
+<p class="muted" id="lib-info"></p>
+<button class="btn" id="rebuild-btn">↻ Aggiorna libreria</button>
+<p class="muted small">Ricalcola giochi, versioni e collezioni dalla cache, senza scaricare nulla.</p>
+<pre id="build-log" class="log"></pre>
+<p class="muted" id="thumbs-info"></p>

@@ -18,7 +18,7 @@ _NIIF_INFO = 0x1
 _IDI_APPLICATION = 32512
 _WM_LBUTTONUP, _WM_LBUTTONDBLCLK, _WM_RBUTTONUP = 0x202, 0x203, 0x205
 _TPM_RIGHTBUTTON, _TPM_RETURNCMD = 0x2, 0x100
-# shortcut: il clic sulla notifica non apre niente (nessuna azione); si aggiunge quando serve
+_NIN_BALLOONUSERCLICK = 0x405  # clic sul fumetto: parte l'azione dell'ultimo avviso mostrato (se ne ha una)
 
 _queue: queue.Queue = queue.Queue()
 _thread: threading.Thread | None = None
@@ -34,8 +34,8 @@ def enabled(cfg) -> bool:
     return sys.platform == "win32" and cfg.app.get("notify") is not False
 
 
-def send(cfg_or_title, title: str = "", body: str = "") -> bool:
-    """Mostra un avviso. `cfg` si puo' omettere: send("Titolo", "Testo")."""
+def send(cfg_or_title, title: str = "", body: str = "", action=None) -> bool:
+    """Mostra un avviso. `cfg` si puo' omettere: send("Titolo", "Testo"). `action` (JSON) va a on_action al clic."""
     if isinstance(cfg_or_title, str):  # forma corta, senza impostazioni: sempre
         title, body = cfg_or_title, title
     elif not enabled(cfg_or_title):
@@ -43,18 +43,18 @@ def send(cfg_or_title, title: str = "", body: str = "") -> bool:
     if not title:
         return False
     try:
-        _ensure_thread().put((title[:64], body[:256]))
+        _ensure_thread().put((title[:64], body[:256], action))
         return True
     except Exception:  # mai un errore per una notifica
         return False
 
 
-def start_tray(icon: str, on_open, on_quit) -> bool:
+def start_tray(icon: str, on_open, on_quit, on_action=None) -> bool:
     """Icona dell'app nell'area di notifica (quella con volume e rete): clic = apre la finestra, tasto destro = menu.
     Da chiamare prima di qualsiasi avviso, che usa la stessa icona."""
     if sys.platform != "win32":
         return False
-    _tray.update(icon=icon, on_open=on_open, on_quit=on_quit)
+    _tray.update(icon=icon, on_open=on_open, on_quit=on_quit, on_action=on_action)
     try:
         _ensure_thread()
         return True
@@ -127,10 +127,12 @@ def _loop():
         user32.DispatchMessageW.argtypes = (ctypes.POINTER(wintypes.MSG),)
         user32.DispatchMessageW.restype = ctypes.c_ssize_t
 
-        def run(name: str):
+        last = {"action": None}
+
+        def run(name: str, *args):
             fn = _tray.get(name)
             if fn:
-                threading.Thread(target=fn, daemon=True).start()  # fuori dal ciclo dei messaggi: non lo blocca
+                threading.Thread(target=fn, args=args, daemon=True).start()  # fuori dal ciclo dei messaggi: non lo blocca
 
         def menu(hwnd):
             m = user32.CreatePopupMenu()
@@ -150,6 +152,9 @@ def _loop():
                     run("on_open")
                 elif ev == _WM_RBUTTONUP:
                     menu(hwnd)
+                elif ev == _NIN_BALLOONUSERCLICK and last["action"]:
+                    run("on_action", last["action"])
+                    last["action"] = None
                 return 0
             return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
 
@@ -184,7 +189,7 @@ def _loop():
                     user32.TranslateMessage(ctypes.byref(msg))
                     user32.DispatchMessageW(ctypes.byref(msg))
                 try:
-                    title, body = _queue.get(timeout=0.05)
+                    title, body, last["action"] = _queue.get(timeout=0.05)
                 except queue.Empty:
                     continue
                 data.uFlags = _NIF_INFO

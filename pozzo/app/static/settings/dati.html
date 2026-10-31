@@ -1,0 +1,54 @@
+<h3>Esporta per altri frontend</h3>
+<p class="muted small">Metadati e immagini nel formato di <b>ES-DE</b> (EmulationStation), <b>Pegasus</b>, oppure
+  come <b>pagina web statica</b> (un solo <i>index.html</i> con copertine nella cartella <i>covers</i>): si apre
+  nel browser anche senza server, da un NAS o da un disco di rete, con ricerca, filtro per console e scheda del gioco.</p>
+<div class="row wrap">
+  <select class="field" id="xf-format"><option value="esde">ES-DE (gamelist.xml)</option><option value="pegasus">Pegasus (metadata.pegasus.txt)</option><option value="html">Pagina web (index.html)</option></select>
+  <input class="field grow" id="xf-out" placeholder="Cartella di destinazione (vuoto = cartella output)">
+  <button class="btn" id="xf-pick" type="button">📁</button>
+  <button class="btn" id="xf-go">Esporta</button>
+</div>
+<div class="row wrap" id="xf-title-row" hidden>
+  <label class="lbl-field grow">Titolo della pagina
+    <input class="field" id="xf-title" placeholder="La mia libreria" maxlength="80">
+  </label>
+</div>
+<p class="muted small" id="xf-info"></p>
+
+<h3>Sincronizzazione tra PC</h3>
+<p class="muted small">Tiene allineati due PC, per ogni profilo: preferiti, tempo di gioco, stati, note, voti,
+  collezioni e lista desideri. Avviene da sola ogni 5 minuti e con «Sincronizza ora».</p>
+<label class="chk"><input type="radio" name="sync-what" value="personal"> Solo i dati personali</label>
+<label class="chk" style="white-space:normal;align-items:flex-start"><input type="radio" name="sync-what" value="all"> Dati personali e impostazioni dell'app
+  <span class="muted small">(store online, fonti, tema, collezioni intelligenti, lista desideri; mai cartelle,
+  emulatori, account degli store e telefono)</span></label>
+<h4>Cartella condivisa</h4>
+<p class="muted small">Una cartella sincronizzata da OneDrive, Dropbox, Google Drive, un NAS o Syncthing: scegli la
+  stessa cartella su tutti e due i PC. Funziona anche se non sono accesi insieme.</p>
+<div class="row"><input class="field grow" id="sync-folder" placeholder="es. C:\Users\nome\OneDrive\PozzoLauncher">
+  <button class="btn" id="sync-folder-pick" type="button">📁</button><button class="btn" id="sync-folder-save">Salva</button></div>
+<h4>Rete locale</h4>
+<p class="muted small">Su un PC premi «Mostra codice»; sull'altro scrivi indirizzo e codice e premi «Abbina». Da quel
+  momento i due PC si scambiano i dati, nei due sensi, quando sono accesi sulla stessa rete.</p>
+<div class="row wrap"><button class="btn" id="sync-code">🔑 Mostra codice per un altro PC</button><span id="sync-code-out" class="small"></span></div>
+<div class="row wrap"><input class="field grow" id="sync-peer-url" placeholder="Indirizzo dell'altro PC (es. 192.168.1.20)">
+  <input class="field" id="sync-peer-code" placeholder="Codice" size="8" inputmode="numeric">
+  <button class="btn" id="sync-peer-add">Abbina</button></div>
+<div id="sync-peers"></div>
+<div class="row"><button class="btn primary" id="sync-now">⟳ Sincronizza ora</button><span class="muted small" id="sync-last"></span></div>
+
+<h3>Copie di sicurezza dei tuoi dati</h3>
+<p class="muted small">Preferiti, tempi di gioco, stati, collezioni personali e impostazioni (emulatori, cartelle).
+  Metadati e immagini non servono: si riscaricano. Una copia automatica ogni settimana, si tengono le ultime 10.</p>
+<button class="btn" id="backup-now">💾 Crea una copia adesso</button>
+<div id="backup-list"></div>
+
+<h3>Salvataggi dei giochi</h3>
+<p class="muted small">Le versioni dei salvataggi sono nel formato di <a href="#" data-open="https://github.com/mtkennerly/ludusavi">Ludusavi</a>.
+  Scegli la stessa cartella di Ludusavi (Ludusavi › Backup mode › Backup target) per vedere e ripristinare le copie
+  con entrambi i programmi. Le copie già fatte restano nella cartella di prima.</p>
+<div class="row">
+  <input id="save-dir" class="field grow" placeholder="">
+  <button class="btn" id="save-dir-pick" type="button">Sfoglia…</button>
+  <button class="btn primary" id="save-dir-save" type="button">Salva</button>
+</div>

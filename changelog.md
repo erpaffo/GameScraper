@@ -18,6 +18,7 @@
 ### In corso
 
 - Motore e profili di esperienza
+- Pagina impostazioni — `pozzo\app\static\index.html` `pozzo\app\static\app.js` `pozzo\app\static\app.css` `pozzo\app\server.py` `pozzo\app\static\settings`
 
 ## 0.10.0 (2026-10-29)
 

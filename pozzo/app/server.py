@@ -63,7 +63,11 @@ def _asset_version() -> str:
     from .. import __version__
 
     digest = hashlib.sha256()
-    for path in sorted((*STATIC.glob("*.css"), *STATIC.glob("*.js"))):
+    assets = [*STATIC.glob("*.css"), *STATIC.glob("*.js")]
+    assets.extend(path for path in STATIC.joinpath("experiences").rglob("*")
+                  if path.is_file() and path.suffix in (".css", ".js"))
+    assets.extend(path for path in STATIC.joinpath("settings").rglob("*.html") if path.is_file())
+    for path in sorted(assets):
         digest.update(path.name.encode("utf-8"))
         digest.update(path.read_bytes())
     return f"{__version__}.{digest.hexdigest()[:12]}"
@@ -3249,7 +3253,7 @@ def create_app(cfg) -> FastAPI:
         if not isinstance(active, str) or active not in {t["id"] for t in themes}:
             active = "default"
         return {"themes": themes, "active_theme": active, "active_experience": X.active_experience(cfg),
-                "experiences": list(X.EXPERIENCES),
+                "experiences": X.list_experiences(),
                 "plugins": X.list_plugins(cfg, plugin_errors),
                 "paths": {"themes": str(X.user_dir(cfg, "themes")), "plugins": str(X.user_dir(cfg, "plugins"))}}
 
@@ -3345,7 +3349,9 @@ def create_app(cfg) -> FastAPI:
     @app.post("/api/app/experience")
     def api_experience(body: dict = Body(...)):
         experience = body.get("experience")
-        if not isinstance(experience, str) or experience not in {x["id"] for x in X.EXPERIENCES}:
+        if not isinstance(experience, str) or experience not in {
+            x["id"] for x in X.list_experiences() if x.get("available")
+        }:
             raise HTTPException(400, "Profilo di esperienza non valido")
         C.save_settings(cfg, app={"experience": experience})
         return {"experience": experience}
@@ -3365,6 +3371,14 @@ def create_app(cfg) -> FastAPI:
         if not f:
             raise HTTPException(404)
         return FileResponse(f, headers={"Cache-Control": "no-cache"})
+
+    @app.get("/experiences/{experience_id}/{rel:path}")
+    def experience_static(experience_id: str, rel: str):
+        f = X.experience_file(experience_id, rel)
+        if not f:
+            raise HTTPException(404)
+        media = "text/javascript" if f.suffix == ".js" else None
+        return FileResponse(f, media_type=media, headers={"Cache-Control": "no-cache"})
 
     @app.get("/plugins/{pid}/{rel:path}")
     def plugin_static(pid: str, rel: str):
@@ -3749,10 +3763,10 @@ def create_app(cfg) -> FastAPI:
     threading.Thread(target=_wish_loop, daemon=True).start()
 
     # ------------------------------------------------------------ avvisi di Windows e coda finita
-    def _notify(title: str, body: str = ""):
+    def _notify(title: str, body: str = "", action=None):
         try:
             from .. import notify
-            notify.send(cfg, title, body)
+            notify.send(cfg, title, body, action)
         except Exception:  # una notifica non deve mai fermare un lavoro
             pass
 
@@ -3794,19 +3808,22 @@ def create_app(cfg) -> FastAPI:
             tok = pt._token(cfg)
             inst = pt.all_installed(cfg)
             seen = dict(C.read_settings(cfg).get("ports_seen") or {})
-            fresh = []
+            fresh, fresh_slugs = [], []
             for slug, man in inst.items():
                 info = pt.update_info(c, man, tok)
                 tag = info.get("latest") or ""
                 if info.get("update") and seen.get(slug) != tag:
                     fresh.append(f"• {man.get('name') or slug} {tag}")
+                    fresh_slugs.append(slug)
                     seen[slug] = tag
         finally:
             c.close()
         seen = {s: t for s, t in seen.items() if s in inst}  # port disinstallati: si toglie la memoria
         C.set_setting(cfg, "ports_seen", seen)
         if fresh:
-            _notify(f"🕹 {len(fresh)} port da aggiornare", "\n".join(fresh[:4]))
+            # un solo port: il clic apre la sua pagina; piu' port: il catalogo dei port
+            _notify(f"🕹 {len(fresh)} port da aggiornare", "\n".join(fresh[:4]),
+                    {"view": "ports", "port": fresh_slugs[0] if len(fresh_slugs) == 1 else None})
 
     app.state.alerts = {"free": _free_alerts, "ports": _port_alerts}  # per i test (avvisi senza rete)
 
@@ -4246,7 +4263,15 @@ def run(cfg, port: int = 8765, browser: bool = False, bigpicture: bool = False):
         SL.set_resolver(api.resolve_link)  # link veri dietro gli accorciatori pubblicitari (ouo)
         from .. import notify
         ico = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2])) / "packaging" / "icon.ico"
-        notify.start_tray(str(ico), api.focus_window, lambda: webview.windows[0].destroy())  # icona vicino a volume e rete
+        def on_notification_click(action):
+            api.focus_window()
+            try:
+                webview.windows[0].evaluate_js(f"window.gsNotifyAction && window.gsNotifyAction({json.dumps(action)})")
+            except Exception:
+                pass
+
+        notify.start_tray(str(ico), api.focus_window, lambda: webview.windows[0].destroy(),  # icona vicino a volume e rete
+                          on_notification_click)
         main_win = webview.create_window("Pozzo Launcher", start_url, width=1500, height=940, min_size=(960, 600),
                                          background_color="#111318", js_api=api, fullscreen=bigpicture)
         # chiusa la finestra principale si chiude anche quella delle attivita' (altrimenti l'app resta aperta)

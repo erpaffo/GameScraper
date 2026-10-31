@@ -114,7 +114,9 @@ def test_library_and_api(tmp: Path):
         assert "per_piattaforma" in c.get("/plugin-api/statistiche/riepilogo").json()
         assert c.get("/api/extensions").json()["active_theme"] == "default"
         assert c.get("/api/extensions").json()["active_experience"] == "catalog"
-        assert {x["name"] for x in ext["experiences"]} == {"Catalogo", "Scaffali"}
+        experiences = {x["id"]: x for x in ext["experiences"]}
+        assert {"Originale", "Catalogo", "Scaffali"} <= {x["name"] for x in ext["experiences"]}
+        assert all(experiences[name]["available"] for name in ("original", "catalog", "shelves"))
         assert c.post("/api/app/theme", json={"theme": "oled"}).status_code == 200
         assert c.get("/api/extensions").json()["active_theme"] == "oled"
         assert c.post("/api/app/experience", json={"experience": "shelves"}).status_code == 200

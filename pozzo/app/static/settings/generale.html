@@ -1,0 +1,16 @@
+<h3>Al termine delle operazioni</h3>
+<p class="muted small">Vale per scraping, aggiornamento degli store e download dei port: quando non c'è più niente
+  in corso, il PC si sospende o si spegne (60 secondi per annullare da qui o dal telefono). Con un gioco aperto
+  non succede niente finché non lo chiudi.</p>
+<div class="row wrap">
+  <select class="field" id="pw-after"><option value="none">Non fare niente</option>
+    <option value="sleep">Sospendi il PC</option><option value="shutdown">Spegni il PC</option></select>
+  <button class="btn" id="pw-abort" type="button" hidden>✕ Annulla</button>
+  <span class="muted small" id="pw-state"></span>
+</div>
+
+<h3>Notifiche di Windows</h3>
+<p class="muted small">Un avviso quando un gioco scende sotto la soglia di prezzo, esce un gioco gratis,
+  un port PC ha un aggiornamento o finisce una ricerca. Restano nel centro notifiche di Windows.</p>
+<label class="chk"><input type="checkbox" id="nt-on"> Attiva le notifiche</label>
+<p class="muted small" id="nt-state"></p>

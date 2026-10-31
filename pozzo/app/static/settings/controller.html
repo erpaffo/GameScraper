@@ -1,0 +1,21 @@
+<h3>App per il telefono</h3>
+<p class="muted small">Dal telefono sfogli la libreria, avvii i giochi sul PC e usi il telefono come controller (con giroscopio).
+  Funziona sulla rete di casa (Wi-Fi), con connessione cifrata e abbinamento: nessun altro sulla rete può usarla.</p>
+<label class="chk"><input type="checkbox" id="ph-on"> Attiva l'accesso dal telefono</label>
+<div id="ph-box"></div>
+
+<h3>Prova del controller</h3>
+<div id="pads-test-setting"></div>
+<button class="btn" id="pads-test-btn" type="button" aria-expanded="false" aria-controls="pads-test">Prova</button>
+<div id="pads-test" class="pads-test" hidden></div>
+
+<h3>Gioca con un amico a distanza</h3>
+<p class="muted small">Un amico apre un link da casa sua, scrive il codice e diventa un altro giocatore: il pad è
+  il suo telefono, il video lo manda Moonlight. Da fuori casa il PC va raggiunto con un tunnel: incolla qui
+  l'indirizzo (Cloudflare: <code>cloudflared tunnel --url https://localhost:8766</code>, oppure ngrok, Tailscale
+  Funnel). Vuoto = vale solo sulla rete di casa.</p>
+<div class="row wrap">
+  <label>Indirizzo pubblico del PC <input class="field" id="ph-public" placeholder="https://amico.trycloudflare.com" autocomplete="off"></label>
+  <label>Indirizzo per Moonlight <input class="field" id="ph-video" placeholder="100.101.102.103 (Tailscale)" autocomplete="off"></label>
+</div>
+<div id="guest-box"></div>
