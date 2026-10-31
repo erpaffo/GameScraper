@@ -1,8 +1,6 @@
 """Cache delle risorse su SQLite (WAL).
 
-Sostituisce db.xml + quickid.xml di Skyscraper: quelli venivano tenuti interamente in RAM
-e riscritti solo a fine esecuzione (un crash = tutto perso). Qui ogni risultato viene
-salvato subito (commit a blocchi), quindi un'esecuzione interrotta riprende da dove era.
+Ogni risultato viene salvato subito (commit a blocchi), quindi un'esecuzione interrotta riprende da dove era.
 
 Tabelle:
   files      path -> hash calcolati (evita di ri-hashare file invariati)

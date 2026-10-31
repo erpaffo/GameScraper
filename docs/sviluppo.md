@@ -1,6 +1,6 @@
 # Sviluppo e dettagli tecnici
 
-Per chi usa i sorgenti, vuole creare gli eseguibili o è curioso di come lavora Pozzo Launcher rispetto a [Skyscraper](https://github.com/Gemba/skyscraper).
+Per chi usa i sorgenti, vuole creare gli eseguibili o è curioso di come lavora Pozzo Launcher.
 
 ## Avvio rapido dai sorgenti (Windows)
 
@@ -54,19 +54,19 @@ covers/             le copertine (file locali)
 da un NAS, da un disco di rete o da un sito statico. La pagina funziona anche con migliaia di giochi (le schede si
 disegnano man mano che scorri).
 
-## Perché è molto più veloce di Skyscraper
+## Prestazioni
 
-| | Skyscraper 3.7.7 | Pozzo Launcher |
-|---|---|---|
-| Identificazione | Una chiamata API per gioco | **Offline**: CRC e nome confrontati con i DAT No-Intro/Redump di libretro |
-| Hash delle ROM | MD5, SHA1 e CRC a blocchi da 1 KB, per thread | **Prima si prova il nome esatto sui DAT**: se corrisponde, CRC/MD5/SHA1 arrivano dal DAT e il file non viene letto. Gli altri: CRC degli ZIP letto dall'indice, blocchi da 8 MB, strategia HDD/SSD, risultati in cache |
-| Rete | Sincrona, 1 richiesta alla volta per thread | Asincrona con HTTP/2, rate limit solo dove serve |
-| ScreenScraper | Attesa di 1,2 s anche prima di ogni immagine | Media scaricati in parallelo, e solo quelli mancanti |
-| IGDB | 2 richieste per gioco, 1 al secondo | **10 giochi per richiesta**, 4 richieste/s |
-| ArcadeDB | 1 gioco per richiesta | **25 giochi per richiesta** |
-| Cache | `db.xml` in RAM, scritto solo alla fine | SQLite con salvataggio continuo e ripresa automatica |
-| Console | Una per esecuzione (`-p`) | Tutte insieme |
-| Fonti | Una dopo l'altra | **A catena**: tutte lavorano contemporaneamente su giochi diversi |
+| | Pozzo Launcher |
+|---|---|
+| Identificazione | **Offline**: CRC e nome confrontati con i DAT No-Intro/Redump di libretro |
+| Hash delle ROM | **Prima si prova il nome esatto sui DAT**: se corrisponde, CRC/MD5/SHA1 arrivano dal DAT e il file non viene letto. Gli altri: CRC degli ZIP letto dall'indice, blocchi da 8 MB, strategia HDD/SSD, risultati in cache |
+| Rete | Asincrona con HTTP/2, rate limit solo dove serve |
+| ScreenScraper | Media scaricati in parallelo, e solo quelli mancanti |
+| IGDB | **10 giochi per richiesta**, 4 richieste/s |
+| ArcadeDB | **25 giochi per richiesta** |
+| Cache | SQLite con salvataggio continuo e ripresa automatica |
+| Console | Tutte insieme |
+| Fonti | **A catena**: tutte lavorano contemporaneamente su giochi diversi |
 
 Misurato su 10.000 ROM in 5 console, con cartelle annidate: 9.500 identificate per nome senza leggere i file; scansione, hash dei restanti 500, identificazione ed export in **meno di 10 secondi** (senza media). Sulla collezione reale di prova (14.782 giochi su HDD), gli NDS da leggere passano da 149 GB a 3,6 GB. Le immagini da libretro arrivano a circa 16 al secondo (misurate su 300 copertine SNES, l'84% trovate): circa 30 minuti per cover, screenshot e title di 10.000 giochi.
 
@@ -82,10 +82,9 @@ Ogni fonte è uno stadio con la propria coda. Un gioco passa alla fonte successi
 
 Ogni sorgente riceve **solo** i giochi a cui manca qualcosa che lei sa fornire. Per sfruttare al massimo la velocità, chiedi i media `wheel`/`marquee`/`video` solo se ti servono: esistono quasi solo su ScreenScraper, e quindi la quota giornaliera del tuo account (es. 20.000 richieste) diventa il limite. Per 10.000 giochi, con quei media, servono circa 10-12.000 richieste ScreenScraper, cioè 1 giorno con un account base. Se la quota finisce, l'esecuzione si ferma pulita e riprende il giorno dopo.
 
-## Cosa non è stato portato da Skyscraper
+## Cosa non c'è
 
-- La generazione di gamelist per EmulationStation, AttractMode e Pegasus: l'output è JSON/CSV neutro.
-- Il compositing delle immagini (`artwork.xml`, effetti `fx*`): vengono salvate le immagini originali.
-- I moduli MobyGames (API ora a pagamento), OpenRetro, WorldOfSpectrum, import ed esgamelist.
+- Il compositing delle immagini: vengono salvate le immagini originali.
+- I moduli MobyGames (API ora a pagamento), OpenRetro e WorldOfSpectrum.
 
 Se servono, si possono aggiungere come nuovi moduli in `pozzo/sources/` o in `export.py`.

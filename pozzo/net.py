@@ -14,7 +14,7 @@ from pathlib import Path
 
 import httpx
 
-UA = "PozzoLauncher/1.0 (+https://github.com/; based on Skyscraper by Lars Muldjord)"
+UA = "PozzoLauncher/1.0 (+https://github.com/)"
 
 
 class RateLimiter:

@@ -17,6 +17,7 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 OUTPUT = ROOT / "docs" / "img"
+REAL = "--reale" in sys.argv  # usa la libreria vera dell'utente invece di quella demo
 PLATFORMS = ("gba", "snes", "psx", "nes", "megadrive")
 TITLES = [
     "Stella Errante", "Cavaliere di Cenere", "Giardino delle Lune", "Il Faro Sommerso", "Vento di Rame",
@@ -223,7 +224,14 @@ def main():
     problems = []
     with TemporaryDirectory(prefix=".demo-screenshots-", dir=ROOT) as temp:
         data_dir = Path(temp)
-        config_path, cache = make_demo_data(data_dir)
+        settings_backup = None
+        if REAL:
+            from pozzo import config as pconfig
+            config_path = pconfig._default_config_path()
+            settings_file = pconfig.settings_path(pconfig.load(None))
+            settings_backup = settings_file.read_bytes() if settings_file.exists() else None
+        else:
+            config_path, cache = make_demo_data(data_dir)
         port = available_port()
         base_url = f"http://127.0.0.1:{port}"
         log_path = data_dir / "server.log"
@@ -243,6 +251,7 @@ def main():
                 context = browser.new_context(viewport={"width": 1440, "height": 900}, device_scale_factor=1,
                                               locale="it-IT")
                 page = context.new_page()
+                page.add_init_script("document.addEventListener('DOMContentLoaded',()=>{const s=document.createElement('style');s.textContent='#update-pop{display:none!important}';document.head.append(s)})")
                 external = []
                 errors = []
                 bad_responses = []
@@ -260,14 +269,18 @@ def main():
                 page.evaluate("localStorage.clear(); sessionStorage.clear()")
                 page.reload(wait_until="domcontentloaded", timeout=30000)
                 page.locator("#main").wait_for(state="visible", timeout=20000)
-                page.wait_for_function("() => document.querySelectorAll('#grid-layer img').length > 0", timeout=25000)
+                try:
+                    page.wait_for_function("() => document.querySelectorAll('#grid-layer img').length > 0", timeout=25000)
+                except Exception:
+                    if not REAL:
+                        raise
                 if not page.request.get(base_url + "/api/setup").json().get("done"):
                     raise RuntimeError("La configurazione guidata è apparsa nonostante setup_done")
                 lib = page.request.get(base_url + "/api/library?part=owned").json()
-                if len(lib.get("games", {}).get("rows", [])) != len(TITLES):
+                if not REAL and len(lib.get("games", {}).get("rows", [])) != len(TITLES):
                     raise RuntimeError("La libreria demo non contiene i 70 giochi previsti")
                 cover_errors = []
-                for row in lib["games"]["rows"]:
+                for row in ([] if REAL else lib["games"]["rows"]):
                     gid = row[0]
                     for kind in ("cover", "hero"):
                         response = page.request.get(f"{base_url}/img/{gid}/{kind}")
@@ -358,6 +371,11 @@ def main():
                 except subprocess.TimeoutExpired:
                     server.kill()
                     server.wait(timeout=5)
+            if REAL:  # le chiamate API cambiano tema/grafica: ripristina le impostazioni dell'utente
+                if settings_backup is None:
+                    settings_file.unlink(missing_ok=True)
+                else:
+                    settings_file.write_bytes(settings_backup)
     print("Creati:")
     for path in created:
         print(f"  {path.relative_to(ROOT)} — {path.stat().st_size:,} byte")

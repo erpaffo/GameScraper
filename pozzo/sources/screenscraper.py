@@ -7,7 +7,7 @@ Differenze rispetto all'originale:
 - i media sono scaricati in parallelo (max `threads` connessioni) e SOLO quelli che
   mancano dopo le sorgenti precedenti
 - quota giornaliera monitorata: ci si ferma pulitamente prima di sforarla
-- credenziali sviluppatore proprie (config) invece di quelle offuscate di Skyscraper
+- credenziali sviluppatore proprie (config)
 """
 
 from __future__ import annotations
@@ -103,7 +103,7 @@ class ScreenScraper(Source):
         # 1 richiesta ogni 1,2 s per thread, come chiesto da ScreenScraper
         self.api_limiter = RateLimiter(threads / 1.2, threads)
         # di default i download dei media passano dallo STESSO limitatore delle API: mai piu'
-        # connessioni contemporanee dei thread concessi (come lo Skyscraper originale)
+        # connessioni contemporanee dei thread concessi
         if self.cfg.ss.get("media_parallel", False):
             self.media_limiter = RateLimiter(0, threads)
         else:

@@ -654,7 +654,7 @@
 
 ## 0.1.1 e precedenti
 
-- 0.1.0 – 0.1.1: prima versione della riscrittura in Python di Skyscraper con interfaccia in stile Playnite
+- 0.1.0 – 0.1.1: prima versione in Python con interfaccia in stile Playnite
   (FastAPI + pywebview): scansione ROM, cascata di fonti (ScreenScraper, IGDB, RAWG, TheGamesDB, Libretro,
   LaunchBox, Wikipedia…), cache, libreria, collezioni, avvio con emulatori, store, Big Picture, versione per telefono.
   Il dettaglio è nello storico git (`git log`).

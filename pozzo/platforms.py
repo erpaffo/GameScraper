@@ -7,7 +7,6 @@ Ogni piattaforma ha:
 - nomi dei sistemi libretro (DAT No-Intro/Redump + thumbnails)
 - alias: nomi di cartella riconosciuti automaticamente durante la scansione
 
-Gli id ScreenScraper derivano dal codice originale di Skyscraper (screenscraper.cpp).
 Se per TheGamesDB l'id non e' noto, viene risolto a runtime per nome (/v1/Platforms).
 """
 

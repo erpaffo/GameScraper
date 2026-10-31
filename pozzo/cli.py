@@ -251,7 +251,7 @@ def cmd_bigpicture(args):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="pozzo", description=f"PozzoLauncher {__version__} - erede veloce di Skyscraper")
+    ap = argparse.ArgumentParser(prog="pozzo", description=f"PozzoLauncher {__version__} - la tua libreria di giochi")
     ap.add_argument("-c", "--config", help="file config.toml (default: POZZO_CONFIG, poi la cartella dati dell'utente)")
     sub = ap.add_subparsers(dest="cmd")
 

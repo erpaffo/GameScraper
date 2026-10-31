@@ -1,7 +1,6 @@
 """Scansione cartelle ROM e calcolo hash.
 
-Ottimizzazioni rispetto a Skyscraper originale (che leggeva i file a blocchi da 1 KB,
-calcolando sempre MD5+SHA1+CRC in un solo thread per gioco):
+Ottimizzazioni:
 - le cartelle console sono cercate anche in profondita' (es. Myrient/No-Intro/<set>)
 - la scansione NON legge i file: l'hash si calcola solo dopo aver provato l'identificazione
   per nome esatto sui DAT No-Intro/Redump (vedi pipeline), quindi per collezioni gia'
@@ -288,7 +287,7 @@ def _m3u_refs(folder: Path) -> set[str]:
 
 def _ignored(d: Path) -> bool:
     return d.name.startswith(".") or d.name.lower() in SKIP_DIRS or \
-        (d / ".skyscraperignore").exists() or (d / ".gsignore").exists()
+        (d / ".gsignore").exists()
 
 
 def find_platform_dirs(cfg) -> list[tuple[P.Platform, Path]]:

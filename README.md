@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/erpaffo/Pozzo-Launcher)](https://github.com/erpaffo/Pozzo-Launcher/releases/latest)
 [![Manuale](https://img.shields.io/badge/manuale-online-blue)](https://erpaffo.github.io/Pozzo-Launcher/)
 
-La tua libreria di giochi in un posto solo: ROM di ogni console e giochi PC dagli store, con copertine, descrizioni, valutazioni e durate recuperate in automatico. Si gioca dal desktop, da Big Picture con il controller, dal telefono o in streaming. È il successore moderno e molto più veloce di [Skyscraper](https://github.com/Gemba/skyscraper).
+La tua libreria di giochi in un posto solo: ROM di ogni console e giochi PC dagli store, con copertine, descrizioni, valutazioni e durate recuperate in automatico. Si gioca dal desktop, da Big Picture con il controller, dal telefono o in streaming.
 
 📖 **[Manuale completo](https://erpaffo.github.io/Pozzo-Launcher/)** · ⬇ **[Download](https://github.com/erpaffo/Pozzo-Launcher/releases)** · 📝 **[Changelog](changelog.md)**
 
@@ -94,7 +94,7 @@ python -m pozzo app          # apre l'app
 python -m pozzo run          # solo scansione e scraping, da terminale
 ```
 
-Struttura del codice, come creare gli eseguibili e confronto con Skyscraper: [Sviluppo](docs/sviluppo.md). Per contribuire: [CONTRIBUTING.md](CONTRIBUTING.md).
+Struttura del codice, come creare gli eseguibili e prestazioni: [Sviluppo](docs/sviluppo.md). Per contribuire: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Avvertenze
 
